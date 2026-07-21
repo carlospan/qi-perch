@@ -1,0 +1,53 @@
+# 栖 · 桌面端（Vue3 + Tauri 2）
+
+透明无边框小窗；前端连本机 WebSocket `ws://127.0.0.1:9527`。Python 大脑仍单独进程启动（尚未做成 Tauri sidecar）。
+
+## 启动
+
+1. 后端（项目根目录）：
+
+```bash
+python run.py --desktop
+```
+
+2. 桌面壳（推荐）：
+
+```bash
+cd embodiment/desktop
+npm install
+npm run tauri:dev
+```
+
+需已安装 Rust（`cargo`）与 MSVC（「使用 C++ 的桌面开发」）。无边框窗可拖标题「栖」区域移动。
+
+3. 仅浏览器调试（不启 Tauri）：
+
+```bash
+cd embodiment/desktop
+npm run dev
+```
+
+打开 http://localhost:5173。
+
+打包：`npm run tauri:build` → `src-tauri/target/release/`。
+
+若提示 `cargo` / `program not found`：多半是 Cursor 终端 PATH 未刷新。本仓库的 `tauri:dev` / `tauri:build` 会自动把 `%USERPROFILE%\.cargo\bin` 加进 PATH；仍不行就**重启 Cursor**，或新开系统 PowerShell 再跑。
+
+若 `cargo` 拉 crates.io 失败，项目已带 `src-tauri/.cargo/config.toml`（rsproxy 稀疏索引）。
+
+更多说明见仓库根目录 [README.md](../../README.md)。
+
+终端文字模式仍用：`python main.py`
+
+## 语音
+
+在 `config/settings.yaml` 里：
+
+```yaml
+voice:
+  enabled: true
+  provider: edge-tts
+  voice_id: zh-CN-XiaoyiNeural
+```
+
+并安装：`pip install "qi[voice]"` 或 `pip install edge-tts`

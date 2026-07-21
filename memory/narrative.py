@@ -1,0 +1,156 @@
+"""叙事记忆：把经历织成故事，再慢慢褪色。"""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.emotion import EmotionState
+    from llm.gateway import LLMGateway
+    from memory.vector_store import VectorStore
+    from storage.database import Database
+
+logger = logging.getLogger("qi.memory.narrative")
+
+_ROOT = Path(__file__).resolve().parent.parent
+_WEAVE_PROMPT = _ROOT / "prompts" / "story_weaving.txt"
+
+# 人格契约：strength < 0.2 不引用；< 0.1 视为遗忘
+RECALL_MIN_STRENGTH = 0.2
+FORGET_STRENGTH = 0.1
+
+
+class NarrativeMemory:
+    """长期记忆的核心——不是日志，是故事。"""
+
+    def __init__(
+        self,
+        db: Database,
+        vector_store: VectorStore,
+        llm: LLMGateway | None = None,
+    ):
+        self.db = db
+        self.vector_store = vector_store
+        self.llm = llm
+
+    async def save(
+        self,
+        content: str,
+        importance: float,
+        emotional_intensity: float = 0.5,
+        source_event_ids: list[int] | None = None,
+        tags: list[str] | None = None,
+        period_start: str | None = None,
+        period_end: str | None = None,
+    ) -> int:
+        memory_id = await self.db.save_narrative_memory(
+            content=content,
+            importance=importance,
+            emotional_intensity=emotional_intensity,
+            strength=1.0,
+            source_event_ids=source_event_ids,
+            tags=tags,
+            period_start=period_start,
+            period_end=period_end,
+        )
+        self.vector_store.add(
+            memory_id,
+            content,
+            metadata={
+                "importance": float(importance),
+                "emotional_intensity": float(emotional_intensity),
+            },
+        )
+        return memory_id
+
+    async def search(self, query: str, top_k: int = 5) -> list[dict]:
+        candidates = self.vector_store.search(query, top_k=top_k * 2)
+        results: list[dict] = []
+        for item in candidates:
+            row = await self.db.get_narrative_memory(item["id"])
+            if row is None:
+                continue
+            strength = float(row["strength"])
+            if strength < RECALL_MIN_STRENGTH:
+                continue
+            await self.recall(item["id"])
+            refreshed = await self.db.get_narrative_memory(item["id"])
+            strength = float(refreshed["strength"]) if refreshed else strength
+            results.append(
+                {
+                    "id": item["id"],
+                    "content": row["content"],
+                    "strength": strength,
+                    "importance": float(row["importance"]),
+                }
+            )
+            if len(results) >= top_k:
+                break
+        return results
+
+    async def decay(self) -> None:
+        """每日褪色：想起的会亮，没想起的慢慢淡；淡到尽头就真的忘了。"""
+        await self.db.decay_narrative_strengths(0.999)
+        forgotten = await self.db.list_forgotten_narrative_ids(FORGET_STRENGTH)
+        for memory_id in forgotten:
+            try:
+                self.vector_store.delete(memory_id)
+            except Exception:
+                logger.debug("向量库删除遗忘记忆失败 id=%s", memory_id, exc_info=True)
+            await self.db.delete_narrative_memory(memory_id)
+
+    async def recall(self, memory_id: int) -> None:
+        await self.db.recall_narrative_memory(memory_id)
+
+    async def weave_narrative(
+        self,
+        emotion: EmotionState,
+        relationship_stage: str = "stranger",
+    ) -> int | None:
+        events = await self.db.load_unprocessed_events()
+        if not events:
+            return None
+        if self.llm is None:
+            logger.warning("叙事编织需要 LLM，当前未注入，跳过")
+            return None
+
+        template = _WEAVE_PROMPT.read_text(encoding="utf-8")
+        raw_text = "\n".join(
+            f"- [{e['timestamp']}] ({e['type']}) {e['content']}" for e in events
+        )
+        emotion_text = emotion.description()
+        prompt = template.format(
+            raw_events_recent=raw_text,
+            emotions_during_events=emotion_text,
+            relationship_stage=relationship_stage,
+        )
+        messages = [
+            {"role": "system", "content": "你是栖。用第一人称写回忆，短一些，像真的在想。"},
+            {"role": "user", "content": prompt},
+        ]
+        woven = await self.llm.call(purpose="narrative", messages=messages, temperature=0.75)
+        if not woven or not woven.strip():
+            logger.warning("叙事编织返回空，本次不标记事件")
+            return None
+
+        event_ids = [int(e["id"]) for e in events]
+        impacts = [abs(float(e["emotional_impact"] or 0)) for e in events]
+        weights = [float(e["attention_weight"] or 1.0) for e in events]
+        importance = min(1.0, max(0.3, sum(weights) / max(len(weights), 1) / 2.5))
+        intensity = min(1.0, sum(impacts) / max(len(impacts), 1))
+        period_start = events[0]["timestamp"]
+        period_end = events[-1]["timestamp"]
+
+        memory_id = await self.save(
+            content=woven.strip(),
+            importance=importance,
+            emotional_intensity=intensity,
+            source_event_ids=event_ids,
+            period_start=period_start,
+            period_end=period_end,
+        )
+        await self.db.mark_events_processed(event_ids)
+        logger.info("编织完成 memory_id=%s events=%s", memory_id, len(event_ids))
+        return memory_id

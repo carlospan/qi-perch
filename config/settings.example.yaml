@@ -1,0 +1,83 @@
+# LLM 配置（OpenAI 兼容协议，deepseek / agnes-ai / 自定义端点可互换）
+llm:
+  default_provider: "deepseek"
+  providers:
+    deepseek:
+      base_url: "https://api.deepseek.com"
+      api_key: "${DEEPSEEK_API_KEY}"
+      models:
+        fast: "deepseek-chat"
+        strong: "deepseek-reasoner"
+    agnes-ai:
+      base_url: "https://apihub.agnes-ai.com/v1"
+      api_key: "${AGNES_API_KEY}"
+      models:
+        fast: "agnes-2.0-flash"
+        strong: "agnes-2.0-flash"
+  custom_providers: {}
+  model_routing:
+    conversation: "deepseek:fast"
+    narrative: "deepseek:strong"
+    consciousness: "deepseek:fast"
+    dream: "deepseek:fast"
+    creation: "deepseek:fast"
+    reflection: "deepseek:strong"
+
+# 心跳配置
+rhythm:
+  awake_interval: 3
+  ambient_interval: 30
+  solitary_interval: 300
+  dreaming_interval: 1800
+
+# 数据库配置
+database:
+  path: "data/qi.db"
+
+# 情绪配置
+emotion:
+  decay_multiplier: 1.0
+  expression_threshold: 0.3
+
+# 记忆配置
+memory:
+  max_working_memory: 20
+  narrative_weave_interval: 21600
+  decay_interval: 86400
+  chroma_path: "data/chroma"
+  dream_retention_hours: 6
+
+# 内在生命
+inner_life:
+  consciousness_probability: 0.05
+  dream_probability: 0.1
+  creation_probability: 0.01
+  meta_cognition_probability: 0.02
+  self_reflection_interval: 604800
+
+# 主动行为冷却（秒）
+proactive_cooldown:
+  check_in: 14400
+  reach_out: 28800
+  share_creation: 86400
+  express_feeling: 7200
+
+# 关系
+relationship:
+  culture_detection_interval: 86400
+  season_detection_interval: 86400
+  scar_healing_interval: 86400
+  drift_detection_interval: 259200
+  daily_depth_cap: 0.03
+
+# 语音（默认关闭；开启后说话会带 TTS）
+voice:
+  enabled: false
+  provider: "edge-tts"
+  voice_id: "zh-CN-XiaoyiNeural"
+  auto_play: true
+
+# 具身通道
+embodiment:
+  host: "127.0.0.1"
+  port: 9527

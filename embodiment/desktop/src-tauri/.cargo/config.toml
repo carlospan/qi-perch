@@ -1,0 +1,9 @@
+# 本机 cargo 走系统代理 127.0.0.1 失败时，用国内稀疏索引镜像
+[source.crates-io]
+replace-with = "rsproxy-sparse"
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
+
+[net]
+git-fetch-with-cli = true
