@@ -73,6 +73,7 @@ voice:
 
 | 文档 | 说明 |
 |------|------|
+| [docs/dev/换机搭建.md](docs/dev/换机搭建.md) | **新电脑 / 换机从零搭建** |
 | [docs/progress.md](docs/progress.md) | 各层开发进度 |
 | [docs/contract.md](docs/contract.md) | 人格契约（硬规则） |
 | [docs/layers/](docs/layers/) | L1–L6 层实现规格 |
