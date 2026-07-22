@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS consciousness_stream (
 CREATE TABLE IF NOT EXISTS dreams (
     id INTEGER PRIMARY KEY,
     created_at DATETIME NOT NULL,
-    content TEXT NOT NULL,                -- 梦境内容（碎片化、非线性，100~300字）
+    content TEXT NOT NULL,                -- 梦境内容（碎片化、非线性；代码截断约 600 字）
     emotion_tag TEXT,                     -- 情绪标签（如 "温暖"、"混乱"、"不安"、"平静"）
     emotional_intensity REAL,             -- 情绪强度 0~1
     retention REAL NOT NULL DEFAULT 1.0,  -- 当前保留度（按6小时半衰期衰减）

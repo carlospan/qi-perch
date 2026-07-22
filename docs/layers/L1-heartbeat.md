@@ -262,7 +262,7 @@ def clamp_emotion(emotion: EmotionState) -> EmotionState:
 ### Step 3：LLM 层 + Prompt
 
 - 建 `qi/llm/providers/openai_compat.py`：OpenAI 兼容端点的统一 provider（deepseek/agnes-ai/自定义模型共用）
-- 建 `qi/llm/gateway.py`：按 `model_routing` 的 "provider:档位" 路由，暴露 `chat(messages, temperature)` 方法
+- 建 `qi/llm/gateway.py`：按 `model_routing` 的 "provider:档位" 路由，暴露 `call(purpose, messages, temperature)` 方法
 - 建 `qi/llm/prompt_builder.py`：组装 system prompt（注入情绪描述、时间）
 - 建 `prompts/conversation.txt`：**自己写**。参考 `prompts/conversation.txt` 模板
 - 验收：手动调一次 LLM，返回的内容不像客服
@@ -402,6 +402,7 @@ class PromptBuilder:
 # qi/core/brain.py —— 真实主循环骨架（与代码一致；细节见各层）
 # <!-- 回写(2026-07)：对齐 Brain 全栈心跳；删掉「仅 apply_decay」旧流程，
 #      依据：qi/core/brain.py:_heartbeat / start / receive_user_message -->
+# <!-- 回写(2026-07)：restore_state / pending 路径 / start 收尾对齐代码 -->
 
 class Brain:
     """栖的意识核心。心跳 + 记忆 + 情绪 + 内在生命 + 关系。"""
@@ -425,13 +426,18 @@ class Brain:
         self.last_interaction = datetime.now()
         self.heartbeat_count = 0
         self._pending_message: str | None = None
+        self._last_response: str | None = None
         self._heartbeat_lock = asyncio.Lock()
         self._db: Database | None = None
+        self._bg_tasks: list[asyncio.Task] = []
         self.proactive = ProactiveGate(config)
         self.proactive_queue: asyncio.Queue[str] = asyncio.Queue()
-        # ... _prev_valence / _accumulated_suppressed / _drift_signals 等
+        # _prev_valence / _prev_arousal / _accumulated_suppressed /
+        # _drift_signals / _last_avatar_payload 等
 
-    def attach_db(self, db: "Database") -> None: ...
+    def attach_db(self, db: "Database") -> None:
+        """仅设置 self._db。restore_state 不调用此方法，而是直接赋值。"""
+        ...
     def attach_embodiment(self, server: "EmbodimentServer") -> None: ...
 
     async def start(self) -> None:
@@ -450,6 +456,8 @@ class Brain:
             while self.alive:
                 async with self._heartbeat_lock:
                     await self._heartbeat()
+                if not self.alive:
+                    break
                 interval = next_interval(self.emotion, self.config)
                 await asyncio.sleep(interval)
         finally:
@@ -461,8 +469,10 @@ class Brain:
         一次心跳（真实顺序）：
         1. determine_mode(..., interacting=pending is not None)
         2. 若有 pending：relationship.on_user_message → first_times.check
-           → assess_impact(..., relationship_stage) → apply_event_impact
-           → apply_security_hint → save_message("user") → memory.on_user_message
+           → impact *= impact_mult；assess_impact → apply_event_impact
+           → apply_security_hint；last_interaction = now
+           → save_message("user") → memory.on_user_message
+           → _apply_anomaly_nudge(anomalies)
         3. step_emotion(...)；可选 apply_season_effect；clamp_emotion
         4. _track_expression_threshold() → want_express
         5. 条件满足时 inner_life.tick(..., after_first_time=...)
@@ -478,7 +488,12 @@ class Brain:
             return await self._heartbeat()
 
     async def restore_state(self, db: "Database") -> None:
-        """attach_db；load_emotion；挂载 MemoryManager/InnerLife/Relationship 等。"""
+        """
+        self._db = db（不调用 attach_db）；
+        挂载 MemoryManager / InnerLife / RelationshipEngine / FirstTimeMemory / ScarManager；
+        memory.restore()、relationship.restore()、恢复 proactive_gate；
+        最后 load_emotion()。
+        """
         ...
 
     async def save_state(self, db: "Database") -> None:
@@ -488,7 +503,7 @@ class Brain:
 
 ```python
 # qi/core/rhythm.py（Brain 使用，非旧 _next_interval）
-# <!-- 回写(2026-07)：依据 core/rhythm.py -->
+# <!-- 回写(2026-07)：依据：qi/core/rhythm.py -->
 
 def determine_mode(
     last_interaction: datetime,
@@ -577,8 +592,10 @@ class Expression:
 ```python
 # qi/cli.py 并发模型
 # <!-- 回写(2026-07)：proactive_queue 排水；console.input；依据：qi/cli.py -->
+# <!-- 回写(2026-07)：入口名为 run_terminal；退出顺序与 quit 别名对齐代码 -->
 
-async def main():
+async def run_terminal() -> None:
+    """终端聊天主循环。console script `qi` → main_terminal() → asyncio.run(本函数)。"""
     config = load_config()
     gateway = LLMGateway(config)
     db = Database(config["database"]["path"])
@@ -595,35 +612,52 @@ async def main():
                 text = await asyncio.wait_for(brain.proactive_queue.get(), timeout=0.5)
             except asyncio.TimeoutError:
                 continue
-            console.print(f"\n栖：{text}\n")
+            except asyncio.CancelledError:
+                break
+            console.print(f"\n[green]栖：[/green]{text}\n")
 
     proactive_task = asyncio.create_task(_drain_proactive())
     loop = asyncio.get_running_loop()
     try:
         while brain.alive:
             user_input = await loop.run_in_executor(
-                None, console.input, "你："
+                None, console.input, "[bold blue]你：[/bold blue]"
             )
             user_input = user_input.strip()
-            if user_input == "/quit":
-                break
-            elif user_input == "/state":
-                console.print(_format_state(brain))
+            if not user_input:
                 continue
-            elif not user_input:
+            if user_input.lower() in ("/quit", "quit", "exit", "再见"):
+                break
+            if user_input == "/state":
+                console.print(Panel(_format_state(brain), title="内在状态", border_style="cyan"))
                 continue
 
             response = await brain.receive_user_message(user_input)
             if response:
-                console.print(f"\n栖：{response}")
+                console.print(f"\n[green]栖：[/green]{response}\n")
             else:
-                console.print("\n[栖想说话，但没能说出来……]")
+                console.print("\n[dim][栖想说话，但没能说出来……][/dim]\n")
+    except (KeyboardInterrupt, EOFError):
+        ...
     finally:
         brain.alive = False
+        proactive_task.cancel()
+        try:
+            await proactive_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await asyncio.wait_for(brain_task, timeout=5)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            brain_task.cancel()
+            ...
         await brain.save_state(db)
         await db.close()
-        brain_task.cancel()
-        proactive_task.cancel()
+
+# 入口分层：
+# - main_terminal() / python -m qi → run_terminal()
+# - main_desktop() / qi-desktop → run_desktop()（Brain ∥ EmbodimentServer）
+# - main()：argparse，--desktop 则具身，否则终端
 
 # 关键设计：
 # - 后台心跳与用户输入并发（brain.start() 独立 task）
@@ -647,7 +681,7 @@ import aiosqlite
 from datetime import datetime
 
 class Database:
-    """SQLite 持久化。L1 管理 emotion_states 和 messages 两张表。"""
+    """SQLite 持久化。L1 核心两表 emotion_states / messages；同文件还有 L2+ 表。"""
 
     def __init__(self, db_path: str):
         """db_path: 来自 config["database"]["path"]，如 "data/qi.db" """
@@ -665,7 +699,7 @@ class Database:
         """
         保存当前情绪快照到 emotion_states 表。
         INSERT INTO emotion_states (timestamp, energy, valence, arousal, security, curiosity, attachment, mode)
-        VALUES (datetime.now(), emotion.energy, emotion.valence, ...)
+        VALUES (datetime.now().isoformat(timespec="seconds"), emotion.energy, ...)
         保存时机：每次心跳结束后调用。
         """
         ...
@@ -693,8 +727,10 @@ class Database:
     async def load_recent_messages(self, limit: int = 20) -> list[dict]:
         """
         加载最近 N 条消息，用于工作记忆 / prompt 上下文。
-        SELECT role, content, timestamp FROM messages ORDER BY timestamp DESC LIMIT ?
-        返回: [{"role": "user"|"qi", "content": "...", "timestamp": "..."}]（按时间正序）
+        SELECT role, content, timestamp FROM messages
+        ORDER BY timestamp DESC, id DESC LIMIT ?
+        再 reverse() 成时间正序。
+        返回: [{"role": "user"|"qi", "content": "...", "timestamp": "..."}]
         """
         ...
 

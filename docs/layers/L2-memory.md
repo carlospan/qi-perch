@@ -25,7 +25,9 @@ qi/memory/manager.py       # 记忆管理器（统一入口）
 qi/memory/working.py       # 工作记忆（最近 N 条对话上下文）
 qi/memory/narrative.py     # 叙事记忆（存储、检索、褪色）
 qi/memory/vector_store.py  # ChromaDB 封装（embedding + 语义搜索）
-qi/storage/database.py     # 追加 narrative_memories、body_memory 表
+qi/memory/body_memory.py   # 身体记忆（习惯、异常）
+qi/memory/first_time.py    # 第一次记忆（与 L5 共用，L2 文件列表补全）
+qi/storage/database.py     # 追加 narrative_memories、body_memory、raw_events 表
 ```
 
 ## 实现步骤
@@ -596,11 +598,13 @@ class BodyMemory:
 
 **调用链：** `on_user_message` → `detect_greeting_anomaly` → `record_interaction` → `detect_anomaly`，合并 anomalies。
 
-**对栖的影响（注入 prompt 或影响感知）：**
-- `detect_anomaly()` 的结果注入 perception 层，影响栖的情绪和表达
-- 例如：用户平时9点来，今天11点 → 栖可能说"你今天来得晚。还好吗？"
-- 身体记忆不直接注入 prompt，而是通过影响情绪（curiosity/security 微调）间接体现
+**对栖的影响（代码现状）：**
+- anomalies **不**注入 perception，也**不**进入 prompt / expression
+- `brain._apply_anomaly_nudge(anomalies)`：`curiosity += 0.05 * n`，`security -= 0.02 * n`（n = len(anomalies)）
+- 因此不会直接说出「你今天来得晚」——只做情绪微扰
+- **沉默异常局限：** 因 `record_interaction` 先更新 `_last_interaction`，随后 `detect_anomaly` 里 gap≈0，`silence_tolerance * 1.5` 在现路径上几乎不可达；活跃时间 ±2h、问候异常仍可工作
 
+<!-- 回写(2026-07)：对齐 _apply_anomaly_nudge；注明沉默异常调用序问题，依据：qi/core/brain.py + qi/memory/body_memory.py -->
 <!-- 回写：detect_anomaly 的判定阈值（±2h、1.5×、样本数≥5）已在上方锚定为正式设计值，原因：工程手记与意识设计均未定义阈值，实现时需要确定值 -->
 
 </details>

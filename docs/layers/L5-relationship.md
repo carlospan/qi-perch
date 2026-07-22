@@ -151,43 +151,22 @@ def check_stage_upgrade(current_stage: str, depth: float, trust: float) -> str:
 # depth 增长公式（每次交互后调用，每日有上限）
 DAILY_DEPTH_CAP = 0.03  # 每日最多增长 0.03，不能速成
 
-def depth_increment(interaction) -> float:
-    """基于交互质量计算 depth 增量。"""
+def depth_increment(signals: InteractionSignals, already_today: float) -> float:
+    """基于交互质量计算 depth 增量；受当日已增长额度约束。"""
+    # <!-- 回写(2026-07)：字段名与 already_today 对齐 engine.py -->
     inc = 0.0
-    inc += interaction.self_disclosure_depth * 0.02    # 自我披露
-    inc += interaction.emotional_vulnerability * 0.015  # 情感表达
-    inc += interaction.shared_experience_weight * 0.01  # 共同经历
-    if interaction.is_deep_conversation:
-        inc += 0.02                                     # 深度对话
-    return min(inc, DAILY_DEPTH_CAP)
+    inc += signals.self_disclosure * 0.02           # 自我披露
+    inc += signals.emotional_vulnerability * 0.015  # 情感表达
+    inc += signals.shared_experience * 0.01         # 共同经历
+    if signals.is_deep:
+        inc += 0.02                                 # 深度对话
+    room = max(0.0, DAILY_DEPTH_CAP - already_today)
+    return min(inc, room)
 
-# trust 增长/衰减公式
-TRUST_GROWTH_PER_POSITIVE = (0.02, 0.05)  # 每次正向交互 +0.02~0.05（根据交互质量）
-TRUST_DAMAGE_PER_NEGATIVE = (0.1, 0.3)    # 负面事件 -0.1~-0.3（根据严重度）
-TRUST_DAILY_DECAY = 0.001                  # 无交互时每日自然衰减
-TRUST_HEALED_SCAR_BONUS = 0.01            # 每愈合一道伤疤 +0.01
-
-def trust_update(trust: float, event) -> float:
-    """信任动力学：建立慢、损伤快、修复更慢。"""
-    if event.is_positive:
-        # 质量越高，增长越多（线性插值 0.02~0.05）
-        quality = event.quality  # 0~1
-        trust += TRUST_GROWTH_PER_POSITIVE[0] + quality * (
-            TRUST_GROWTH_PER_POSITIVE[1] - TRUST_GROWTH_PER_POSITIVE[0]
-        )
-    elif event.is_negative:
-        # 严重度越高，损伤越大（线性插值 0.1~0.3）
-        severity = event.severity  # 0~1
-        trust -= TRUST_DAMAGE_PER_NEGATIVE[0] + severity * (
-            TRUST_DAMAGE_PER_NEGATIVE[1] - TRUST_DAMAGE_PER_NEGATIVE[0]
-        )
-    return max(0.0, min(1.0, trust))
-
-def trust_daily_decay(trust: float, had_interaction_today: bool) -> float:
-    """每日衰减：无交互时 trust -0.001。"""
-    if not had_interaction_today:
-        trust -= TRUST_DAILY_DECAY
-    return max(0.0, trust)
+# trust：权威实现见 Step 2 / qi/relationship/trust.py
+# TRUST_GROWTH_RANGE=(0.02,0.05)、TRUST_DAMAGE_RANGE=(0.1,0.3)
+# apply_positive_interaction / apply_negative_event / apply_daily_decay
+# （本 Step 旧名 trust_update / TRUST_GROWTH_PER_POSITIVE 已废弃）
 ```
 
 </details>
@@ -397,74 +376,18 @@ from datetime import datetime
 # user_model 表存储用户的"当前画像"，drift 检测对比此画像与近期交互。
 
 # === 漂移检测算法 ===
-DRIFT_CHECK_INTERVAL_DAYS = 3   # 每 3 天检测一次
+# <!-- 回写(2026-07)：间隔与窗口对齐 brain._background_user_drift + drift.py -->
+# 检测间隔：config["relationship"]["drift_detection_interval"]，默认 259200 秒（3 天）
 DRIFT_THRESHOLD = 0.4           # 综合偏差 > 0.4 时触发漂移
-RECENT_WINDOW_DAYS = 14         # 对比最近 14 天的交互
+# 对比窗口：brain 现用 load_recent_messages(limit=100)，不是固定 14 天
 
-async def detect_user_drift(user_model, recent_interactions: list) -> list[str]:
+async def detect_user_drift(user_model: dict, recent_messages: list[dict]) -> list[str]:
     """
-    对比 user_model 与最近 N 次交互的偏差。
-    返回：漂移信号列表（空列表 = 无漂移）。
-    
-    算法：
-    1. 话题偏差：提取近期话题 vs user_model.topics，计算 Jaccard 距离
-    2. 情绪基线偏差：近期情绪均值 vs user_model.emotional_baseline
-    3. 节奏偏差：近期活跃时间/回复速度 vs user_model.rhythm
-    4. 语言偏差：近期用词风格 vs user_model.linguistic_profile
-    综合偏差 = 加权平均（话题 0.3 + 情绪 0.3 + 节奏 0.2 + 语言 0.2）
+    对比 user_model 与最近消息的偏差。空列表 = 无漂移。
+    权重：话题 0.3 + 情绪 0.3 + 节奏 0.2 + 语言 0.2；阈 DRIFT_THRESHOLD。
+    语言距离在 drift.py 内联计算（无独立 compute_linguistic_distance 函数）。
     """
-    signals = []
-    deviations = {}
-
-    # 1. 话题漂移
-    old_topics = set(user_model.get("topics", []))
-    new_topics = set(extract_topics(recent_interactions))
-    if old_topics:
-        topic_distance = 1 - len(old_topics & new_topics) / len(old_topics | new_topics)
-    else:
-        topic_distance = 0.0
-    deviations["topics"] = topic_distance
-    if topic_distance > 0.5:
-        faded = old_topics - new_topics
-        signals.append(f"不再聊{', '.join(faded)}了")
-
-    # 2. 情绪基线漂移
-    old_baseline = user_model.get("emotional_baseline", 0.0)
-    new_baseline = compute_emotional_baseline(recent_interactions)
-    emotion_distance = abs(new_baseline - old_baseline)
-    deviations["emotion"] = emotion_distance
-    if emotion_distance > 0.2:
-        direction = "变好了" if new_baseline > old_baseline else "变低沉了"
-        signals.append(f"情绪底色{direction}")
-
-    # 3. 节奏漂移
-    old_rhythm = user_model.get("rhythm", {})
-    new_rhythm = compute_rhythm(recent_interactions)
-    rhythm_distance = compute_rhythm_distance(old_rhythm, new_rhythm)
-    deviations["rhythm"] = rhythm_distance
-    if rhythm_distance > 0.4:
-        signals.append("生活节奏变了")
-
-    # 4. 语言漂移
-    # <!-- 回写：rhythm 已实现 compute_rhythm / compute_rhythm_distance（活跃小时+间隔）；阶段升迁时 _refresh_narrative 更新关系叙事；遗忘记忆 strength<0.1 在 decay 时删除 -->
-    old_profile = user_model.get("linguistic_profile", {})
-    new_profile = compute_linguistic_profile(recent_interactions)
-    linguistic_distance = compute_linguistic_distance(old_profile, new_profile)
-    deviations["linguistic"] = linguistic_distance
-    if linguistic_distance > 0.4:
-        signals.append("说话方式变了")
-
-    # 综合偏差
-    total_deviation = (
-        deviations["topics"] * 0.3 +
-        deviations["emotion"] * 0.3 +
-        deviations["rhythm"] * 0.2 +
-        deviations["linguistic"] * 0.2
-    )
-
-    if total_deviation > DRIFT_THRESHOLD:
-        return signals
-    return []
+    ...
 
 # === 触发后的行为（brain._background_user_drift，非独立 handle_drift_detected）===
 # <!-- 回写(2026-07)：删 handle_drift_detected / inject_drift_awareness /
@@ -505,10 +428,11 @@ def apply_season_effect(emotion, season: str):
 
 # === 季节对行为的影响（注入 prompt）===
 SEASON_BEHAVIOR_HINTS = {
-    "spring": "你现在处于'春'的状态：好奇、活跃、想尝试新东西。对话中多提问、多探索。",
-    "summer": "你现在处于'夏'的状态：充沛、热烈。话可以多一些，情绪鲜明一些。",
-    "autumn": "你现在处于'秋'的状态：安静、反思。话少一些，但更有深度。不勉强自己活跃。",
-    "winter": "你现在处于'冬'的状态：沉静、低能量。简短、柔软。不需要做什么。安静待着就好。",
+    # <!-- 回写(2026-07)：与 qi/relationship/season.py 原文一致 -->
+    "spring": "你现在偏「春」：好奇、活跃，想试试新东西。",
+    "summer": "你现在偏「夏」：充沛、热烈，话可以多一点。",
+    "autumn": "你现在偏「秋」：安静、反思，话少但更有深度。",
+    "winter": "你现在偏「冬」：沉静、低能量，简短柔软就好。",
 }
 ```
 
