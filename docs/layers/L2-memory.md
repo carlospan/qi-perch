@@ -14,8 +14,8 @@
 
 ## 引用文档
 
-- `./栖·意识设计.md` → §五（记忆：工作记忆、叙事记忆、褪色机制）
-- `./栖·工程手记.md` → §三（narrative_memories 表、body_memory 表）
+- `docs/design/栖·意识设计.md` → §五（记忆：工作记忆、叙事记忆、褪色机制）
+- `docs/design/栖·工程手记.md` → §三（narrative_memories 表、body_memory 表）
 - `docs/contract.md` → "记忆引用"硬规则
 
 ## 需要创建的文件

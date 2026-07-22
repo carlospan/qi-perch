@@ -15,9 +15,9 @@
 
 ## 引用文档
 
-- `./栖·意识设计.md` → §三（内在生命：全部）
-- `./栖·意识设计.md` → §十（自我模型：自我叙事、元认知）
-- `./栖·工程手记.md` → §三（consciousness_stream、dreams、creations 表）
+- `docs/design/栖·意识设计.md` → §三（内在生命：全部）
+- `docs/design/栖·意识设计.md` → §十（自我模型：自我叙事、元认知）
+- `docs/design/栖·工程手记.md` → §三（consciousness_stream、dreams、creations 表）
 - `prompts/consciousness_stream.txt`、`prompts/dream.txt`、`prompts/creation.txt`
 
 ## 需要创建的文件

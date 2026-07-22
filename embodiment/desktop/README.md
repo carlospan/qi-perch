@@ -7,7 +7,8 @@
 1. 后端（项目根目录）：
 
 ```bash
-python run.py --desktop
+qi-desktop
+# 兼容：python run.py --desktop
 ```
 
 2. 桌面壳（推荐）：
@@ -37,7 +38,7 @@ npm run dev
 
 更多说明见仓库根目录 [README.md](../../README.md)。
 
-终端文字模式仍用：`python main.py`
+终端文字模式仍用：`qi`（或 `python -m qi`）
 
 ## 语音
 

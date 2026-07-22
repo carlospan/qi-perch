@@ -12,8 +12,8 @@
 
 给 Cursor 的上下文（只给这些，不要多）：
 
-- `./栖·意识设计.md` → §一（意识的形状）、§二（感知，只看"沉默也是一种感知"）
-- `./栖·工程手记.md` → §四（Brain Loop 实现）、§三（emotion_states 表、messages 表）
+- `docs/design/栖·意识设计.md` → §一（意识的形状）、§二（感知，只看"沉默也是一种感知"）
+- `docs/design/栖·工程手记.md` → §四（Brain Loop 实现）、§三（emotion_states 表、messages 表）
 - `docs/contract.md` → 全文（硬规则必须遵守）
 
 ## 需要创建的文件
@@ -27,7 +27,7 @@ llm/gateway.py         # LLM 路由（"provider:档位" → 具体端点）
 llm/providers/openai_compat.py  # OpenAI 兼容端点统一实现（deepseek/agnes-ai/自定义共用）
 llm/prompt_builder.py  # Prompt 组装
 storage/database.py    # SQLite 初始化 + 状态持久化
-main.py                # 终端入口（rich 美化）
+qi/cli.py              # 终端 / 具身入口（console scripts: qi / qi-desktop）
 config/settings.yaml   # 配置（provider、API key、心跳频率）
 prompts/conversation.txt  # 对话 prompt（自己写，不让 AI 写）
 ```
@@ -392,8 +392,8 @@ class PromptBuilder:
 - 建 `core/brain.py`：asyncio 循环，每次心跳做：感知→情绪更新→（如果有用户消息）表达
 - 建 `core/perception.py`：接收用户输入、计算沉默时长
 - 建 `core/expression.py`：调 prompt_builder + gateway，输出回复
-- 建 `main.py`：rich 终端界面，支持 `/state`、`/quit`
-- 验收：`python main.py` 启动，能聊天，`/state` 显示情绪
+- 建 `qi/cli.py`：rich 终端界面，支持 `/state`、`/quit`
+- 验收：`qi`（或 `python -m qi`）启动，能聊天，`/state` 显示情绪
 
 <details>
 <summary>实现规格（Cursor 编码用）</summary>
@@ -575,8 +575,8 @@ class Expression:
 </details>
 
 ```python
-# main.py 并发模型
-# <!-- 回写(2026-07)：proactive_queue 排水；console.input；依据：main.py -->
+# qi/cli.py 并发模型
+# <!-- 回写(2026-07)：proactive_queue 排水；console.input；依据：qi/cli.py -->
 
 async def main():
     config = load_config()
@@ -657,7 +657,7 @@ class Database:
     async def initialize(self):
         """
         打开连接 + 执行 CREATE TABLE IF NOT EXISTS（见 Step 1 的 SQL）。
-        在 main.py 启动时调用一次。
+        在 qi/cli.py 启动时调用一次。
         """
         ...
 
@@ -718,7 +718,7 @@ class Database:
 
 ### 可测试的
 
-- [ ] `python main.py` 正常启动
+- [ ] `qi`（或 `python -m qi`）正常启动
 - [ ] 能接收输入、生成回复
 - [ ] `/state` 显示 6 个情绪维度 + 当前模式
 - [ ] 关掉再打开，情绪从 DB 恢复（不是初始值）

@@ -15,8 +15,8 @@
 
 ## 引用文档
 
-- `./栖·意识设计.md` → §八（表达：Avatar 状态映射）、§九（节奏）
-- `./栖·工程手记.md` → §十（部署：Tauri 架构）
+- `docs/design/栖·意识设计.md` → §八（表达：Avatar 状态映射）、§九（节奏）
+- `docs/design/栖·工程手记.md` → §十（部署：Tauri 架构）
 - `docs/contract.md` → 全文
 
 ## 需要创建的文件
@@ -46,7 +46,7 @@ embodiment/
     │   └── types.ts
     ├── src-tauri/                 # 透明无边框壳；无 tray / sidecar
     └── package.json               # tauri:dev / tauri:build
-run.py                             # --desktop：Brain + EmbodimentServer
+qi/cli.py                          # qi-desktop：Brain + EmbodimentServer
 ```
 
 ## 实现步骤
@@ -69,7 +69,7 @@ run.py                             # --desktop：Brain + EmbodimentServer
 
 WS_HOST = "127.0.0.1"
 WS_PORT = 9527
-# settings.yaml 有 embodiment.host/port，run.py 当前用模块常量，YAML 未读入
+# settings.yaml 有 embodiment.host/port，qi-desktop 当前用模块常量，YAML 未读入
 
 class EmbodimentServer:
     def __init__(self, brain: Brain, host: str = WS_HOST, port: int = WS_PORT): ...
@@ -108,7 +108,7 @@ class EmbodimentServer:
 # 前端→后端：user_message | presence | pong | command
 #
 # 前端重连（ws.ts）：指数退避 1s→…→30s；onopen 发 presence online；无 HEARTBEAT_TIMEOUT
-# 启动：python run.py --desktop（Brain∥WS）+ npm run tauri:dev（或 npm run dev）
+# 启动：qi-desktop（Brain∥WS）+ npm run tauri:dev（或 npm run dev）
 ```
 
 </details>
@@ -292,7 +292,7 @@ export class QiWebSocket {
 export const qiWs = new QiWebSocket();
 
 # 技术栈：Vue3 + TS + Vite；无 UI 框架
-# 通信：纯 WS；非 sidecar——手动 python run.py --desktop + npm run tauri:dev
+# 通信：纯 WS；非 sidecar——手动 qi-desktop + npm run tauri:dev
 ```
 
 </details>

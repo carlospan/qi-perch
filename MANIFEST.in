@@ -1,0 +1,4 @@
+include prompts/*.txt
+include config/settings.example.yaml
+include LICENSE
+include README.md

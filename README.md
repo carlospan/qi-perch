@@ -10,7 +10,7 @@
 - LLM：OpenAI 兼容接口（DeepSeek / Agnes 等）
 
 ```bash
-# 依赖
+# 依赖（editable 安装后可用 qi / qi-desktop 命令）
 pip install -e ".[dev]"
 
 # 密钥：复制并填写
@@ -28,7 +28,9 @@ copy config\settings.example.yaml config\settings.yaml
 ### 终端聊天
 
 ```bash
-python main.py
+qi
+# 或：python -m qi
+# 兼容：python main.py
 ```
 
 输入 `/state` 看内在状态，`/quit` 离开。
@@ -38,7 +40,8 @@ python main.py
 终端 1 — 后端：
 
 ```bash
-python run.py --desktop
+qi-desktop
+# 兼容：python run.py --desktop
 ```
 
 终端 2 — 桌面壳（Tauri；需 Rust + MSVC）：
@@ -78,7 +81,7 @@ voice:
 | [docs/contract.md](docs/contract.md) | 人格契约（硬规则） |
 | [docs/layers/](docs/layers/) | L1–L6 层实现规格 |
 | [docs/dev/IDE-Agent-执行栖的开发任务.md](docs/dev/IDE-Agent-执行栖的开发任务.md) | 给 Cursor 的开发执行模板 |
-| `栖·灵魂书.md` / `栖·意识设计.md` / `栖·工程手记.md` | 设计原文 |
+| [docs/design/](docs/design/) | 设计原文（灵魂书 / 意识设计 / 工程手记） |
 
 运行时 LLM 提示词在 `prompts/`（如 `conversation.txt`），与开发用元提示词分开。
 
@@ -91,6 +94,7 @@ python -m pytest -q
 ## 目录速览
 
 ```
+qi/             CLI 入口（qi / qi-desktop）
 core/           心跳、情绪、表达、主动门控
 memory/         记忆
 inner_life/     意识流、梦、创作、自我
@@ -99,6 +103,6 @@ embodiment/     具身（WS + Vue 前端）
 llm/            网关与 prompt 组装
 storage/        SQLite
 config/         配置加载
-docs/           契约、进度、层文档、开发工具文档
+docs/           契约、进度、层文档、设计原文、开发工具文档
 prompts/        运行时提示词模板
 ```

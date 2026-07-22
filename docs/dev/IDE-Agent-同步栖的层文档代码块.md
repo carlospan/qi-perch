@@ -42,7 +42,7 @@ gateway 内部用 llm/providers/openai_compat.py 做协议适配。
 层文档 ↔ 代码文件 的对应关系：
   L1 → core/brain.py, core/rhythm.py, core/perception.py, core/emotion.py,
        core/expression.py, llm/gateway.py, llm/prompt_builder.py,
-       llm/providers/openai_compat.py, storage/database.py, main.py, config/settings.yaml
+       llm/providers/openai_compat.py, storage/database.py, qi/cli.py, config/settings.yaml
   L2 → memory/manager.py, memory/working.py, memory/narrative.py,
        memory/first_time.py, memory/body_memory.py, memory/vector_store.py,
        storage/database.py, llm/prompt_builder.py
@@ -53,7 +53,7 @@ gateway 内部用 llm/providers/openai_compat.py 做协议适配。
        relationship/scars.py, relationship/culture.py, relationship/season.py,
        relationship/drift.py, memory/first_time.py
   L6 → embodiment/server.py, embodiment/avatar/controller.py,
-       embodiment/avatar/states.py, embodiment/voice/tts.py, run.py,
+       embodiment/avatar/states.py, embodiment/voice/tts.py, qi/cli.py,
        embodiment/desktop/（前端，仅在文档涉及处参考）
 
 ---
@@ -89,7 +89,7 @@ L1 心跳：
 - Brain Loop 真实结构：模式判定(determine_mode) → 处理消息 → step_emotion
   → inner_life.tick → 表达/主动行为 → 同步 avatar。文档若出现 Volition / Percept 类、
   _stir / _inner_life_tick / gather 等旧架构名字，按真实 brain.py 改写。
-- main.py 并发模型：阻塞调用用 run_in_executor；LLM 失败有兜底。
+- qi/cli.py 并发模型：阻塞调用用 run_in_executor；LLM 失败有兜底。
 
 L2 记忆：
 - 叙事记忆衰减：strength *= 0.999（每日），首次记忆 strength 恒为 1.0。
