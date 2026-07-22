@@ -2,11 +2,15 @@
 import { nextTick, ref, watch } from "vue";
 import type { TalkDayGroup } from "../composables/useQi";
 
+const WAITING_LINES = ["……", "嗯……", "我在想。", "稍等……"] as const;
+
 const props = defineProps<{
   groups: TalkDayGroup[];
+  typing?: boolean;
 }>();
 
 const body = ref<HTMLElement | null>(null);
+const waitLine = ref<string>(WAITING_LINES[0]);
 
 function timeLabel(at: number) {
   const d = new Date(at);
@@ -15,12 +19,27 @@ function timeLabel(at: number) {
   return `${hh}:${mm}`;
 }
 
+async function scrollBottom() {
+  await nextTick();
+  const el = body.value;
+  if (el) el.scrollTop = el.scrollHeight;
+}
+
 watch(
   () => props.groups.map((g) => g.messages.length).reduce((a, b) => a + b, 0),
-  async () => {
-    await nextTick();
-    const el = body.value;
-    if (el) el.scrollTop = el.scrollHeight;
+  () => {
+    void scrollBottom();
+  }
+);
+
+watch(
+  () => props.typing,
+  (on) => {
+    if (on) {
+      waitLine.value =
+        WAITING_LINES[Math.floor(Math.random() * WAITING_LINES.length)];
+      void scrollBottom();
+    }
   }
 );
 </script>
@@ -32,7 +51,9 @@ watch(
       <span class="sub">你们说过的话</span>
     </div>
     <div ref="body" class="panel-body">
-      <p v-if="groups.length === 0" class="empty">还没有说过话。说一句，会留在这里。</p>
+      <p v-if="groups.length === 0 && !typing" class="empty">
+        还没有说过话。说一句，会留在这里。
+      </p>
       <template v-for="g in groups" :key="g.key">
         <div class="day">{{ g.label }}</div>
         <div
@@ -46,6 +67,11 @@ watch(
           <div class="when">{{ timeLabel(m.at) }}</div>
         </div>
       </template>
+
+      <div v-if="typing" class="msg qi pending" aria-live="polite">
+        <div class="who">栖</div>
+        <div class="txt wait">{{ waitLine }}</div>
+      </div>
     </div>
   </div>
 </template>
@@ -204,5 +230,22 @@ watch(
 }
 .msg.me .when {
   text-align: right;
+}
+
+.msg.pending .txt.wait {
+  color: var(--ink-dim);
+  font-weight: 300;
+  letter-spacing: 0.6px;
+  animation: wait-breathe 3.6s ease-in-out infinite;
+}
+
+@keyframes wait-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.95;
+  }
 }
 </style>

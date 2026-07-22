@@ -86,7 +86,7 @@ onUnmounted(() => disconnect());
             />
           </div>
           <div v-else-if="view === 'talk'" key="talk" class="overlay">
-            <TalkView :groups="talkByDay" />
+            <TalkView :groups="talkByDay" :typing="typing" />
           </div>
           <div v-else key="journal" class="overlay">
             <JournalView :entries="journal" />
