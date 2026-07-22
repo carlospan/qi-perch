@@ -3,7 +3,6 @@ defineProps<{
   mode: string;
   season: string;
   connected: boolean;
-  description: string;
 }>();
 
 const seasonLabel: Record<string, string> = {
@@ -28,7 +27,6 @@ const modeLabel: Record<string, string> = {
     <span>{{ modeLabel[mode] || mode || "……" }}</span>
     <span class="sep">·</span>
     <span>{{ seasonLabel[season] || season || "春" }}</span>
-    <span v-if="description" class="desc">{{ description }}</span>
   </div>
 </template>
 
@@ -37,33 +35,26 @@ const modeLabel: Record<string, string> = {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  font-size: 0.75rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
   color: var(--ink-dim);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
 }
 
 .dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #6a7a8a;
+  background: var(--ink-faint);
 }
 
 .dot.on {
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--glow);
+  background: var(--ember);
+  opacity: 0.85;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--ember) 55%, transparent);
 }
 
 .sep {
   opacity: 0.5;
-}
-
-.desc {
-  margin-left: 0.25rem;
-  opacity: 0.75;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 10rem;
 }
 </style>

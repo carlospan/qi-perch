@@ -1,13 +1,51 @@
 :root {
-  --bg-deep: #1a2332;
-  --bg-mid: #243044;
-  --mist: rgba(180, 210, 230, 0.12);
-  --ink: #e8eef5;
-  --ink-dim: #9aafc4;
-  --accent: #7eb8c9;
-  --warm: #c4a882;
-  --glow: rgba(126, 184, 201, 0.35);
-  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* 文字（墨）—— 禁止在组件里硬编码颜色，一律走令牌 */
+  --ink: #e9edf2;
+  --ink-dim: #9aa9b8;
+  --ink-faint: #64748a;
+
+  /* 点睛 */
+  --seal: #b0432f;
+  --seal-ink: #f3e6d8;
+  --ember: #d9a05f;
+
+  /* 场景基底 */
+  --night: #0a1020;
+  --branch: #0b1220;
+  --mist: #96b2cc;
+  --sky-cool-0: #0a1020;
+  --sky-cool-1: #121b2b;
+  --sky-cool-2: #1e2a3b;
+  --sky-warm-0: #171a2e;
+  --sky-warm-1: #2b2a41;
+  --sky-warm-2: #4a3c4b;
+  --horizon-cool: #6082a0;
+  --horizon-warm: #e0965c;
+  --panel-veil: #0a0e16;
+
+  /* 氛围（由 useEmotion 驱动；此处为默认平静态） */
+  --warm-t: 0.5;
+  --glow-a: 0.5;
+  --mote-a: 0.4;
+  --vig-a: 0.42;
+  --sat: 1;
+  --bright: 1;
+  --mist-dur: 46s;
+
+  --serif: "Noto Serif SC", "Songti SC", "SimSun", serif;
+  --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+
+  /* 谈 · 气泡（冷栖 / 暖你） */
+  --talk-qi-bg: color-mix(in srgb, #96b4cd 10%, transparent);
+  --talk-qi-bd: color-mix(in srgb, #96b4cd 14%, transparent);
+  --talk-me-bg: color-mix(in srgb, var(--ember) 12%, transparent);
+  --talk-me-bd: color-mix(in srgb, var(--ember) 16%, transparent);
+  --talk-me-ink: #f0e2d0;
+
+  /* 动效 */
+  --ease-view: cubic-bezier(0.22, 0.9, 0.3, 1);
+
+  font-family: var(--serif);
 }
 
 * {
@@ -20,6 +58,7 @@ body,
   margin: 0;
   min-height: 100%;
   height: 100%;
+  width: 100%;
   /* Tauri 透明窗：外层透明，内容在 .shell 上 */
   background: transparent;
   color: var(--ink);
@@ -27,4 +66,5 @@ body,
 
 body {
   overflow: hidden;
+  font-family: var(--serif);
 }

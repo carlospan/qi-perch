@@ -35,3 +35,23 @@ export type ClientMessage =
   | { type: "presence"; payload: { online: boolean } }
   | { type: "pong"; payload: { ts: number } }
   | { type: "command"; payload: { text: string } };
+
+/** 静 / 谈 / 忆 */
+export type QiView = "still" | "talk" | "journal";
+
+/** 「谈」会话消息（第一期：仅内存累积本次会话） */
+export type TalkMessage = {
+  id: string;
+  role: "qi" | "me";
+  text: string;
+  at: number;
+  tone?: string;
+};
+
+/** 「忆」日记条目（第二期由后端拉；第一期可为空） */
+export type JournalEntry = {
+  id: string;
+  kind: "梦" | "独白" | "第一次" | string;
+  text: string;
+  at: number;
+};

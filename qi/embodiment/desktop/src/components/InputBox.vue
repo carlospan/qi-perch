@@ -31,35 +31,57 @@ function submit() {
 <style scoped>
 .input {
   display: flex;
-  gap: 0.45rem;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
 }
 
 input {
   flex: 1;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  background: color-mix(in srgb, var(--ink) 4.5%, transparent);
   color: var(--ink);
   border-radius: 999px;
-  padding: 0.55rem 0.9rem;
+  padding: 11px 18px;
   outline: none;
-  font-size: 0.9rem;
+  font-family: var(--serif);
+  font-size: 14px;
+  transition:
+    border-color 0.35s ease,
+    background 0.35s ease;
+}
+
+input::placeholder {
+  color: var(--ink-faint);
+  font-weight: 300;
 }
 
 input:focus {
-  border-color: rgba(126, 184, 201, 0.55);
+  border-color: color-mix(in srgb, var(--ember) 45%, transparent);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
 button {
+  width: 38px;
+  height: 38px;
   border: none;
-  border-radius: 999px;
-  padding: 0.55rem 0.95rem;
-  background: linear-gradient(135deg, #6fa3b5, #4d7f91);
-  color: #f2f7fb;
+  border-radius: 50%;
+  padding: 0;
+  background: linear-gradient(135deg, #8fb4c6, #5c8296);
+  color: #0e1620;
   cursor: pointer;
-  font-size: 0.88rem;
+  font-family: var(--serif);
+  font-size: 15px;
+  display: grid;
+  place-items: center;
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 
 button:hover {
-  filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px color-mix(in srgb, #8fb4c6 35%, transparent);
 }
 </style>

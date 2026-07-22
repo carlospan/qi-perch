@@ -12,6 +12,8 @@
      栖 · 主界面设计稿 —— "黄昏的枝"
      美学：水墨 × 黄昏氛围。情绪即天气，不出现任何数字。
      有机衬线（Noto Serif SC）= 栖的声音；等宽（IBM Plex Mono）= 数字基质。
+     形象更新（2026-07）：中央形象改为 Live2D 模型，本稿以人形剪影占位，
+     实际接线见 docs/dev/主界面-Live2D接入.md；氛围/三视图/配色不受影响。
      ============================================================ */
   :root{
     --ink:        #e9edf2;   /* 主文字 · 墨白 */
@@ -142,9 +144,9 @@
 
   /* ---- 静 · 陪伴主屏 ---- */
   .view-still{ display:flex; flex-direction:column; align-items:center; justify-content:flex-end; }
-  .avatar-wrap{ position:relative; width:200px; height:200px; margin-bottom:6px;
+  .avatar-wrap{ position:relative; width:220px; height:216px; margin-bottom:2px;
     display:grid; place-items:center; }
-  .halo{ position:absolute; width:190px; height:190px; border-radius:50%;
+  .halo{ position:absolute; top:6px; width:190px; height:190px; border-radius:50%;
     filter:blur(6px); transition:opacity 1.6s ease;
     animation:breathe 5.5s ease-in-out infinite; }
   .halo.cool{ background:radial-gradient(circle, rgba(120,165,195,.55), transparent 68%); }
@@ -154,22 +156,21 @@
   .halo{ opacity:var(--glow-a); }
   @keyframes breathe{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.07)} }
 
-  .avatar{ position:relative; width:88px; height:82px;
+  /* 人形剪影 —— Live2D 形象占位。
+     实际实现中此处为透明 Live2D 画布（见 主界面-Live2D接入.md），
+     设计稿仅以剪影预示"人形立于暮色"的构图。 */
+  .figure{ position:relative; height:172px; width:auto; display:block;
+    filter:drop-shadow(0 8px 22px rgba(0,0,0,.4));
     animation:bob 6.5s ease-in-out infinite; }
   @keyframes bob{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
-  .avatar .body{
-    position:absolute; inset:0;
-    border-radius:52% 48% 55% 45% / 60% 62% 40% 38%;
-    background:radial-gradient(120% 120% at 32% 22%, #cfe2ec 0%, #8fb4c6 46%, #5c8296 100%);
-    box-shadow:0 6px 24px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.08) inset;
-  }
-  .eye{ position:absolute; top:34%; width:6px; height:6px; border-radius:50%;
-    background:#27333f; animation:blink 5.2s infinite; }
-  .eye.l{ left:32%; } .eye.r{ right:32%; }
-  @keyframes blink{ 0%,92%,100%{transform:scaleY(1)} 95%{transform:scaleY(.08)} }
-  .mouth{ position:absolute; top:52%; left:50%; transform:translateX(-50%);
-    width:14px; height:5px; border-radius:0 0 14px 14px;
-    border-bottom:2px solid #4f6878; }
+  .figure .sil{ fill:#10161f; }
+  .figure .rim{ fill:none; stroke:rgba(233,214,178,.28); stroke-width:1.1; }
+
+  .ph-tag{ position:absolute; left:50%; bottom:-2px; transform:translateX(-50%);
+    font-family:var(--mono); font-size:8.5px; letter-spacing:2px;
+    color:var(--ink-faint); white-space:nowrap;
+    background:rgba(10,14,22,.4); border:1px solid rgba(255,255,255,.08);
+    border-radius:3px; padding:2px 7px; }
 
   .whisper{
     min-height:52px; max-width:280px; text-align:center;
@@ -325,12 +326,31 @@
           <div class="avatar-wrap">
             <div class="halo cool"></div>
             <div class="halo warm"></div>
-            <div class="avatar">
-              <div class="body"></div>
-              <div class="eye l"></div>
-              <div class="eye r"></div>
-              <div class="mouth"></div>
-            </div>
+            <!-- Live2D 形象占位：实际为透明画布中站立的人形 -->
+            <svg class="figure" viewBox="0 0 120 200" width="104" height="172" aria-label="Live2D 形象占位">
+              <!-- 头 -->
+              <circle class="sil" cx="60" cy="26" r="15"/>
+              <!-- 发（垂落） -->
+              <path class="sil" d="M45 22 Q42 46 47 60 L52 58 Q48 40 50 24 Z"/>
+              <path class="sil" d="M75 22 Q78 46 73 60 L68 58 Q72 40 70 24 Z"/>
+              <!-- 颈 -->
+              <rect class="sil" x="55" y="38" width="10" height="12" rx="4"/>
+              <!-- 身（长裙，收腰放摆） -->
+              <path class="sil" d="M60 48
+                C47 50 42 60 41 74
+                C40 92 44 108 40 132
+                C37 156 33 176 30 192
+                L90 192
+                C87 176 83 156 80 132
+                C76 108 80 92 79 74
+                C78 60 73 50 60 48 Z"/>
+              <!-- 臂（垂于身侧） -->
+              <path class="sil" d="M44 60 C38 74 37 92 39 108 L44 107 C42 92 43 76 48 63 Z"/>
+              <path class="sil" d="M76 60 C82 74 83 92 81 108 L76 107 C78 92 77 76 72 63 Z"/>
+              <!-- 暮色轮廓光（右侧受光） -->
+              <path class="rim" d="M74 16 Q84 30 79 52 C84 66 84 92 81 116 C84 146 88 172 90 190"/>
+            </svg>
+            <span class="ph-tag">LIVE2D · 占位</span>
           </div>
           <div class="whisper" id="whisper"></div>
         </section>
@@ -391,7 +411,7 @@
   </div>
 
   <!-- 窗外：演示控制（不属于界面本身） -->
-  <div class="caption">栖 · 主界面设计稿 —— "黄昏的枝" · 420 × 680 · 情绪即天气</div>
+  <div class="caption">栖 · 主界面设计稿 —— "黄昏的枝" · 420 × 680 · 情绪即天气 · 中央人形为 Live2D 形象（此处剪影占位，见 主界面-Live2D接入.md）</div>
   <div class="demo">
     <span class="lbl">演示情绪：</span>
     <button data-e="calm" class="on">平静</button>

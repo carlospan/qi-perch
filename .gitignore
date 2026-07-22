@@ -34,3 +34,9 @@ embodiment/desktop/src-tauri/target/
 .env
 .env.*
 !.env.example
+
+# 调试截图
+qi/embodiment/desktop/_*.png
+
+# Live2D Cubism Core（官方授权，不可随仓库分发；本地放 public/live2dcubismcore.min.js）
+qi/embodiment/desktop/public/live2dcubismcore.min.js
