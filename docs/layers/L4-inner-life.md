@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS self_model (
 );
 ```
 
-<!-- 回写(2026-07)：self_model.values 列名加引号，依据：storage/database.py:_CREATE_SELF_MODEL -->
+<!-- 回写(2026-07)：self_model.values 列名加引号，依据：qi/storage/database.py:_CREATE_SELF_MODEL -->
 
 ### Step 2：意识流
 
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS self_model (
 **实现规格：**
 
 ```python
-# inner_life/consciousness.py
+# qi/inner_life/consciousness.py
 # <!-- 回写(2026-07)：silence 需 mode!=awake；外层 tick 门控，依据：consciousness.py + InnerLife.tick -->
 
 CONSCIOUSNESS_PROBABILITY = 0.05
@@ -156,7 +156,7 @@ class ConsciousnessStream:
 **实现规格：**
 
 ```python
-# inner_life/dream.py
+# qi/inner_life/dream.py
 # <!-- 回写(2026-07)：update_dream_retention 签名；maybe_mention_hint，依据：dream.py -->
 
 DREAM_PROBABILITY = 0.1
@@ -209,7 +209,7 @@ def parse_emotion_tag(text) -> tuple[str, str]:
 **实现规格：**
 
 ```python
-# inner_life/creativity.py
+# qi/inner_life/creativity.py
 # <!-- 回写(2026-07)：maybe_share_hint + 25% 门控；非 proactive，依据：creativity.py -->
 
 CREATION_BASE_PROBABILITY = 0.01
@@ -258,7 +258,7 @@ class Creativity:
 **实现规格：**
 
 ```python
-# inner_life/self_model.py
+# qi/inner_life/self_model.py
 # <!-- 回写(2026-07)：启发式字段抽取；relationship_summary 简化，依据：self_model.py -->
 
 SELF_REFLECTION_INTERVAL_SECONDS = 604800
@@ -299,7 +299,7 @@ def _extract_existential(narrative) -> list[str]: ...  # 固定问句最多 4
 **实现规格：**
 
 ```python
-# inner_life/consciousness.py — maybe_meta
+# qi/inner_life/consciousness.py — maybe_meta
 # <!-- 回写(2026-07)：独立 2%、非 awake；temperature=0.7；截断 80 字，依据：maybe_meta -->
 
 META_COGNITION_PROBABILITY = 0.02
@@ -319,10 +319,10 @@ def should_trigger_meta(mode: str, probability: float = META_COGNITION_PROBABILI
 
 ### Step 7：协调器与 Brain 接线
 
-<!-- 回写(2026-07)：补 InnerLife 集成规格，依据：inner_life/__init__.py + core/brain.py -->
+<!-- 回写(2026-07)：补 InnerLife 集成规格，依据：qi/inner_life/__init__.py + qi/core/brain.py -->
 
 ```python
-# inner_life/__init__.py
+# qi/inner_life/__init__.py
 
 class InnerLife:
     async def tick(

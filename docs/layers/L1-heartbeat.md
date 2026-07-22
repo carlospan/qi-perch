@@ -127,7 +127,7 @@ emotion:
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# core/emotion.py —— L1 用到的类型与衰减/冲击（与代码逐字一致）
+# qi/core/emotion.py —— L1 用到的类型与衰减/冲击（与代码逐字一致）
 # <!-- 回写(2026-07)：description/apply_decay(model_copy) 对齐 emotion.py；
 #      Brain 经 step_emotion 调用衰减+耦合+天气+节律，详见 L3 -->
 
@@ -255,7 +255,7 @@ def clamp_emotion(emotion: EmotionState) -> EmotionState:
 # should_express / modulate_impact / step_emotion
 ```
 
-<!-- 回写(2026-07)：同文件已实现 L3 动力学；本块只抄 L1 入口类型与衰减/冲击，依据：core/emotion.py -->
+<!-- 回写(2026-07)：同文件已实现 L3 动力学；本块只抄 L1 入口类型与衰减/冲击，依据：qi/core/emotion.py -->
 
 </details>
 
@@ -271,8 +271,8 @@ def clamp_emotion(emotion: EmotionState) -> EmotionState:
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# llm/gateway.py
-# <!-- 回写(2026-07)：无 LLMProvider ABC；重试为首次+2次共3次；失败返回 ""，依据：llm/gateway.py -->
+# qi/llm/gateway.py
+# <!-- 回写(2026-07)：无 LLMProvider ABC；重试为首次+2次共3次；失败返回 ""，依据：qi/llm/gateway.py -->
 
 from qi.llm.providers.openai_compat import OpenAICompatProvider
 
@@ -321,8 +321,8 @@ class LLMGateway:
 ```
 
 ```python
-# llm/prompt_builder.py
-# <!-- 回写(2026-07)：签名与 prompts/conversation.txt 占位符对齐，依据：llm/prompt_builder.py -->
+# qi/llm/prompt_builder.py
+# <!-- 回写(2026-07)：签名与 prompts/conversation.txt 占位符对齐，依据：qi/llm/prompt_builder.py -->
 
 class PromptBuilder:
     """组装栖的 prompt。不是'指令'，是'状态注入'。"""
@@ -399,9 +399,9 @@ class PromptBuilder:
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# core/brain.py —— 真实主循环骨架（与代码一致；细节见各层）
+# qi/core/brain.py —— 真实主循环骨架（与代码一致；细节见各层）
 # <!-- 回写(2026-07)：对齐 Brain 全栈心跳；删掉「仅 apply_decay」旧流程，
-#      依据：core/brain.py:_heartbeat / start / receive_user_message -->
+#      依据：qi/core/brain.py:_heartbeat / start / receive_user_message -->
 
 class Brain:
     """栖的意识核心。心跳 + 记忆 + 情绪 + 内在生命 + 关系。"""
@@ -487,7 +487,7 @@ class Brain:
 ```
 
 ```python
-# core/rhythm.py（Brain 使用，非旧 _next_interval）
+# qi/core/rhythm.py（Brain 使用，非旧 _next_interval）
 # <!-- 回写(2026-07)：依据 core/rhythm.py -->
 
 def determine_mode(
@@ -511,9 +511,9 @@ def next_interval(emotion: EmotionState, config: dict | None = None) -> float:
 ```
 
 ```python
-# core/perception.py
+# qi/core/perception.py
 # <!-- 回写(2026-07)：assess_impact 含 relationship_stage + modulate_impact；
-#      依据：core/perception.py -->
+#      依据：qi/core/perception.py -->
 
 class Perception:
     def __init__(self, config: dict):
@@ -543,8 +543,8 @@ class Perception:
 ```
 
 ```python
-# core/expression.py
-# <!-- 回写(2026-07)：express 签名扩展，依据：core/expression.py -->
+# qi/core/expression.py
+# <!-- 回写(2026-07)：express 签名扩展，依据：qi/core/expression.py -->
 
 class Expression:
     def __init__(self, config: dict, llm: "LLMGateway"):
@@ -641,7 +641,7 @@ async def main():
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# storage/database.py
+# qi/storage/database.py
 
 import aiosqlite
 from datetime import datetime
@@ -710,7 +710,7 @@ class Database:
 - `load_emotion`：程序启动 `brain.restore_state(db)`
 - `load_recent_messages`：无 MemoryManager 时由 `_gather_prompt_context` 拉取；有记忆层则用工作记忆
 
-<!-- 回写(2026-07)：保存时机对齐 brain._heartbeat / _deliver_qi_message，依据：core/brain.py -->
+<!-- 回写(2026-07)：保存时机对齐 brain._heartbeat / _deliver_qi_message，依据：qi/core/brain.py -->
 
 </details>
 

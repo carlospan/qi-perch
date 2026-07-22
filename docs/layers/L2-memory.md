@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS body_memory (
 | `"silence_tolerance"` | `{"gaps": [...], "hours": 4.2, "samples": N}` | 间隔样本 + 中位数小时 |
 | `"typing_rhythm"` | `{"chars": [...], "intervals": [...], "avg_chars": 15, "avg_interval_sec": 60, "samples": N}` | 字数与间隔 |
 
-<!-- 回写(2026-07)：body_memory value 结构对齐 BodyMemory，依据：memory/body_memory.py -->
+<!-- 回写(2026-07)：body_memory value 结构对齐 BodyMemory，依据：qi/memory/body_memory.py -->
 
 </details>
 
@@ -99,8 +99,8 @@ CREATE TABLE IF NOT EXISTS body_memory (
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# memory/working.py
-# <!-- 回写(2026-07)：load_from_db 截尾 + _parse_timestamp，依据：memory/working.py -->
+# qi/memory/working.py
+# <!-- 回写(2026-07)：load_from_db 截尾 + _parse_timestamp，依据：qi/memory/working.py -->
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -168,7 +168,7 @@ class WorkingMemory:
 2. 若 `overflow is not None`：`await db.save_raw_event(event_type=..., content=..., timestamp=..., attention_weight=0.5)`
 3. 栖侧 `on_qi_message`：工作记忆可溢出，**不**写入 raw_events
 
-<!-- 回写(2026-07)：溢出走 Database.save_raw_event；qi 溢出不进 raw_events，依据：memory/manager.py -->
+<!-- 回写(2026-07)：溢出走 Database.save_raw_event；qi 溢出不进 raw_events，依据：qi/memory/manager.py -->
 
 </details>
 
@@ -186,8 +186,8 @@ class WorkingMemory:
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# memory/vector_store.py
-# <!-- 回写(2026-07)：persist_dir 可配；upsert；CharNgram；delete，依据：memory/vector_store.py -->
+# qi/memory/vector_store.py
+# <!-- 回写(2026-07)：persist_dir 可配；upsert；CharNgram；delete，依据：qi/memory/vector_store.py -->
 
 class CharNgramEmbeddingFunction:  # chromadb EmbeddingFunction
     """离线字符 n-gram 嵌入（dim=384, n=2），不下载 HF 模型。"""
@@ -220,8 +220,8 @@ class VectorStore:
 ```
 
 ```python
-# memory/narrative.py
-# <!-- 回写(2026-07)：常量名、search top_k*2、decay 物理删除、llm 参数，依据：memory/narrative.py -->
+# qi/memory/narrative.py
+# <!-- 回写(2026-07)：常量名、search top_k*2、decay 物理删除、llm 参数，依据：qi/memory/narrative.py -->
 
 RECALL_MIN_STRENGTH = 0.2  # 低于此不注入 prompt
 FORGET_STRENGTH = 0.1      # 低于此物理删除
@@ -323,8 +323,8 @@ class NarrativeMemory:
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# llm/prompt_builder.py
-# <!-- 回写(2026-07)：_format_memories 接受 str；过滤空 content，依据：llm/prompt_builder.py -->
+# qi/llm/prompt_builder.py
+# <!-- 回写(2026-07)：_format_memories 接受 str；过滤空 content，依据：qi/llm/prompt_builder.py -->
 
 def _format_memories(self, memories: list[dict] | str) -> str:
     if isinstance(memories, str):
@@ -356,7 +356,7 @@ def _format_memories(self, memories: list[dict] | str) -> str:
 3. `expression.express(..., memories=memories, recent_messages=working.get_context()...)`
 4. `PromptBuilder._format_memories` → `{relevant_memories}`
 
-<!-- 回写(2026-07)：流程对齐 brain._gather_prompt_context + memory.retrieve，依据：core/brain.py -->
+<!-- 回写(2026-07)：流程对齐 brain._gather_prompt_context + memory.retrieve，依据：qi/core/brain.py -->
 
 </details>
 
@@ -371,9 +371,9 @@ def _format_memories(self, memories: list[dict] | str) -> str:
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# memory/manager.py
+# qi/memory/manager.py
 # <!-- 回写(2026-07)：__init__(..., llm=)；on_user_message/on_qi_message；
-#      should_remember 关键词实现，依据：memory/manager.py -->
+#      should_remember 关键词实现，依据：qi/memory/manager.py -->
 
 _SELF_DISCLOSURE = (...)  # 「我最近」「我喜欢」等
 _STRONG_EMOTION = (...)
@@ -454,8 +454,8 @@ class MemoryManager:
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# memory/narrative.py · weave_narrative
-# <!-- 回写(2026-07)：完整编织流程与 importance 公式，依据：memory/narrative.py:weave_narrative -->
+# qi/memory/narrative.py · weave_narrative
+# <!-- 回写(2026-07)：完整编织流程与 importance 公式，依据：qi/memory/narrative.py:weave_narrative -->
 
 async def weave_narrative(
     self,
@@ -519,7 +519,7 @@ async def _background_memory_decay(self) -> None:
             await self.memory.narrative.decay()
 ```
 
-<!-- 回写(2026-07)：并列褪色后台 + relationship_stage 属性，依据：core/brain.py -->
+<!-- 回写(2026-07)：并列褪色后台 + relationship_stage 属性，依据：qi/core/brain.py -->
 
 **prompts/story_weaving.txt：**
 
@@ -554,8 +554,8 @@ async def _background_memory_decay(self) -> None:
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# memory/body_memory.py
-# <!-- 回写(2026-07)：委托 Database；拆分 detect_greeting_anomaly，依据：memory/body_memory.py -->
+# qi/memory/body_memory.py
+# <!-- 回写(2026-07)：委托 Database；拆分 detect_greeting_anomaly，依据：qi/memory/body_memory.py -->
 
 class BodyMemory:
     def __init__(self, db: "Database"):

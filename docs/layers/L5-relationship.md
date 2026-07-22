@@ -106,7 +106,7 @@ VALUES (1, 'stranger', 0.0, 0.5, 0.5, 'spring');
 ```
 
 ```python
-# relationship/engine.py — 关系状态 Pydantic 模型与初始化
+# qi/relationship/engine.py — 关系状态 Pydantic 模型与初始化
 
 from pydantic import BaseModel
 from datetime import datetime
@@ -206,7 +206,7 @@ def trust_daily_decay(trust: float, had_interaction_today: bool) -> float:
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# relationship/stages.py — 阈值与升档（权威定义处）
+# qi/relationship/stages.py — 阈值与升档（权威定义处）
 # <!-- 回写(2026-07)：本模块定义阈值；engine 从此处 import，依据：stages.py -->
 
 STAGES = ["stranger", "acquaintance", "friend", "bonded"]
@@ -222,7 +222,7 @@ def check_stage_upgrade(current_stage: str, depth: float, trust: float) -> str:
 ```
 
 ```python
-# relationship/trust.py — 信任动力学
+# qi/relationship/trust.py — 信任动力学
 
 # === 核心参数 ===
 TRUST_GROWTH_RANGE = (0.02, 0.05)   # 每次正向交互增长范围
@@ -288,8 +288,8 @@ def apply_scar_healed_bonus(trust: float) -> float:
 ```
 
 ```python
-# memory/first_time.py
-# <!-- 回写(2026-07)：FirstTimeMemory.check / maybe_recall_hint；依据：memory/first_time.py -->
+# qi/memory/first_time.py
+# <!-- 回写(2026-07)：FirstTimeMemory.check / maybe_recall_hint；依据：qi/memory/first_time.py -->
 
 RECALL_COOLDOWN = timedelta(days=7)
 # 7 种：first_goodnight / first_i_miss_you / first_argument / first_vulnerability /
@@ -340,7 +340,7 @@ class FirstTimeMemory:
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# relationship/culture.py — 共同文化检测
+# qi/relationship/culture.py — 共同文化检测
 # <!-- 回写(2026-07)：同步 detect_shared_culture(messages, existing)；brain 后台调用，依据：culture.py -->
 # 旧 async detect_shared_culture(memory, ...) 规格作废。
 
@@ -362,7 +362,7 @@ def format_culture_for_prompt(culture: list) -> str:
 ```
 
 ```python
-# relationship/scars.py — ScarManager（创建在 engine → db.save_scar）
+# qi/relationship/scars.py — ScarManager（创建在 engine → db.save_scar）
 # <!-- 回写(2026-07)：无独立 create_scar API；愈合用 ScarManager.check_healing，依据：scars.py -->
 
 class ScarManager:
@@ -389,7 +389,7 @@ def get_scar_influences(scars: list[dict]) -> list[str]: ...
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# relationship/drift.py — 用户漂移检测
+# qi/relationship/drift.py — 用户漂移检测
 
 from datetime import datetime
 
@@ -483,7 +483,7 @@ def build_updated_user_model(recent_messages: list[dict], signals: list[str]) ->
 ```
 
 ```python
-# relationship/season.py
+# qi/relationship/season.py
 # <!-- 回写(2026-07)：determine_season(list[dict])；交互密度未用，依据：season.py -->
 
 def determine_season(
@@ -524,8 +524,8 @@ SEASON_BEHAVIOR_HINTS = {
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# core/proactive.py
-# <!-- 回写(2026-07)：补主动门控规格，依据：core/proactive.py -->
+# qi/core/proactive.py
+# <!-- 回写(2026-07)：补主动门控规格，依据：qi/core/proactive.py -->
 
 PROACTIVE_DAILY_LIMIT = 3
 KIND_CHECK_IN = "check_in"           # 冷却默认 14400s（4h）

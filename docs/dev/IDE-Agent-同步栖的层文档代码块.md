@@ -26,8 +26,9 @@
 注意：这不是写新功能，是同步文档。权威来源是真实代码，不是文档。
 
 技术栈：Python 3.12 + asyncio + SQLite + ChromaDB + OpenAI SDK。
-LLM 调用：业务代码统一走 llm/gateway.py（路由/重试/温度/失败兜底），
-gateway 内部用 llm/providers/openai_compat.py 做协议适配。
+LLM 调用：业务代码统一走 qi/llm/gateway.py（路由/重试/温度/失败兜底），
+gateway 内部用 qi/llm/providers/openai_compat.py 做协议适配。
+包布局：唯一顶层包为 qi（qi.core / qi.config / …）；实现规格代码块中的路径一律写 qi/…。
 
 ---
 
@@ -40,20 +41,22 @@ gateway 内部用 llm/providers/openai_compat.py 做协议适配。
 里，有的以"**实现规格：**"开头）。这些代码块就是要回写的对象。
 
 层文档 ↔ 代码文件 的对应关系：
-  L1 → qi/core/brain.py, core/rhythm.py, core/perception.py, core/emotion.py,
-       core/expression.py, llm/gateway.py, llm/prompt_builder.py,
-       qi/llm/providers/openai_compat.py, storage/database.py, qi/cli.py, qi/config/settings.yaml
-  L2 → qi/memory/manager.py, memory/working.py, memory/narrative.py,
-       qi/memory/first_time.py, memory/body_memory.py, memory/vector_store.py,
-       qi/storage/database.py, llm/prompt_builder.py
-  L3 → core/emotion.py（耦合矩阵 / 内在天气周期 / 日内节律 / 心情周期 / 模式切换）
-  L4 → inner_life/consciousness.py, inner_life/dream.py, inner_life/creativity.py,
-       qi/inner_life/self_model.py, storage/database.py
-  L5 → relationship/engine.py, relationship/stages.py, relationship/trust.py,
-       qi/relationship/scars.py, relationship/culture.py, relationship/season.py,
-       qi/relationship/drift.py, memory/first_time.py
-  L6 → embodiment/server.py, embodiment/avatar/controller.py,
-       qi/embodiment/avatar/states.py, embodiment/voice/tts.py, qi/cli.py,
+  L1 → qi/core/brain.py, qi/core/rhythm.py, qi/core/perception.py, qi/core/emotion.py,
+       qi/core/expression.py, qi/llm/gateway.py, qi/llm/prompt_builder.py,
+       qi/llm/providers/openai_compat.py, qi/storage/database.py, qi/cli.py,
+       qi/config/settings.example.yaml
+  L2 → qi/memory/manager.py, qi/memory/working.py, qi/memory/narrative.py,
+       qi/memory/first_time.py, qi/memory/body_memory.py, qi/memory/vector_store.py,
+       qi/storage/database.py, qi/llm/prompt_builder.py
+  L3 → qi/core/emotion.py（耦合矩阵 / 内在天气周期 / 日内节律 / 心情周期）、
+       qi/core/rhythm.py（模式切换）、qi/core/perception.py
+  L4 → qi/inner_life/consciousness.py, qi/inner_life/dream.py, qi/inner_life/creativity.py,
+       qi/inner_life/self_model.py, qi/inner_life/__init__.py, qi/storage/database.py
+  L5 → qi/relationship/engine.py, qi/relationship/stages.py, qi/relationship/trust.py,
+       qi/relationship/scars.py, qi/relationship/culture.py, qi/relationship/season.py,
+       qi/relationship/drift.py, qi/memory/first_time.py, qi/core/proactive.py
+  L6 → qi/embodiment/server.py, qi/embodiment/avatar/controller.py,
+       qi/embodiment/avatar/states.py, qi/embodiment/voice/tts.py, qi/cli.py,
        qi/embodiment/desktop/（前端，仅在文档涉及处参考）
 
 ---
@@ -83,7 +86,7 @@ gateway 内部用 llm/providers/openai_compat.py 做协议适配。
 
 通用：
 - LLM 失败处理：gateway 重试（约 3 次）后返回空字符串 ""，不抛异常。文档若写"抛异常/中断"要改。
-- 业务代码只 import llm/gateway.py，不直接 import openai 或 openai_compat。
+- 业务代码只 import qi/llm/gateway.py，不直接 import openai 或 openai_compat。
 
 L1 心跳：
 - Brain Loop 真实结构：模式判定(determine_mode) → 处理消息 → step_emotion
@@ -102,12 +105,13 @@ L2 记忆：
 
 L3 情绪：
 - 六维 + DECAY_RATES + COUPLING 矩阵 + 心情周期（目标趋近，速率约 0.05）+ 日内节律。
-  以 core/emotion.py 真实常量/公式为准，逐个核对数值。
+  以 qi/core/emotion.py 真实常量/公式为准，逐个核对数值。
 
 L4 内在生命：
-- 意识流四触发受模式门控：随机 5% 仅在 solitary；情绪突变与沉默仅在非 awake；
-  首次体验触发不受模式限制。文档代码块要体现这个门控。
-- 元认知：概率约 2%，仅在非 awake 模式触发（不是 awake 门控）。
+- 意识流：InnerLife.tick 外层门控为 `mode != "awake" or after_first_time` 才 maybe_generate。
+  should_trigger：first_time 优先；emotion_surge（|Δ|>0.3）本身无模式判断；
+  silence（>4h）仅非 awake；random 5% 仅 solitary。
+- 元认知 / 创作 / 做梦：仅在非 awake。
 - 创作：基础概率 0.01，高情绪(>0.7)升档 0.03；分享需 friend/bonded 阶段、
   24h 冷却、且有约 25% 随机门控。
 - 自我反思：约每 7 天一次；self_model 有真实字段写入（对照 self_model.py 与
@@ -119,7 +123,7 @@ L5 关系：
 - 第一次记忆：7 种类型（含 first_compliment、first_shared_silence），
   冲击 ×3，回忆冷却 7 天（RECALL_COOLDOWN）。
 - 关系叙事：在阶段升迁时更新（非周期性）。
-- 主动行为门控（core/proactive.py）：每日上限 3（PROACTIVE_DAILY_LIMIT），
+- 主动行为门控（qi/core/proactive.py）：每日上限 3（PROACTIVE_DAILY_LIMIT），
   冷却 check_in 4h / reach_out 8h / share_creation 24h / express_feeling 2h，
   陌生人抑制。文档若把这些写成"无实现"或缺失，按真实代码补上。
 

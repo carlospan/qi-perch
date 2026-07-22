@@ -22,7 +22,7 @@
 ## 需要创建的文件
 
 ```
-# <!-- 回写(2026-07)：按现状清单；ASR/Fish Audio/sidecar 未实现，依据：embodiment/ -->
+# <!-- 回写(2026-07)：按现状清单；ASR/Fish Audio/sidecar 未实现，依据：qi/embodiment/ -->
 qi/embodiment/
 ├── avatar/
 │   ├── controller.py      # 情绪→动画状态映射
@@ -64,7 +64,7 @@ qi/cli.py                          # qi-desktop：Brain + EmbodimentServer
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# embodiment/server.py — WebSocket 服务端
+# qi/embodiment/server.py — WebSocket 服务端
 # <!-- 回写(2026-07)：对齐 EmbodimentServer；无 90s 超时；补 audio/command；依据：server.py -->
 
 WS_HOST = "127.0.0.1"
@@ -128,7 +128,7 @@ class EmbodimentServer:
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# embodiment/avatar/states.py — Avatar 状态定义
+# qi/embodiment/avatar/states.py — Avatar 状态定义
 # <!-- 回写(2026-07)：枚举与 to_dict 对齐 states.py；无 focused / 无 5s happy 回退 -->
 
 class Posture(str, Enum):
@@ -168,7 +168,7 @@ class AvatarState(BaseModel):
 ```
 
 ```python
-# embodiment/avatar/controller.py — 情绪→动画状态映射
+# qi/embodiment/avatar/controller.py — 情绪→动画状态映射
 # <!-- 回写(2026-07)：补 autumn/winter effect；依据：controller.map_state -->
 
 class AvatarController:
@@ -309,7 +309,7 @@ export const qiWs = new QiWebSocket();
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```python
-# embodiment/voice/tts.py — TTS 语音合成
+# qi/embodiment/voice/tts.py — TTS 语音合成
 # <!-- 回写(2026-07)：无 FishAudioProvider / speak_to_file 不在抽象基类；
 #      pitch 用 Hz；create_tts；播放在 Brain._emit_speech；依据：tts.py / brain.py -->
 

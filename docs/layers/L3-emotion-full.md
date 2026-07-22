@@ -39,8 +39,8 @@ qi/core/perception.py      # 冲击评估 + modulate_impact + apply_security_hin
 **实现规格：**
 
 ```python
-# core/emotion.py — 耦合矩阵与耦合函数
-# <!-- 回写(2026-07)：model_copy 不可变写法，依据：core/emotion.py:apply_coupling -->
+# qi/core/emotion.py — 耦合矩阵与耦合函数
+# <!-- 回写(2026-07)：model_copy 不可变写法，依据：qi/core/emotion.py:apply_coupling -->
 
 COUPLING = {
     ("security", "attachment_unmet"): 0.3,
@@ -92,8 +92,8 @@ def apply_coupling(emotion: EmotionState) -> EmotionState:
 **实现规格：**
 
 ```python
-# core/emotion.py — 内在天气周期
-# <!-- 回写(2026-07)：目标趋近取代累加，依据：core/emotion.py:apply_mood_cycle -->
+# qi/core/emotion.py — 内在天气周期
+# <!-- 回写(2026-07)：目标趋近取代累加，依据：qi/core/emotion.py:apply_mood_cycle -->
 
 MOOD_CYCLE_PRIMARY_PERIOD_HOURS = 4 * 24
 MOOD_CYCLE_SECONDARY_PERIOD_HOURS = 18 * 24
@@ -138,8 +138,8 @@ def apply_mood_cycle(emotion: EmotionState, now: datetime) -> EmotionState:
 **实现规格：**
 
 ```python
-# core/emotion.py — 日内节律
-# <!-- 回写(2026-07)：model_copy + hour%24，依据：core/emotion.py:apply_circadian -->
+# qi/core/emotion.py — 日内节律
+# <!-- 回写(2026-07)：model_copy + hour%24，依据：qi/core/emotion.py:apply_circadian -->
 
 CIRCADIAN_ENERGY = {
     0: 0.2, 1: 0.15, 2: 0.15, 3: 0.15, 4: 0.2, 5: 0.25,
@@ -170,9 +170,9 @@ def apply_circadian(emotion: EmotionState, hour: int) -> EmotionState:
 **实现规格：**
 
 ```python
-# core/emotion.py — 表达阈值与状态调制
+# qi/core/emotion.py — 表达阈值与状态调制
 # <!-- 回写(2026-07)：STAGE_IMPACT_WEIGHT / ACCUMULATION_LIMIT / expression_threshold
-#      参数；补 perception 链路，依据：core/emotion.py + core/perception.py -->
+#      参数；补 perception 链路，依据：qi/core/emotion.py + qi/core/perception.py -->
 
 EXPRESSION_THRESHOLD = 0.3
 ACCUMULATION_LIMIT = 1.0
@@ -222,7 +222,7 @@ def modulate_impact(
 ```
 
 ```python
-# core/perception.py — 冲击评估与安全感微调
+# qi/core/perception.py — 冲击评估与安全感微调
 
 class Perception:
     def assess_impact(
@@ -242,8 +242,8 @@ class Perception:
 ```
 
 ```python
-# core/emotion.py — 心跳统一步进（Brain 调用）
-# <!-- 回写(2026-07)：补 step_emotion，依据：core/emotion.py:step_emotion -->
+# qi/core/emotion.py — 心跳统一步进（Brain 调用）
+# <!-- 回写(2026-07)：补 step_emotion，依据：qi/core/emotion.py:step_emotion -->
 
 def step_emotion(
     emotion: EmotionState,
@@ -267,10 +267,10 @@ def step_emotion(
 **实现规格：**
 
 ```python
-# core/rhythm.py — 模式切换与心跳频率
+# qi/core/rhythm.py — 模式切换与心跳频率
 # ConsciousnessMode 定义在 core/emotion.py，此处 import
 # <!-- 回写(2026-07)：interacting / effectively_online / next_interval(config)，
-#      依据：core/rhythm.py -->
+#      依据：qi/core/rhythm.py -->
 
 from qi.core.emotion import ConsciousnessMode
 

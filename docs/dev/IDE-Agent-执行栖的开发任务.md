@@ -34,7 +34,8 @@
 
 技术栈：Python 3.12 + asyncio + SQLite + ChromaDB + OpenAI SDK
 不使用任何 Agent 框架（不用 LangGraph、不用 LangChain）。
-LLM 调用架构：业务代码统一通过 llm/gateway.py 调用（路由、重试、温度控制）；gateway 内部使用 llm/openai_compat.py 做协议适配。
+LLM 调用架构：业务代码统一通过 qi/llm/gateway.py 调用（路由、重试、温度控制）；gateway 内部使用 qi/llm/providers/openai_compat.py 做协议适配。
+唯一顶层 Python 包为 qi（qi.core / qi.config / qi.memory …）；不要再创建与 qi 平级的 core/、config/ 等顶层包。
 
 ---
 
@@ -82,8 +83,8 @@ LLM 调用架构：业务代码统一通过 llm/gateway.py 调用（路由、重
 5. 不修改本层以外的已有代码（除非层文档明确要求）
 6. 优先选择最简单可靠的方案。不要过度设计。栖是一个生命，不是一个企业级系统
 7. 异步代码统一用 asyncio，不用多线程
-8. LLM 调用统一走 llm/gateway.py，不直接 import openai
-9. 所有持久化走 storage/database.py，不在业务代码里直接写 SQL
+8. LLM 调用统一走 qi/llm/gateway.py，不直接 import openai
+9. 所有持久化走 qi/storage/database.py，不在业务代码里直接写 SQL
 
 ---
 
