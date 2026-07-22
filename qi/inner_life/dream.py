@@ -13,9 +13,7 @@ if TYPE_CHECKING:
     from qi.llm.gateway import LLMGateway
     from qi.storage.database import Database
 
-from qi import PROJECT_ROOT
-
-_DREAM_PROMPT = PROJECT_ROOT / "prompts" / "dream.txt"
+from qi.prompts import read_prompt
 
 DREAM_PROBABILITY = 0.1
 DREAM_HALF_LIFE_HOURS = 6
@@ -83,7 +81,7 @@ class DreamEngine:
         pending = await self.db.load_latest_consciousness()
         unfinished = pending["content"][:80] if pending else "无"
 
-        template = _DREAM_PROMPT.read_text(encoding="utf-8")
+        template = read_prompt("dream.txt")
         prompt = template.format(
             recent_memories_shuffled=mem_text,
             emotion_color=emotion_color(emotion),

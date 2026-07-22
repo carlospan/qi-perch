@@ -11,7 +11,7 @@ from rich.panel import Panel
 
 from qi.config import load_config
 from qi.core.brain import Brain
-from qi.embodiment.server import EmbodimentServer, WS_HOST, WS_PORT
+from qi.embodiment.server import WS_HOST, WS_PORT, EmbodimentServer
 from qi.llm.gateway import LLMGateway
 from qi.storage.database import Database
 
@@ -56,7 +56,7 @@ async def run_terminal() -> None:
         while brain.alive:
             try:
                 text = await asyncio.wait_for(brain.proactive_queue.get(), timeout=0.5)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             except asyncio.CancelledError:
                 break
@@ -95,7 +95,7 @@ async def run_terminal() -> None:
             pass
         try:
             await asyncio.wait_for(brain_task, timeout=5)
-        except (asyncio.TimeoutError, asyncio.CancelledError):
+        except (TimeoutError, asyncio.CancelledError):
             brain_task.cancel()
             try:
                 await brain_task

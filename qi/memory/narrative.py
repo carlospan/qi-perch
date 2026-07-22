@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from qi.prompts import read_prompt
+
 if TYPE_CHECKING:
     from qi.core.emotion import EmotionState
     from qi.llm.gateway import LLMGateway
@@ -12,10 +14,6 @@ if TYPE_CHECKING:
     from qi.storage.database import Database
 
 logger = logging.getLogger("qi.memory.narrative")
-
-from qi import PROJECT_ROOT
-
-_WEAVE_PROMPT = PROJECT_ROOT / "prompts" / "story_weaving.txt"
 
 # 人格契约：strength < 0.2 不引用；< 0.1 视为遗忘
 RECALL_MIN_STRENGTH = 0.2
@@ -116,7 +114,7 @@ class NarrativeMemory:
             logger.warning("叙事编织需要 LLM，当前未注入，跳过")
             return None
 
-        template = _WEAVE_PROMPT.read_text(encoding="utf-8")
+        template = read_prompt("story_weaving.txt")
         raw_text = "\n".join(
             f"- [{e['timestamp']}] ({e['type']}) {e['content']}" for e in events
         )

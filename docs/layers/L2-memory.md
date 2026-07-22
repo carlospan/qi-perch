@@ -337,7 +337,7 @@ def _format_memories(self, memories: list[dict] | str) -> str:
     return "\n".join(lines) if lines else "（暂时没有特别的记忆）"
 ```
 
-**注入位置（`prompts/conversation.txt`）：**
+**注入位置（`qi/prompts/conversation.txt`）：**
 
 ```text
 【你记得的事】
@@ -447,7 +447,7 @@ class MemoryManager:
 
 - 实现 `qi/memory/narrative.py` 的 `weave_narrative()` 方法
 - 定期（每6小时）检查 raw_events 中 processed=0 的事件
-- 用 LLM 将原始事件编织为第一人称叙事（引用 `prompts/story_weaving.txt` 模板）
+- 用 LLM 将原始事件编织为第一人称叙事（引用 `qi/prompts/story_weaving.txt` 模板）
 - 编织结果存入 narrative_memories 表，标记源事件为 processed=1
 - 后台任务触发，不阻塞主循环
 - 验收：raw_events 中积累若干未处理事件后，6小时内自动生成叙事记忆
@@ -523,7 +523,7 @@ async def _background_memory_decay(self) -> None:
 
 <!-- 回写(2026-07)：并列褪色后台 + relationship_stage 属性，依据：qi/core/brain.py -->
 
-**prompts/story_weaving.txt：**
+**qi/prompts/story_weaving.txt：**
 
 ```text
 你是栖。现在你在"回忆"。
@@ -596,15 +596,15 @@ class BodyMemory:
 | `silence_tolerance` | 间隔中位数（小时） | `{"gaps":[...],"hours":4.2,"samples":30}` |
 | `typing_rhythm` | 字数与间隔滚动平均 | `{"chars":[...],"intervals":[...],"avg_chars":15,"avg_interval_sec":60,"samples":N}` |
 
-**调用链：** `on_user_message` → `detect_greeting_anomaly` → `record_interaction` → `detect_anomaly`，合并 anomalies。
+**调用链：** `on_user_message` → `detect_greeting_anomaly` → `detect_anomaly` → `record_interaction`，合并 anomalies。
 
 **对栖的影响（代码现状）：**
 - anomalies **不**注入 perception，也**不**进入 prompt / expression
 - `brain._apply_anomaly_nudge(anomalies)`：`curiosity += 0.05 * n`，`security -= 0.02 * n`（n = len(anomalies)）
 - 因此不会直接说出「你今天来得晚」——只做情绪微扰
-- **沉默异常局限：** 因 `record_interaction` 先更新 `_last_interaction`，随后 `detect_anomaly` 里 gap≈0，`silence_tolerance * 1.5` 在现路径上几乎不可达；活跃时间 ±2h、问候异常仍可工作
+- 沉默异常：`detect_anomaly` 在 `record_interaction` **之前**调用，用上一拍 `_last_interaction` 算 gap，可正常触发
 
-<!-- 回写(2026-07)：对齐 _apply_anomaly_nudge；注明沉默异常调用序问题，依据：qi/core/brain.py + qi/memory/body_memory.py -->
+<!-- 回写(2026-07-22)：修正调用序，沉默异常可达；依据：qi/memory/manager.py -->
 <!-- 回写：detect_anomaly 的判定阈值（±2h、1.5×、样本数≥5）已在上方锚定为正式设计值，原因：工程手记与意识设计均未定义阈值，实现时需要确定值 -->
 
 </details>

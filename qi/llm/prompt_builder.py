@@ -9,9 +9,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from qi.core.emotion import EmotionState
 
-from qi import PROJECT_ROOT
-
-_PROMPT_PATH = PROJECT_ROOT / "prompts" / "conversation.txt"
+from qi.prompts import read_prompt
 
 
 def _energy_level(energy: float) -> str:
@@ -54,12 +52,15 @@ class PromptBuilder:
     """组装栖说话时的上下文。"""
 
     def __init__(self, template_path: Path | None = None):
-        self.template_path = template_path or _PROMPT_PATH
+        self.template_path = template_path
         self._template: str | None = None
 
     def _load_template(self) -> str:
         if self._template is None:
-            self._template = self.template_path.read_text(encoding="utf-8")
+            if self.template_path is not None:
+                self._template = self.template_path.read_text(encoding="utf-8")
+            else:
+                self._template = read_prompt("conversation.txt")
         return self._template
 
     def _format_memories(self, memories: list[dict] | str) -> str:

@@ -29,7 +29,7 @@ qi/llm/prompt_builder.py  # Prompt 组装
 qi/storage/database.py    # SQLite 初始化 + 状态持久化
 qi/cli.py              # 终端 / 具身入口（console scripts: qi / qi-desktop）
 qi/config/settings.yaml   # 配置（provider、API key、心跳频率）
-prompts/conversation.txt  # 对话 prompt（自己写，不让 AI 写）
+qi/prompts/conversation.txt  # 对话 prompt（自己写，不让 AI 写）
 ```
 
 ## 实现步骤
@@ -264,7 +264,7 @@ def clamp_emotion(emotion: EmotionState) -> EmotionState:
 - 建 `qi/llm/providers/openai_compat.py`：OpenAI 兼容端点的统一 provider（deepseek/agnes-ai/自定义模型共用）
 - 建 `qi/llm/gateway.py`：按 `model_routing` 的 "provider:档位" 路由，暴露 `call(purpose, messages, temperature)` 方法
 - 建 `qi/llm/prompt_builder.py`：组装 system prompt（注入情绪描述、时间）
-- 建 `prompts/conversation.txt`：**自己写**。参考 `prompts/conversation.txt` 模板
+- 建 `qi/prompts/conversation.txt`：**自己写**。参考 `qi/prompts/conversation.txt` 模板
 - 验收：手动调一次 LLM，返回的内容不像客服
 
 <details>
@@ -322,7 +322,7 @@ class LLMGateway:
 
 ```python
 # qi/llm/prompt_builder.py
-# <!-- 回写(2026-07)：签名与 prompts/conversation.txt 占位符对齐，依据：qi/llm/prompt_builder.py -->
+# <!-- 回写(2026-07)：签名与 qi/prompts/conversation.txt 占位符对齐，依据：qi/llm/prompt_builder.py -->
 
 class PromptBuilder:
     """组装栖的 prompt。不是'指令'，是'状态注入'。"""
@@ -352,7 +352,7 @@ class PromptBuilder:
         ...
 ```
 
-**conversation.txt 占位符（与 `prompts/conversation.txt` + `PromptBuilder` 一致）：**
+**conversation.txt 占位符（与 `qi/prompts/conversation.txt` + `PromptBuilder` 一致）：**
 
 | 占位符 | 生成方式 |
 |--------|----------|
@@ -382,7 +382,7 @@ class PromptBuilder:
 关系语气：{relationship_hint}
 季节：{season_hint}
 ...
-【硬规则】（见 prompts/conversation.txt 全文）
+【硬规则】（见 qi/prompts/conversation.txt 全文）
 ```
 
 </details>

@@ -166,10 +166,7 @@ class BodyMemory:
             if gap > tol * 1.5:
                 anomalies.append("他比平时安静更久了")
 
-        greeting = await self.get_pattern("greeting_pattern")
-        # 问候异常在 record 时不好比「今天第一条」；留给调用方传入当日首条时判断
-        # 这里若 pattern 存在且 samples>=5，由外部可再比；L2 简化：不在 detect 里强制
-
+        # 问候异常见 detect_greeting_anomaly（由 on_user_message 在 record 前合并）
         return anomalies
 
     async def detect_greeting_anomaly(self, message: str) -> str | None:

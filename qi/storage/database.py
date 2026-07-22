@@ -817,7 +817,10 @@ class Database:
             rows = await cursor.fetchall()
         return [dict(r) for r in rows]
 
-    async def recall_first_time(self, first_id: int) -> None:
+    async def recall_first_time(
+        self, first_id: int, *, now: datetime | None = None
+    ) -> None:
+        when = now or datetime.now()
         conn = self._require_conn()
         await conn.execute(
             """
@@ -826,7 +829,7 @@ class Database:
                 last_recalled = ?
             WHERE id = ?
             """,
-            (datetime.now().isoformat(timespec="seconds"), first_id),
+            (when.isoformat(timespec="seconds"), first_id),
         )
         await conn.commit()
 

@@ -1,11 +1,9 @@
 """L5 关系系统测试。"""
 
-from datetime import datetime
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 import pytest
-
 from qi.core.emotion import EmotionState
 from qi.memory.first_time import FirstTimeMemory, rule_match
 from qi.relationship.culture import detect_shared_culture, format_culture_for_prompt

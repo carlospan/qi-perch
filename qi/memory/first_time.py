@@ -193,7 +193,7 @@ class FirstTimeMemory:
             et = ft.get("event_type")
             keys = _PATTERNS.get(et, ())
             if keys and any(k in text for k in keys):
-                await self.db.recall_first_time(int(ft["id"]))
+                await self.db.recall_first_time(int(ft["id"]), now=now)
                 return (
                     f"你记得一个第一次：{ft.get('content')}。"
                     f"当时你想：{ft.get('inner_experience')}。"
@@ -203,7 +203,7 @@ class FirstTimeMemory:
         if now.hour >= 22 or now.hour < 4:
             ft = firsts[0]
             if int(ft.get("recall_count") or 0) < 3:
-                await self.db.recall_first_time(int(ft["id"]))
+                await self.db.recall_first_time(int(ft["id"]), now=now)
                 return (
                     f"深夜你突然想起第一次：{ft.get('content')}。"
                     "可以很轻地提，也可以只放在心里。"

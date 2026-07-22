@@ -1,4 +1,4 @@
-"""配置加载：读取 settings.yaml，解析 ${ENV_VAR} 占位符。"""
+"""配置加载：读取 settings，解析 ${ENV_VAR} 占位符。"""
 
 from __future__ import annotations
 
@@ -53,21 +53,33 @@ def _walk_resolve(obj):
     return obj
 
 
+def user_config_candidates() -> list[Path]:
+    """
+    用户可改配置的查找顺序（先命中先生效）：
+    1. 仓库 data/settings.yaml（推荐，与 data/ 一起迁移）
+    2. ~/.qi/settings.yaml（机器级）
+    3. qi/config/settings.yaml（兼容旧布局）
+    4. 仓库根 config/settings.yaml（更旧兼容）
+    最后回退包内 settings.example.yaml（只读默认）。
+    """
+    return [
+        PROJECT_ROOT / "data" / "settings.yaml",
+        Path.home() / ".qi" / "settings.yaml",
+        _CONFIG_DIR / "settings.yaml",
+        PROJECT_ROOT / "config" / "settings.yaml",
+        _CONFIG_DIR / "settings.example.yaml",
+    ]
+
+
 def load_config(path: str | Path | None = None) -> dict:
     """
     加载栖的配置。
-    默认读 qi/config/settings.yaml；
-    若不存在，回退到 settings.example.yaml。
-    兼容旧路径：项目根 config/settings.yaml。
+    默认按 user_config_candidates() 查找；显式 path 优先。
     """
     _load_dotenv()
 
     if path is None:
-        candidates = [
-            _CONFIG_DIR / "settings.yaml",
-            PROJECT_ROOT / "config" / "settings.yaml",
-            _CONFIG_DIR / "settings.example.yaml",
-        ]
+        candidates = user_config_candidates()
         path = next((c for c in candidates if c.exists()), candidates[-1])
     else:
         path = Path(path)

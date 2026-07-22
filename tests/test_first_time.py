@@ -1,15 +1,14 @@
 """第一次记忆：共同沉默、周回忆冷却、冲击返回值。"""
 
+import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-import tempfile
 
 import pytest
-
 from qi.core.emotion import EmotionState
 from qi.memory.first_time import (
-    FirstTimeMemory,
     RECALL_COOLDOWN,
+    FirstTimeMemory,
     is_comfortable_silence,
     rule_match,
 )

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime
-from typing import Any
 
 CULTURE_DETECTION_THRESHOLDS = {
     "ritual": 5,

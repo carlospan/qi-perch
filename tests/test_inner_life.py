@@ -1,16 +1,14 @@
 """L4 内在生命测试。"""
 
+import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-import tempfile
 
 import pytest
-
-from qi.core.emotion import ConsciousnessMode, EmotionState
+from qi.core.emotion import EmotionState
 from qi.inner_life.consciousness import should_trigger_consciousness, should_trigger_meta
 from qi.inner_life.creativity import can_share_creation
-from qi.inner_life.dream import parse_emotion_tag, update_dream_retention
-from qi.inner_life.dream import DreamEngine
+from qi.inner_life.dream import DreamEngine, parse_emotion_tag, update_dream_retention
 from qi.storage.database import Database
 
 

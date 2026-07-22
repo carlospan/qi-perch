@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
-from qi.relationship.stages import STAGE_THRESHOLDS, STAGES, check_stage_upgrade
+from qi.relationship.stages import check_stage_upgrade
 from qi.relationship.trust import (
     apply_daily_decay,
     apply_negative_event,

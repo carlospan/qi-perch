@@ -3,7 +3,6 @@
 from datetime import datetime, timedelta
 
 from qi.core.emotion import (
-    BASELINES,
     ConsciousnessMode,
     EmotionState,
     apply_circadian,
@@ -34,12 +33,12 @@ def test_mood_cycle_has_periodicity_over_7_days():
     base = datetime(2026, 7, 1, 12, 0, 0)
     offsets = [mood_cycle_offset(base + timedelta(hours=h)) for h in range(0, 7 * 24, 6)]
     assert max(offsets) - min(offsets) > 0.05
-    # 同一天确定性噪声一致
-    a = mood_cycle_offset(datetime(2026, 7, 2, 3, 0, 0))
-    b = mood_cycle_offset(datetime(2026, 7, 2, 21, 0, 0))
-    # 同日噪声相同，但主/次周期随小时变，不应完全相等；至少可重复调用同一时刻
+    # 同日噪声相同，但主/次周期随小时变；同一时刻应可重复
     t = datetime(2026, 7, 2, 15, 0, 0)
     assert mood_cycle_offset(t) == mood_cycle_offset(t)
+    assert mood_cycle_offset(datetime(2026, 7, 2, 3, 0, 0)) != mood_cycle_offset(
+        datetime(2026, 7, 2, 21, 0, 0)
+    )
 
 
 def test_mood_cycle_approach_stays_bounded():

@@ -390,6 +390,11 @@ class Brain:
 
             if response:
                 await self._deliver_qi_message(response, now, proactive=False)
+            else:
+                # gateway 已打失败日志；这里标明「用户消息被吞、无回复」便于排障
+                logger.warning(
+                    "对话表达返回空串，本轮不说话（检查 API 密钥/网络/provider）"
+                )
 
         elif pending is None:
             silence_seconds = self.perception.detect_silence(self.last_interaction, now)
@@ -441,6 +446,11 @@ class Brain:
                         self._consume_expression_want()
                     await self._deliver_qi_message(response, now, proactive=True)
                     await self._persist_proactive_gate()
+                else:
+                    logger.warning(
+                        "主动表达返回空串 kind=%s（检查 API 密钥/网络/provider）",
+                        kind,
+                    )
             elif want_express:
                 # 想开口但被门控拦住——把冲动留下来，下一拍还能想起来
                 self._accumulated_suppressed = max(self._accumulated_suppressed, 1.01)
@@ -486,10 +496,16 @@ class Brain:
                 logger.exception("记忆褪色后台出错")
 
     async def _background_self_reflection(self) -> None:
+        """
+        定期询问是否该反思。门控在 should_reflect（周间隔 / 重大事件标志），
+        这里用短轮询，避免 mark_major_event 后要等将近一周才轮到。
+        """
         interval = float(
             self.config.get("inner_life", {}).get("self_reflection_interval", 604800)
         )
-        await asyncio.sleep(min(60.0, interval))
+        # 轮询周期：默认 60s；若配置的反思间隔更短则跟着走
+        poll = min(60.0, max(5.0, interval))
+        await asyncio.sleep(poll)
         while self.alive:
             if self.inner_life is not None:
                 try:
@@ -498,7 +514,7 @@ class Brain:
                     )
                 except Exception:
                     logger.exception("自我反思后台出错")
-            await asyncio.sleep(interval)
+            await asyncio.sleep(poll)
 
     async def _background_dream_decay(self) -> None:
         while self.alive:

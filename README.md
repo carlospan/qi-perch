@@ -17,11 +17,12 @@ pip install -e ".[dev]"
 copy .env.example .env
 # 编辑 .env，例如 AGNES_API_KEY=...
 
-# 配置（可选）：从示例复制后按需改
-copy qi\config\settings.example.yaml qi\config\settings.yaml
+# 配置（可选）：推荐放到 data/（与记忆数据一起，不在包内）
+copy qi\config\settings.example.yaml data\settings.yaml
+# 兼容：仍可读 qi\config\settings.yaml 或 ~/.qi\settings.yaml
 ```
 
-`qi/config/settings.yaml` 已在 `.gitignore` 中，不要提交密钥。
+用户配置优先顺序：`data/settings.yaml` → `~/.qi/settings.yaml` → `qi/config/settings.yaml`（旧）→ 包内 example。不要提交含密钥的配置。
 
 ## 启动
 
@@ -85,7 +86,7 @@ voice:
 | [docs/dev/IDE-Agent-执行栖的开发任务.md](docs/dev/IDE-Agent-执行栖的开发任务.md) | 给 Cursor 的开发执行模板 |
 | [docs/design/](docs/design/) | 设计原文（灵魂书 / 意识设计 / 工程手记） |
 
-运行时 LLM 提示词在 `prompts/`（如 `conversation.txt`），与开发用元提示词分开。
+运行时 LLM 提示词在 `qi/prompts/`（如 `conversation.txt`），与开发用元提示词分开。
 
 ## 测试
 
@@ -104,8 +105,9 @@ qi/                 唯一顶层包
   relationship/     关系
   embodiment/       具身（WS + Vue/Tauri 前端）
   llm/              网关与 prompt 组装
+  prompts/          运行时 LLM 模板（随包打包）
   storage/          SQLite
-  config/           配置加载 + settings 模板
+  config/           配置加载 + settings.example
 docs/               契约、进度、层文档、设计原文、开发工具文档
-prompts/            运行时提示词模板
+data/               运行时（gitignore）：库、推荐放 settings.yaml
 ```

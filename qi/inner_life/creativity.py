@@ -12,9 +12,7 @@ if TYPE_CHECKING:
     from qi.llm.gateway import LLMGateway
     from qi.storage.database import Database
 
-from qi import PROJECT_ROOT
-
-_CREATION_PROMPT = PROJECT_ROOT / "prompts" / "creation.txt"
+from qi.prompts import read_prompt
 
 CREATION_BASE_PROBABILITY = 0.01
 CREATION_HIGH_EMOTION_PROBABILITY = 0.03
@@ -100,7 +98,7 @@ class Creativity:
         else:
             target = "自己"
 
-        template = _CREATION_PROMPT.read_text(encoding="utf-8")
+        template = read_prompt("creation.txt")
         prompt = template.format(
             emotion_state=emotion.description(),
             trigger_thought=trigger,

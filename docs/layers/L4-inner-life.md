@@ -18,7 +18,7 @@
 - `docs/design/栖·意识设计.md` → §三（内在生命：全部）
 - `docs/design/栖·意识设计.md` → §十（自我模型：自我叙事、元认知）
 - `docs/design/栖·工程手记.md` → §三（consciousness_stream、dreams、creations 表）
-- `prompts/consciousness_stream.txt`、`prompts/dream.txt`、`prompts/creation.txt`
+- `qi/prompts/consciousness_stream.txt`、`qi/prompts/dream.txt`、`qi/prompts/creation.txt`
 
 ## 需要创建的文件
 
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS self_model (
 
 - 建 `qi/inner_life/consciousness.py`
 - 触发条件（满足其一）：`first_time` / `emotion_surge` / `silence`(非 awake) / `random`(solitary 5%)
-- 调用 LLM（temperature 0.85），用 `prompts/consciousness_stream.txt`
+- 调用 LLM（temperature 0.85），用 `qi/prompts/consciousness_stream.txt`
 - 输出存入 consciousness_stream（type=`stream`）
 - 影响：下次对话注入 `{recent_thoughts}`
 - 验收：独处后有记录；对话中仅 first_time 当拍可写意识流
@@ -140,13 +140,13 @@ class ConsciousnessStream:
 ```
 
 **外层门控（`InnerLife.tick`）：** `mode != "awake" or after_first_time` 才调用 `maybe_generate`。  
-**Prompt：** 读 `prompts/consciousness_stream.txt`。
+**Prompt：** 读 `qi/prompts/consciousness_stream.txt`。
 
 ### Step 3：梦境引擎
 
 - 建 `qi/inner_life/dream.py`
 - 触发条件：梦境模式下，每次心跳 10% 概率
-- 调用 LLM（temperature 1.1），用 `prompts/dream.txt` 模板
+- 调用 LLM（temperature 1.1），用 `qi/prompts/dream.txt` 模板
 - 输出存入 dreams 表，标记情绪标签
 - 梦的余韵：下次 awake 时，梦的情绪标签影响初始情绪（±0.05~0.1）
 - 梦的衰减：retention 按 6 小时半衰期衰减
@@ -162,7 +162,7 @@ class ConsciousnessStream:
 DREAM_PROBABILITY = 0.1
 DREAM_HALF_LIFE_HOURS = 6
 DREAM_SHARE_PROBABILITY = 0.12
-# purpose=dream, temperature=1.1；模板 prompts/dream.txt
+# purpose=dream, temperature=1.1；模板 qi/prompts/dream.txt
 # <!-- 回写：路由默认 fast；要更高质量可在 settings 改 *:strong -->
 
 
@@ -200,7 +200,7 @@ def parse_emotion_tag(text) -> tuple[str, str]:
 
 - 建 `qi/inner_life/creativity.py`
 - 触发条件：独处模式下，每次心跳 1% 概率；或情绪强度 > 0.7 时概率升至 3%
-- 调用 LLM（temperature 0.95），用 `prompts/creation.txt` 模板
+- 调用 LLM（temperature 0.95），用 `qi/prompts/creation.txt` 模板
 - 输出存入 creations 表
 - 分享：对话中经 `maybe_share_hint` 注入 prompt（friend/bonded、24h 冷却、另有 25% 随机门控）；**不是** proactive `share_creation` 推送
 - 冷却：每 24 小时最多分享一次（读 `proactive_cooldown.share_creation` 秒数）
@@ -217,7 +217,7 @@ CREATION_HIGH_EMOTION_PROBABILITY = 0.03
 CREATION_EMOTION_THRESHOLD = 0.7
 CREATION_SHARE_COOLDOWN_HOURS = 24
 # intensity = max(abs(valence), arousal)；前置 mode == solitary
-# purpose=creation, temperature=0.95；模板 prompts/creation.txt
+# purpose=creation, temperature=0.95；模板 qi/prompts/creation.txt
 
 
 def can_share_creation(
@@ -263,10 +263,12 @@ class Creativity:
 
 SELF_REFLECTION_INTERVAL_SECONDS = 604800
 VALENCE_SURGE_FOR_REFLECT = 0.5
-# purpose=reflection, temperature=0.8；模板 prompts/self_reflection.txt
-# 后台：brain._background_self_reflection → maybe_reflect
-# 额外触发：note_emotion_surge(|Δv|>0.5)；mark_major_event（阶段跃迁）
+# purpose=reflection, temperature=0.8；模板 qi/prompts/self_reflection.txt
+# 后台：brain._background_self_reflection 约每 60s 轮询 maybe_reflect；
+#       是否真反思由 should_reflect 门控（周间隔 / _pending_major）
+# 额外触发：note_emotion_surge(|Δv|>0.5)；mark_major_event（阶段跃迁）→ 下一轮询（≤~60s）即反思
 # 「用户存在性问题」未接入 SelfModel（FirstTime 另表）
+# <!-- 回写(2026-07-22)：短轮询+should_reflect 门控，事件后不再干等一周 -->
 
 
 class SelfModel:

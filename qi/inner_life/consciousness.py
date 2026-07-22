@@ -12,9 +12,7 @@ if TYPE_CHECKING:
     from qi.llm.gateway import LLMGateway
     from qi.storage.database import Database
 
-from qi import PROJECT_ROOT
-
-_STREAM_PROMPT = PROJECT_ROOT / "prompts" / "consciousness_stream.txt"
+from qi.prompts import read_prompt
 
 CONSCIOUSNESS_PROBABILITY = 0.05
 EMOTION_SURGE_THRESHOLD = 0.3
@@ -119,7 +117,7 @@ class ConsciousnessStream:
         dream = await self.db.load_latest_dream(min_retention=0.3)
         dream_text = dream["content"][:100] if dream else "没有记得的梦"
 
-        template = _STREAM_PROMPT.read_text(encoding="utf-8")
+        template = read_prompt("consciousness_stream.txt")
         prompt = template.format(
             time=datetime.now().strftime("%H:%M"),
             silence_duration=_format_silence(silence),

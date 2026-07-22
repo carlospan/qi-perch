@@ -2,11 +2,10 @@
 
 import gc
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
-
 from qi.core.emotion import EmotionState
 from qi.memory.body_memory import BodyMemory
 from qi.memory.manager import MemoryManager
@@ -103,6 +102,49 @@ async def test_body_memory_records_hours():
         assert pattern is not None
         assert pattern["samples"] >= 5
         assert pattern["start"] <= 10 <= pattern["end"]
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_silence_anomaly_before_record():
+    """沉默异常须在更新 last_interaction 之前检测，否则 gap≈0。"""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        body = BodyMemory(db)
+        await body.update_pattern(
+            "silence_tolerance",
+            {"gaps": [1.0] * 5, "hours": 2.0, "samples": 5},
+        )
+        t0 = datetime(2026, 7, 21, 10, 0)
+        body._last_interaction = t0
+        long_gap = t0 + timedelta(hours=5)  # > 2.0 * 1.5
+        anomalies = await body.detect_anomaly(long_gap)
+        assert any("安静" in a for a in anomalies)
+
+        # 模拟错误顺序：先 record 再 detect → 不可达
+        await body.record_interaction(long_gap, "我回来了")
+        after = await body.detect_anomaly(long_gap)
+        assert not any("安静" in a for a in after)
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_manager_silence_anomaly_on_user_message():
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        mm = MemoryManager(db, config={})
+        await mm.body.update_pattern(
+            "silence_tolerance",
+            {"gaps": [1.0] * 5, "hours": 2.0, "samples": 5},
+        )
+        t0 = datetime(2026, 7, 21, 10, 0)
+        mm.body._last_interaction = t0
+        anomalies = await mm.on_user_message(
+            "我回来了", EmotionState(), now=t0 + timedelta(hours=5)
+        )
+        assert any("安静" in a for a in anomalies)
         await db.close()
 
 

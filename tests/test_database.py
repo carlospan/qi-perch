@@ -4,7 +4,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from qi.core.emotion import ConsciousnessMode, EmotionState
 from qi.storage.database import Database
 

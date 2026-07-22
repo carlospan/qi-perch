@@ -130,11 +130,12 @@ class MemoryManager:
                 timestamp=now,
             )
 
+        # 异常检测必须在 record 之前：否则 _last_interaction 已更新，沉默 gap≈0
         greeting_anomaly = await self.body.detect_greeting_anomaly(message)
-        await self.body.record_interaction(now, message)
         anomalies = await self.body.detect_anomaly(now)
         if greeting_anomaly:
             anomalies.append(greeting_anomaly)
+        await self.body.record_interaction(now, message)
         return anomalies
 
     def on_qi_message(self, content: str) -> None:

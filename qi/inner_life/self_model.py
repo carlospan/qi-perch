@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -10,9 +10,7 @@ if TYPE_CHECKING:
     from qi.llm.gateway import LLMGateway
     from qi.storage.database import Database
 
-from qi import PROJECT_ROOT
-
-_REFLECT_PROMPT = PROJECT_ROOT / "prompts" / "self_reflection.txt"
+from qi.prompts import read_prompt
 
 SELF_REFLECTION_INTERVAL_SECONDS = 604800
 VALENCE_SURGE_FOR_REFLECT = 0.5
@@ -81,7 +79,7 @@ class SelfModel:
             if float(n.get("importance") or 0) > 0.7
         ) or "没有特别强烈的事"
 
-        template = _REFLECT_PROMPT.read_text(encoding="utf-8")
+        template = read_prompt("self_reflection.txt")
         prompt = template.format(
             current_state=f"{emotion.description()}，模式 {emotion.mode.value}",
             recent_experiences=experiences,
