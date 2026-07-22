@@ -1,6 +1,6 @@
 """自我模型字段抽取。"""
 
-from inner_life.self_model import _extract_aesthetic, _extract_existential, _extract_values
+from qi.inner_life.self_model import _extract_aesthetic, _extract_existential, _extract_values
 
 
 def test_extract_self_model_fields():

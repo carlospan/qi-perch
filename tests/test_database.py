@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from core.emotion import ConsciousnessMode, EmotionState
-from storage.database import Database
+from qi.core.emotion import ConsciousnessMode, EmotionState
+from qi.storage.database import Database
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 
-from relationship.drift import (
+from qi.relationship.drift import (
     build_updated_user_model,
     compute_rhythm,
     compute_rhythm_distance,
@@ -62,6 +62,6 @@ def test_detect_drift_includes_rhythm_signal():
 
 
 def test_forget_constant_used_in_purge_api():
-    from memory.narrative import FORGET_STRENGTH
+    from qi.memory.narrative import FORGET_STRENGTH
 
     assert FORGET_STRENGTH == 0.1

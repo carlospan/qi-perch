@@ -14,7 +14,7 @@ WS_HOST = "127.0.0.1"
 WS_PORT = 9527
 
 if TYPE_CHECKING:
-    from core.brain import Brain
+    from qi.core.brain import Brain
 
 
 class EmbodimentServer:

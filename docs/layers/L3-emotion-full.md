@@ -23,16 +23,16 @@
 ## 需要修改/创建的文件
 
 ```
-core/emotion.py         # 耦合、内在天气、日内节律、阈值、step_emotion
-core/rhythm.py          # 模式切换（determine_mode）、心跳间隔（next_interval）
-core/perception.py      # 冲击评估 + modulate_impact + apply_security_hint
+qi/core/emotion.py         # 耦合、内在天气、日内节律、阈值、step_emotion
+qi/core/rhythm.py          # 模式切换（determine_mode）、心跳间隔（next_interval）
+qi/core/perception.py      # 冲击评估 + modulate_impact + apply_security_hint
 ```
 
 ## 实现步骤
 
 ### Step 1：耦合矩阵
 
-- 在 `core/emotion.py` 中加入维度间耦合（参考意识设计 §四 的耦合表）
+- 在 `qi/core/emotion.py` 中加入维度间耦合（参考意识设计 §四 的耦合表）
 - security 低 → attachment 需求升；energy 低 → valence 轻微降；等
 - 验收：单元测试——降低 security，观察 attachment 是否上升
 
@@ -131,7 +131,7 @@ def apply_mood_cycle(emotion: EmotionState, now: datetime) -> EmotionState:
 
 ### Step 3：日内节律
 
-- 在 `core/emotion.py` 中按小时调节能量目标（凌晨低、上午高、午后微降、深夜安静）
+- 在 `qi/core/emotion.py` 中按小时调节能量目标（凌晨低、上午高、午后微降、深夜安静）
 - 能量缓慢趋向目标（不是瞬间跳转）
 - 验收：模拟不同时间点，energy 值符合预期曲线
 
@@ -260,7 +260,7 @@ def step_emotion(
 
 ### Step 5：模式切换 + 心跳频率
 
-- 在 `core/rhythm.py` 中实现四种模式判定（awake/ambient/solitary/dreaming）
+- 在 `qi/core/rhythm.py` 中实现四种模式判定（awake/ambient/solitary/dreaming）
 - 心跳频率随模式和情绪变化（活跃 3s、陪伴 30s、独处 5min、梦境 30min）
 - 验收：用户不在线 30 分钟后，模式从 ambient 切到 solitary；心跳日志显示间隔变长
 
@@ -272,7 +272,7 @@ def step_emotion(
 # <!-- 回写(2026-07)：interacting / effectively_online / next_interval(config)，
 #      依据：core/rhythm.py -->
 
-from core.emotion import ConsciousnessMode
+from qi.core.emotion import ConsciousnessMode
 
 HEARTBEAT_INTERVALS = {
     ConsciousnessMode.AWAKE: 3,

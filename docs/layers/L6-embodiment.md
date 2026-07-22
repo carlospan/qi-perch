@@ -23,7 +23,7 @@
 
 ```
 # <!-- 回写(2026-07)：按现状清单；ASR/Fish Audio/sidecar 未实现，依据：embodiment/ -->
-embodiment/
+qi/embodiment/
 ├── avatar/
 │   ├── controller.py      # 情绪→动画状态映射
 │   └── states.py          # Avatar 状态（idle/talking/thinking/happy/sleeping；无 focused）
@@ -53,11 +53,11 @@ qi/cli.py                          # qi-desktop：Brain + EmbodimentServer
 
 ### Step 1：WebSocket 通信层
 
-- 建 `embodiment/server.py`：Python 端开 WebSocket（`127.0.0.1:9527`）
+- 建 `qi/embodiment/server.py`：Python 端开 WebSocket（`127.0.0.1:9527`）
 - 消息协议：
   - 后端→前端：`speech` / `state`（含 `avatar_state`+`season`+`mode`）/ `typing` / `ping` / `audio`
   - 前端→后端：`user_message` / `presence` / `pong`（可选 `command` `/state`）
-- 修改 `core/brain.py`：`attach_embodiment` + `_emit_speech` / `_sync_avatar` 推送
+- 修改 `qi/core/brain.py`：`attach_embodiment` + `_emit_speech` / `_sync_avatar` 推送
 - 验收：Python 后端发消息，前端能收到
 
 <details>
@@ -115,7 +115,7 @@ class EmbodimentServer:
 
 ### Step 2：Avatar 状态映射
 
-- 建 `embodiment/avatar/controller.py`：
+- 建 `qi/embodiment/avatar/controller.py`：
   - 输入：EmotionState + mode + season
   - 输出：avatar_state（posture + expression + effect）
 - 状态定义：
@@ -219,7 +219,7 @@ class AvatarController:
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```
-# Tauri 项目结构（embodiment/desktop/）
+# Tauri 项目结构（qi/embodiment/desktop/）
 # <!-- 回写(2026-07)：对齐现状目录；无 composables/useWebSocket、无 PNG assets、无 sidecar -->
 
 desktop/
@@ -299,7 +299,7 @@ export const qiWs = new QiWebSocket();
 
 ### Step 4：TTS 语音
 
-- 建 `embodiment/voice/tts.py`：
+- 建 `qi/embodiment/voice/tts.py`：
   - 仅 **edge-tts**（`voice.enabled` 时由 `create_tts` 创建；Fish Audio **未实现**）
   - 栖说话时：`Brain._emit_speech` → WS `speech`，再可选合成 MP3 → WS `audio`
   - 语速/音调受情绪影响（`emotion_to_voice_params`）；pitch 单位 **Hz**，rate 为 **%**
@@ -344,7 +344,7 @@ def create_tts(config: dict) -> TTSProvider | None:
     # 其他 provider（含 fish-audio）→ None【未实现】
     ...
 
-# config/settings.yaml：
+# qi/config/settings.yaml：
 # voice:
 #   enabled: false
 #   provider: "edge-tts"
@@ -361,7 +361,7 @@ def create_tts(config: dict) -> TTSProvider | None:
 
 ### Step 5：ASR 语音输入（可选）
 
-- 【未实现】无 `embodiment/voice/asr.py`；输入仅为文本框 → WS `user_message`
+- 【未实现】无 `qi/embodiment/voice/asr.py`；输入仅为文本框 → WS `user_message`
 - 未来方向：VAD + FunASR/Whisper → `brain.receive_user_message()`
 - <!-- 回写(2026-07)：ASR 未接入，不伪造规格；依据：voice/ 目录无 asr.py -->
 

@@ -9,11 +9,11 @@ import logging
 from rich.console import Console
 from rich.panel import Panel
 
-from config import load_config
-from core.brain import Brain
-from embodiment.server import EmbodimentServer, WS_HOST, WS_PORT
-from llm.gateway import LLMGateway
-from storage.database import Database
+from qi.config import load_config
+from qi.core.brain import Brain
+from qi.embodiment.server import EmbodimentServer, WS_HOST, WS_PORT
+from qi.llm.gateway import LLMGateway
+from qi.storage.database import Database
 
 console = Console()
 
@@ -111,7 +111,7 @@ async def run_desktop() -> None:
         Panel(
             "[dim]身体慢慢醒过来。[/dim]\n"
             f"[dim]通道：ws://{WS_HOST}:{WS_PORT}[/dim]\n"
-            "[dim]打开 embodiment/desktop 的前端，就能看见它。[/dim]",
+            "[dim]打开 qi/embodiment/desktop 的前端，就能看见它。[/dim]",
             title="栖 · 具身",
             border_style="blue",
         )

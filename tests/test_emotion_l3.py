@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 
-from core.emotion import (
+from qi.core.emotion import (
     BASELINES,
     ConsciousnessMode,
     EmotionState,
@@ -14,7 +14,7 @@ from core.emotion import (
     should_express,
     step_emotion,
 )
-from core.rhythm import determine_mode, next_interval
+from qi.core.rhythm import determine_mode, next_interval
 
 
 def test_coupling_low_security_raises_attachment_need():

@@ -8,13 +8,15 @@ from pathlib import Path
 
 import yaml
 
+from qi import PROJECT_ROOT
+
 _ENV_PATTERN = re.compile(r"\$\{([^}]+)\}")
-_ROOT = Path(__file__).resolve().parent.parent
+_CONFIG_DIR = Path(__file__).resolve().parent
 
 
 def _load_dotenv(path: Path | None = None) -> None:
     """轻量加载 .env（不覆盖已有环境变量）。无需额外依赖。"""
-    env_path = path or (_ROOT / ".env")
+    env_path = path or (PROJECT_ROOT / ".env")
     if not env_path.is_file():
         return
     try:
@@ -54,16 +56,19 @@ def _walk_resolve(obj):
 def load_config(path: str | Path | None = None) -> dict:
     """
     加载栖的配置。
-    默认读项目根目录下的 config/settings.yaml；
+    默认读 qi/config/settings.yaml；
     若不存在，回退到 settings.example.yaml。
+    兼容旧路径：项目根 config/settings.yaml。
     """
     _load_dotenv()
 
     if path is None:
-        candidate = _ROOT / "config" / "settings.yaml"
-        if not candidate.exists():
-            candidate = _ROOT / "config" / "settings.example.yaml"
-        path = candidate
+        candidates = [
+            _CONFIG_DIR / "settings.yaml",
+            PROJECT_ROOT / "config" / "settings.yaml",
+            _CONFIG_DIR / "settings.example.yaml",
+        ]
+        path = next((c for c in candidates if c.exists()), candidates[-1])
     else:
         path = Path(path)
 

@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.emotion import EmotionState
-    from llm.gateway import LLMGateway
-    from storage.database import Database
+    from qi.core.emotion import EmotionState
+    from qi.llm.gateway import LLMGateway
+    from qi.storage.database import Database
 
-_ROOT = Path(__file__).resolve().parent.parent
-_REFLECT_PROMPT = _ROOT / "prompts" / "self_reflection.txt"
+from qi import PROJECT_ROOT
+
+_REFLECT_PROMPT = PROJECT_ROOT / "prompts" / "self_reflection.txt"
 
 SELF_REFLECTION_INTERVAL_SECONDS = 604800
 VALENCE_SURGE_FOR_REFLECT = 0.5

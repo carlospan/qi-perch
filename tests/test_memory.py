@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from core.emotion import EmotionState
-from memory.body_memory import BodyMemory
-from memory.manager import MemoryManager
-from memory.narrative import NarrativeMemory
-from memory.vector_store import VectorStore
-from memory.working import WorkingMemory
-from storage.database import Database
+from qi.core.emotion import EmotionState
+from qi.memory.body_memory import BodyMemory
+from qi.memory.manager import MemoryManager
+from qi.memory.narrative import NarrativeMemory
+from qi.memory.vector_store import VectorStore
+from qi.memory.working import WorkingMemory
+from qi.storage.database import Database
 
 
 @pytest.mark.asyncio

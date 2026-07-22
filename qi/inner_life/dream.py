@@ -6,16 +6,16 @@ import math
 import random
 import re
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.emotion import EmotionState
-    from llm.gateway import LLMGateway
-    from storage.database import Database
+    from qi.core.emotion import EmotionState
+    from qi.llm.gateway import LLMGateway
+    from qi.storage.database import Database
 
-_ROOT = Path(__file__).resolve().parent.parent
-_DREAM_PROMPT = _ROOT / "prompts" / "dream.txt"
+from qi import PROJECT_ROOT
+
+_DREAM_PROMPT = PROJECT_ROOT / "prompts" / "dream.txt"
 
 DREAM_PROBABILITY = 0.1
 DREAM_HALF_LIFE_HOURS = 6

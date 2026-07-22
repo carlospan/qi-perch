@@ -14,7 +14,7 @@ qi-desktop
 2. 桌面壳（推荐）：
 
 ```bash
-cd embodiment/desktop
+cd qi/embodiment/desktop
 npm install
 npm run tauri:dev
 ```
@@ -24,7 +24,7 @@ npm run tauri:dev
 3. 仅浏览器调试（不启 Tauri）：
 
 ```bash
-cd embodiment/desktop
+cd qi/embodiment/desktop
 npm run dev
 ```
 
@@ -42,7 +42,7 @@ npm run dev
 
 ## 语音
 
-在 `config/settings.yaml` 里：
+在 `qi/config/settings.yaml` 里：
 
 ```yaml
 voice:

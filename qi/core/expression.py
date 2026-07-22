@@ -7,11 +7,11 @@ import random
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from llm.prompt_builder import PromptBuilder
+from qi.llm.prompt_builder import PromptBuilder
 
 if TYPE_CHECKING:
-    from core.emotion import EmotionState
-    from llm.gateway import LLMGateway
+    from qi.core.emotion import EmotionState
+    from qi.llm.gateway import LLMGateway
 
 
 class Expression:

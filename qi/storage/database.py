@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import aiosqlite
 
 if TYPE_CHECKING:
-    from core.emotion import EmotionState
+    from qi.core.emotion import EmotionState
 
 
 _CREATE_EMOTION_STATES = """
@@ -242,7 +242,7 @@ class Database:
         await conn.commit()
 
     async def load_emotion(self) -> EmotionState | None:
-        from core.emotion import ConsciousnessMode, EmotionState
+        from qi.core.emotion import ConsciousnessMode, EmotionState
 
         conn = self._require_conn()
         async with conn.execute(

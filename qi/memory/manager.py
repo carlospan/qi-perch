@@ -5,15 +5,15 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from memory.body_memory import BodyMemory
-from memory.narrative import NarrativeMemory
-from memory.vector_store import VectorStore
-from memory.working import WorkingMemory
+from qi.memory.body_memory import BodyMemory
+from qi.memory.narrative import NarrativeMemory
+from qi.memory.vector_store import VectorStore
+from qi.memory.working import WorkingMemory
 
 if TYPE_CHECKING:
-    from core.emotion import EmotionState
-    from llm.gateway import LLMGateway
-    from storage.database import Database
+    from qi.core.emotion import EmotionState
+    from qi.llm.gateway import LLMGateway
+    from qi.storage.database import Database
 
 
 _SELF_DISCLOSURE = (

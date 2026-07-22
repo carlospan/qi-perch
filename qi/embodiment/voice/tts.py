@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.emotion import EmotionState
+    from qi.core.emotion import EmotionState
 
 
 class TTSProvider(ABC):

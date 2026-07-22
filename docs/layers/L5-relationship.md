@@ -24,16 +24,16 @@
 ## 需要创建的文件
 
 ```
-relationship/engine.py     # RelationshipEngine 编排（depth/trust/stage/叙事/伤疤创建）
-relationship/stages.py     # STAGE_THRESHOLDS + check_stage_upgrade（权威定义）
-relationship/trust.py      # 信任动力学
-relationship/culture.py    # 共同文化检测
-relationship/scars.py      # ScarManager（愈合检测 + prompt 文案）
-relationship/season.py     # 数字季节
-relationship/drift.py      # 用户漂移
-memory/first_time.py       # FirstTimeMemory
-core/proactive.py          # ProactiveGate + pick_proactive_kind
-storage/database.py        # relationship / first_times / scars / user_model
+qi/relationship/engine.py     # RelationshipEngine 编排（depth/trust/stage/叙事/伤疤创建）
+qi/relationship/stages.py     # STAGE_THRESHOLDS + check_stage_upgrade（权威定义）
+qi/relationship/trust.py      # 信任动力学
+qi/relationship/culture.py    # 共同文化检测
+qi/relationship/scars.py      # ScarManager（愈合检测 + prompt 文案）
+qi/relationship/season.py     # 数字季节
+qi/relationship/drift.py      # 用户漂移
+qi/memory/first_time.py       # FirstTimeMemory
+qi/core/proactive.py          # ProactiveGate + pick_proactive_kind
+qi/storage/database.py        # relationship / first_times / scars / user_model
 ```
 
 ## 实现步骤
@@ -41,7 +41,7 @@ storage/database.py        # relationship / first_times / scars / user_model
 ### Step 1：数据库 + 关系状态
 
 - 建 `relationship`（单行）、`first_times`、`scars`、`user_model` 表
-- 建 `relationship/engine.py`：初始化关系状态（stranger, depth=0, trust=0.5）
+- 建 `qi/relationship/engine.py`：初始化关系状态（stranger, depth=0, trust=0.5）
 - 验收：relationship 表有初始行
 
 <details>
@@ -194,8 +194,8 @@ def trust_daily_decay(trust: float, had_interaction_today: bool) -> float:
 
 ### Step 2：阶段 + 深度 + 信任
 
-- 建 `relationship/stages.py`：定义 `STAGE_THRESHOLDS` / `check_stage_upgrade`（只升不降）
-- 建 `relationship/trust.py`：
+- 建 `qi/relationship/stages.py`：定义 `STAGE_THRESHOLDS` / `check_stage_upgrade`（只升不降）
+- 建 `qi/relationship/trust.py`：
   - 信任建立：每次正向交互 +0.02~0.05（按质量插值）
   - 信任损伤：每次负面 -0.1~0.3；单次损伤 >0.15 创建伤疤
   - 无交互日衰减 0.001；愈合伤疤 +0.01
@@ -273,7 +273,7 @@ def apply_scar_healed_bonus(trust: float) -> float:
 
 ### Step 3：第一次记忆
 
-- 建 `memory/first_time.py`：
+- 建 `qi/memory/first_time.py`：
   - 检测模式（first_goodnight、first_argument、first_i_miss_you 等）
   - 触发时：记录叙事 + 生成内在体验（LLM）+ 情绪冲击 ×3
   - 永不褪色（strength 永远 1.0）
@@ -324,12 +324,12 @@ class FirstTimeMemory:
 
 ### Step 4：共同文化 + 伤疤
 
-- 建 `relationship/culture.py`：
+- 建 `qi/relationship/culture.py`：
   - 检测重复问候模式 → 仪式
   - 检测复用表达 → 梗
   - 注入 prompt（"你们之间的默契"段落）
   - 模式被打破时注意到（"你今天没说'早'"）
-- 建 `relationship/scars.py`：
+- 建 `qi/relationship/scars.py`：
   - 信任损伤 > 阈值时创建伤疤
   - 每日检查愈合（trust 恢复到损伤前 95%）
   - 愈合时生成 wisdom + behavioral_mark（LLM）
@@ -379,10 +379,10 @@ def get_scar_influences(scars: list[dict]) -> list[str]: ...
 
 ### Step 5：季节 + 漂移 + Prompt 注入
 
-- 建 `relationship/season.py`：每日判定 spring/summer/autumn/winter
-- 建 `relationship/drift.py`：每 3 天检测用户话题/情绪/节奏变化
-- 修改 `llm/prompt_builder.py`：注入关系阶段、共同文化、伤疤影响、季节感受
-- 修改 `core/expression.py`：关系阶段影响语气亲密度和主动程度
+- 建 `qi/relationship/season.py`：每日判定 spring/summer/autumn/winter
+- 建 `qi/relationship/drift.py`：每 3 天检测用户话题/情绪/节奏变化
+- 修改 `qi/llm/prompt_builder.py`：注入关系阶段、共同文化、伤疤影响、季节感受
+- 修改 `qi/core/expression.py`：关系阶段影响语气亲密度和主动程度
 - 验收：prompt 中能看到关系上下文；不同阶段栖的语气明显不同
 
 <details>
@@ -516,7 +516,7 @@ SEASON_BEHAVIOR_HINTS = {
 
 ### Step 6：主动行为门控
 
-- 建 `core/proactive.py`：`ProactiveGate` + `pick_proactive_kind`
+- 建 `qi/core/proactive.py`：`ProactiveGate` + `pick_proactive_kind`
 - 日限 3；陌生期禁止；冷却与沉默触发阈值见下
 - `KIND_SHARE_CREATION` 有冷却常量，但 `pick_proactive_kind` **未选用**（创作分享走 L4 `maybe_share_hint`）
 

@@ -40,21 +40,21 @@ gateway 内部用 llm/providers/openai_compat.py 做协议适配。
 里，有的以"**实现规格：**"开头）。这些代码块就是要回写的对象。
 
 层文档 ↔ 代码文件 的对应关系：
-  L1 → core/brain.py, core/rhythm.py, core/perception.py, core/emotion.py,
+  L1 → qi/core/brain.py, core/rhythm.py, core/perception.py, core/emotion.py,
        core/expression.py, llm/gateway.py, llm/prompt_builder.py,
-       llm/providers/openai_compat.py, storage/database.py, qi/cli.py, config/settings.yaml
-  L2 → memory/manager.py, memory/working.py, memory/narrative.py,
-       memory/first_time.py, memory/body_memory.py, memory/vector_store.py,
-       storage/database.py, llm/prompt_builder.py
+       qi/llm/providers/openai_compat.py, storage/database.py, qi/cli.py, qi/config/settings.yaml
+  L2 → qi/memory/manager.py, memory/working.py, memory/narrative.py,
+       qi/memory/first_time.py, memory/body_memory.py, memory/vector_store.py,
+       qi/storage/database.py, llm/prompt_builder.py
   L3 → core/emotion.py（耦合矩阵 / 内在天气周期 / 日内节律 / 心情周期 / 模式切换）
   L4 → inner_life/consciousness.py, inner_life/dream.py, inner_life/creativity.py,
-       inner_life/self_model.py, storage/database.py
+       qi/inner_life/self_model.py, storage/database.py
   L5 → relationship/engine.py, relationship/stages.py, relationship/trust.py,
-       relationship/scars.py, relationship/culture.py, relationship/season.py,
-       relationship/drift.py, memory/first_time.py
+       qi/relationship/scars.py, relationship/culture.py, relationship/season.py,
+       qi/relationship/drift.py, memory/first_time.py
   L6 → embodiment/server.py, embodiment/avatar/controller.py,
-       embodiment/avatar/states.py, embodiment/voice/tts.py, qi/cli.py,
-       embodiment/desktop/（前端，仅在文档涉及处参考）
+       qi/embodiment/avatar/states.py, embodiment/voice/tts.py, qi/cli.py,
+       qi/embodiment/desktop/（前端，仅在文档涉及处参考）
 
 ---
 

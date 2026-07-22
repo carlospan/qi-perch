@@ -18,10 +18,10 @@ copy .env.example .env
 # 编辑 .env，例如 AGNES_API_KEY=...
 
 # 配置（可选）：从示例复制后按需改
-copy config\settings.example.yaml config\settings.yaml
+copy qi\config\settings.example.yaml qi\config\settings.yaml
 ```
 
-`config/settings.yaml` 已在 `.gitignore` 中，不要提交密钥。
+`qi/config/settings.yaml` 已在 `.gitignore` 中，不要提交密钥。
 
 ## 启动
 
@@ -47,7 +47,7 @@ qi-desktop
 终端 2 — 桌面壳（Tauri；需 Rust + MSVC）：
 
 ```bash
-cd embodiment/desktop
+cd qi/embodiment/desktop
 npm install
 npm run tauri:dev
 ```
@@ -63,7 +63,7 @@ VS Code 里可用运行配置「栖 · 具身（后端+前端）」（需本机�
 pip install edge-tts
 ```
 
-在 `config/settings.yaml` 中：
+在 `qi/config/settings.yaml` 中：
 
 ```yaml
 voice:
@@ -94,15 +94,16 @@ python -m pytest -q
 ## 目录速览
 
 ```
-qi/             CLI 入口（qi / qi-desktop）
-core/           心跳、情绪、表达、主动门控
-memory/         记忆
-inner_life/     意识流、梦、创作、自我
-relationship/   关系
-embodiment/     具身（WS + Vue 前端）
-llm/            网关与 prompt 组装
-storage/        SQLite
-config/         配置加载
-docs/           契约、进度、层文档、设计原文、开发工具文档
-prompts/        运行时提示词模板
+qi/                 唯一顶层包
+  cli.py            入口（qi / qi-desktop）
+  core/             心跳、情绪、表达、主动门控
+  memory/           记忆
+  inner_life/       意识流、梦、创作、自我
+  relationship/     关系
+  embodiment/       具身（WS + Vue/Tauri 前端）
+  llm/              网关与 prompt 组装
+  storage/          SQLite
+  config/           配置加载 + settings 模板
+docs/               契约、进度、层文档、设计原文、开发工具文档
+prompts/            运行时提示词模板
 ```

@@ -6,14 +6,14 @@ import tempfile
 
 import pytest
 
-from core.emotion import EmotionState
-from memory.first_time import FirstTimeMemory, rule_match
-from relationship.culture import detect_shared_culture, format_culture_for_prompt
-from relationship.engine import RelationshipEngine, assess_interaction
-from relationship.season import determine_season
-from relationship.stages import check_stage_upgrade
-from relationship.trust import apply_negative_event, apply_positive_interaction
-from storage.database import Database
+from qi.core.emotion import EmotionState
+from qi.memory.first_time import FirstTimeMemory, rule_match
+from qi.relationship.culture import detect_shared_culture, format_culture_for_prompt
+from qi.relationship.engine import RelationshipEngine, assess_interaction
+from qi.relationship.season import determine_season
+from qi.relationship.stages import check_stage_upgrade
+from qi.relationship.trust import apply_negative_event, apply_positive_interaction
+from qi.storage.database import Database
 
 
 def test_stage_upgrade_only_up():

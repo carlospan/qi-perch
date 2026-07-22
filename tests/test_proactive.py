@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 
-from core.proactive import (
+from qi.core.proactive import (
     KIND_CHECK_IN,
     KIND_EXPRESS_FEELING,
     KIND_REACH_OUT,

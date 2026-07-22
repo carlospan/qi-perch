@@ -2,10 +2,10 @@
 
 from datetime import datetime
 
-from core.emotion import EmotionState
-from embodiment.avatar.controller import AvatarController
-from embodiment.avatar.states import Effect, Expression, Posture
-from embodiment.voice.tts import emotion_to_voice_params
+from qi.core.emotion import EmotionState
+from qi.embodiment.avatar.controller import AvatarController
+from qi.embodiment.avatar.states import Effect, Expression, Posture
+from qi.embodiment.voice.tts import emotion_to_voice_params
 
 
 def test_idle_default():

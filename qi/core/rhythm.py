@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-from core.emotion import ConsciousnessMode
+from qi.core.emotion import ConsciousnessMode
 
 if TYPE_CHECKING:
-    from core.emotion import EmotionState
+    from qi.core.emotion import EmotionState
 
 # 基础间隔（秒）；可被 config["rhythm"] 覆盖
 HEARTBEAT_INTERVALS = {

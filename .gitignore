@@ -3,6 +3,7 @@ data/
 *.db
 *.db-journal
 config/settings.yaml
+qi/config/settings.yaml
 
 # Python
 __pycache__/
@@ -16,6 +17,10 @@ build/
 
 # 前端（Vue / Vite / Tauri）
 node_modules/
+qi/embodiment/desktop/dist/
+qi/embodiment/desktop/.vite/
+qi/embodiment/desktop/src-tauri/target/
+# 兼容旧路径（若本地残留）
 embodiment/desktop/dist/
 embodiment/desktop/.vite/
 embodiment/desktop/src-tauri/target/

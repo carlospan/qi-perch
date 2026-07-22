@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from llm.gateway import LLMGateway
-    from storage.database import Database
+    from qi.llm.gateway import LLMGateway
+    from qi.storage.database import Database
 
 
 def get_scar_influences(scars: list[dict]) -> list[str]:

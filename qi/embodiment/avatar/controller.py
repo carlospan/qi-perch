@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from embodiment.avatar.states import AvatarState, Effect, Expression, Posture
+from qi.embodiment.avatar.states import AvatarState, Effect, Expression, Posture
 
 if TYPE_CHECKING:
-    from core.emotion import EmotionState
+    from qi.core.emotion import EmotionState
 
 
 class AvatarController:

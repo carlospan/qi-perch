@@ -7,33 +7,33 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from core.emotion import (
+from qi.core.emotion import (
     EmotionState,
     apply_event_impact,
     clamp_emotion,
     should_express,
     step_emotion,
 )
-from core.expression import Expression
-from core.perception import Perception
-from core.proactive import ProactiveGate, pick_proactive_kind
-from core.rhythm import determine_mode, next_interval
-from embodiment.avatar.controller import AvatarController
-from embodiment.voice.tts import create_tts, emotion_to_voice_params
-from inner_life import InnerLife
-from memory.first_time import FirstTimeMemory
-from memory.manager import MemoryManager
-from relationship import RelationshipEngine
-from relationship.culture import detect_shared_culture, format_culture_for_prompt
-from relationship.drift import build_updated_user_model, detect_user_drift
-from relationship.scars import ScarManager, format_scars_for_prompt
-from relationship.season import apply_season_effect, determine_season
+from qi.core.expression import Expression
+from qi.core.perception import Perception
+from qi.core.proactive import ProactiveGate, pick_proactive_kind
+from qi.core.rhythm import determine_mode, next_interval
+from qi.embodiment.avatar.controller import AvatarController
+from qi.embodiment.voice.tts import create_tts, emotion_to_voice_params
+from qi.inner_life import InnerLife
+from qi.memory.first_time import FirstTimeMemory
+from qi.memory.manager import MemoryManager
+from qi.relationship import RelationshipEngine
+from qi.relationship.culture import detect_shared_culture, format_culture_for_prompt
+from qi.relationship.drift import build_updated_user_model, detect_user_drift
+from qi.relationship.scars import ScarManager, format_scars_for_prompt
+from qi.relationship.season import apply_season_effect, determine_season
 
 if TYPE_CHECKING:
-    from embodiment.server import EmbodimentServer
-    from embodiment.voice.tts import TTSProvider
-    from llm.gateway import LLMGateway
-    from storage.database import Database
+    from qi.embodiment.server import EmbodimentServer
+    from qi.embodiment.voice.tts import TTSProvider
+    from qi.llm.gateway import LLMGateway
+    from qi.storage.database import Database
 
 logger = logging.getLogger("qi.brain")
 

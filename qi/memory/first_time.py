@@ -6,9 +6,9 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.emotion import EmotionState
-    from llm.gateway import LLMGateway
-    from storage.database import Database
+    from qi.core.emotion import EmotionState
+    from qi.llm.gateway import LLMGateway
+    from qi.storage.database import Database
 
 # 规则初筛关键词（first_shared_silence 靠沉默上下文，不走关键词表）
 _PATTERNS: dict[str, tuple[str, ...]] = {

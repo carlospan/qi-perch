@@ -19,16 +19,16 @@
 ## 需要创建的文件
 
 ```
-core/brain.py          # 心跳主循环
-core/emotion.py        # 最简情绪（6维度 + 衰减 + 事件冲击）
-core/perception.py     # 感知（接收用户输入 + 检测沉默）
-core/expression.py     # 表达（调 LLM + 语气注入）
-llm/gateway.py         # LLM 路由（"provider:档位" → 具体端点）
-llm/providers/openai_compat.py  # OpenAI 兼容端点统一实现（deepseek/agnes-ai/自定义共用）
-llm/prompt_builder.py  # Prompt 组装
-storage/database.py    # SQLite 初始化 + 状态持久化
+qi/core/brain.py          # 心跳主循环
+qi/core/emotion.py        # 最简情绪（6维度 + 衰减 + 事件冲击）
+qi/core/perception.py     # 感知（接收用户输入 + 检测沉默）
+qi/core/expression.py     # 表达（调 LLM + 语气注入）
+qi/llm/gateway.py         # LLM 路由（"provider:档位" → 具体端点）
+qi/llm/providers/openai_compat.py  # OpenAI 兼容端点统一实现（deepseek/agnes-ai/自定义共用）
+qi/llm/prompt_builder.py  # Prompt 组装
+qi/storage/database.py    # SQLite 初始化 + 状态持久化
 qi/cli.py              # 终端 / 具身入口（console scripts: qi / qi-desktop）
-config/settings.yaml   # 配置（provider、API key、心跳频率）
+qi/config/settings.yaml   # 配置（provider、API key、心跳频率）
 prompts/conversation.txt  # 对话 prompt（自己写，不让 AI 写）
 ```
 
@@ -36,9 +36,9 @@ prompts/conversation.txt  # 对话 prompt（自己写，不让 AI 写）
 
 ### Step 1：数据库 + 配置
 
-- 建 `storage/database.py`：初始化 SQLite，建 `emotion_states` 和 `messages` 表
-- 建 `config/settings.yaml`：LLM provider（默认 deepseek，OpenAI 兼容协议）、API key（从环境变量读）、心跳间隔
-- 验收：`python -c "from storage.database import Database; ..."` 不报错
+- 建 `qi/storage/database.py`：初始化 SQLite，建 `emotion_states` 和 `messages` 表
+- 建 `qi/config/settings.yaml`：LLM provider（默认 deepseek，OpenAI 兼容协议）、API key（从环境变量读）、心跳间隔
+- 验收：`python -c "from qi.storage.database import Database; ..."` 不报错
 
 <details>
 <summary>实现规格（Cursor 编码用）</summary>
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS messages (
 ```
 
 ```yaml
-# config/settings.example.yaml（权威模板；本地 settings.yaml 不入库）
+# qi/config/settings.example.yaml（权威模板；本地 settings.yaml 不入库）
 # <!-- 回写(2026-07)：与 settings.example.yaml 对齐；memory/inner_life/proactive/
 #      relationship/voice/embodiment 等键在同文件，规格见对应层 -->
 
@@ -118,9 +118,9 @@ emotion:
 
 ### Step 2：情绪系统（最简版）
 
-- 建 `core/emotion.py`：EmotionState 数据类（6维度）
+- 建 `qi/core/emotion.py`：EmotionState 数据类（6维度）
 - 实现：衰减（回归基线）、事件冲击（用户消息影响情绪）
-- L1 只放最简情绪（基线 + 衰减）。耦合、内在天气周期、日内节律等完整动力学已在本文件（`core/emotion.py`）中实现，规格见 L3。
+- L1 只放最简情绪（基线 + 衰减）。耦合、内在天气周期、日内节律等完整动力学已在本文件（`qi/core/emotion.py`）中实现，规格见 L3。
 - 验收：单元测试——给一个事件，情绪变化方向正确；无事件时，情绪缓慢回归基线
 
 <details>
@@ -261,9 +261,9 @@ def clamp_emotion(emotion: EmotionState) -> EmotionState:
 
 ### Step 3：LLM 层 + Prompt
 
-- 建 `llm/providers/openai_compat.py`：OpenAI 兼容端点的统一 provider（deepseek/agnes-ai/自定义模型共用）
-- 建 `llm/gateway.py`：按 `model_routing` 的 "provider:档位" 路由，暴露 `chat(messages, temperature)` 方法
-- 建 `llm/prompt_builder.py`：组装 system prompt（注入情绪描述、时间）
+- 建 `qi/llm/providers/openai_compat.py`：OpenAI 兼容端点的统一 provider（deepseek/agnes-ai/自定义模型共用）
+- 建 `qi/llm/gateway.py`：按 `model_routing` 的 "provider:档位" 路由，暴露 `chat(messages, temperature)` 方法
+- 建 `qi/llm/prompt_builder.py`：组装 system prompt（注入情绪描述、时间）
 - 建 `prompts/conversation.txt`：**自己写**。参考 `prompts/conversation.txt` 模板
 - 验收：手动调一次 LLM，返回的内容不像客服
 
@@ -274,7 +274,7 @@ def clamp_emotion(emotion: EmotionState) -> EmotionState:
 # llm/gateway.py
 # <!-- 回写(2026-07)：无 LLMProvider ABC；重试为首次+2次共3次；失败返回 ""，依据：llm/gateway.py -->
 
-from llm.providers.openai_compat import OpenAICompatProvider
+from qi.llm.providers.openai_compat import OpenAICompatProvider
 
 _DEFAULT_TEMPERATURES = {
     "conversation": 0.7,
@@ -389,9 +389,9 @@ class PromptBuilder:
 
 ### Step 4：Brain Loop + 终端入口
 
-- 建 `core/brain.py`：asyncio 循环，每次心跳做：感知→情绪更新→（如果有用户消息）表达
-- 建 `core/perception.py`：接收用户输入、计算沉默时长
-- 建 `core/expression.py`：调 prompt_builder + gateway，输出回复
+- 建 `qi/core/brain.py`：asyncio 循环，每次心跳做：感知→情绪更新→（如果有用户消息）表达
+- 建 `qi/core/perception.py`：接收用户输入、计算沉默时长
+- 建 `qi/core/expression.py`：调 prompt_builder + gateway，输出回复
 - 建 `qi/cli.py`：rich 终端界面，支持 `/state`、`/quit`
 - 验收：`qi`（或 `python -m qi`）启动，能聊天，`/state` 显示情绪
 

@@ -5,15 +5,15 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-from inner_life.consciousness import ConsciousnessStream
-from inner_life.creativity import Creativity
-from inner_life.dream import DreamEngine
-from inner_life.self_model import SelfModel
+from qi.inner_life.consciousness import ConsciousnessStream
+from qi.inner_life.creativity import Creativity
+from qi.inner_life.dream import DreamEngine
+from qi.inner_life.self_model import SelfModel
 
 if TYPE_CHECKING:
-    from core.emotion import EmotionState
-    from llm.gateway import LLMGateway
-    from storage.database import Database
+    from qi.core.emotion import EmotionState
+    from qi.llm.gateway import LLMGateway
+    from qi.storage.database import Database
 
 
 class InnerLife:

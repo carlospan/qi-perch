@@ -21,11 +21,11 @@
 ## 需要创建的文件
 
 ```
-memory/manager.py       # 记忆管理器（统一入口）
-memory/working.py       # 工作记忆（最近 N 条对话上下文）
-memory/narrative.py     # 叙事记忆（存储、检索、褪色）
-memory/vector_store.py  # ChromaDB 封装（embedding + 语义搜索）
-storage/database.py     # 追加 narrative_memories、body_memory 表
+qi/memory/manager.py       # 记忆管理器（统一入口）
+qi/memory/working.py       # 工作记忆（最近 N 条对话上下文）
+qi/memory/narrative.py     # 叙事记忆（存储、检索、褪色）
+qi/memory/vector_store.py  # ChromaDB 封装（embedding + 语义搜索）
+qi/storage/database.py     # 追加 narrative_memories、body_memory 表
 ```
 
 ## 实现步骤
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS body_memory (
 
 ### Step 2：工作记忆
 
-- 建 `memory/working.py`：维护最近 20 条对话（role + content + timestamp）
+- 建 `qi/memory/working.py`：维护最近 20 条对话（role + content + timestamp）
 - 超出 20 条时，最旧的移出工作记忆（但不删除，进入 raw_events）
 - 验收：对话超过 20 条后，prompt 中只包含最近 20 条
 
@@ -174,8 +174,8 @@ class WorkingMemory:
 
 ### Step 3：叙事记忆 + 向量检索
 
-- 建 `memory/vector_store.py`：ChromaDB 初始化、embedding 生成、语义搜索
-- 建 `memory/narrative.py`：
+- 建 `qi/memory/vector_store.py`：ChromaDB 初始化、embedding 生成、语义搜索
+- 建 `qi/memory/narrative.py`：
   - `save(content, importance, emotion)` → 存入 DB + 向量库
   - `search(query, top_k)` → 语义检索相关记忆
   - `decay()` → 每日衰减所有记忆的 strength
@@ -315,7 +315,7 @@ class NarrativeMemory:
 
 ### Step 4：记忆注入 Prompt
 
-- 修改 `llm/prompt_builder.py`：在 prompt 中加入 `[你记得的事]` 段落
+- 修改 `qi/llm/prompt_builder.py`：在 prompt 中加入 `[你记得的事]` 段落
 - 检索到的记忆以叙事性语言注入（不是 JSON，是"你记得他之前在学吉他"）
 - 验收：跟栖说"我最近在学吉他"，下次聊音乐时它提起吉他
 
@@ -443,7 +443,7 @@ class MemoryManager:
 
 ### Step 6：叙事编织
 
-- 实现 `memory/narrative.py` 的 `weave_narrative()` 方法
+- 实现 `qi/memory/narrative.py` 的 `weave_narrative()` 方法
 - 定期（每6小时）检查 raw_events 中 processed=0 的事件
 - 用 LLM 将原始事件编织为第一人称叙事（引用 `prompts/story_weaving.txt` 模板）
 - 编织结果存入 narrative_memories 表，标记源事件为 processed=1
@@ -499,7 +499,7 @@ async def weave_narrative(
     return memory_id
 ```
 
-**触发逻辑（`core/brain.py` 后台任务）：**
+**触发逻辑（`qi/core/brain.py` 后台任务）：**
 
 ```python
 async def _background_narrative_weaving(self) -> None:
@@ -544,7 +544,7 @@ async def _background_memory_decay(self) -> None:
 
 ### Step 7：身体记忆
 
-- 实现 `memory/body_memory.py` 的模式检测
+- 实现 `qi/memory/body_memory.py` 的模式检测
 - 记录并检测：用户通常在线时间、打字节奏、问候模式、沉默容忍度
 - 存入 body_memory 表
 - 这些模式影响栖的节律感知（"他通常这个时候在线"）

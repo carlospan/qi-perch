@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import AsyncIterator
 
-from llm.providers.openai_compat import OpenAICompatProvider
+from qi.llm.providers.openai_compat import OpenAICompatProvider
 
 logger = logging.getLogger("qi.llm")
 
@@ -64,7 +64,7 @@ class LLMGateway:
         if provider is None:
             # 回退到任意已初始化的 provider
             if not self.providers:
-                raise RuntimeError("没有可用的 LLM provider，请检查 config/settings.yaml")
+                raise RuntimeError("没有可用的 LLM provider，请检查 qi/config/settings.yaml")
             provider = next(iter(self.providers.values()))
             logger.warning("provider %s 未找到，回退到 %s", provider_name, provider.name)
 

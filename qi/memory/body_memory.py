@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from storage.database import Database
+    from qi.storage.database import Database
 
 _GREETING_HINTS = ("早", "你好", "嗨", "嘿", "晚安", "午安", "在吗", "hello", "hi")
 

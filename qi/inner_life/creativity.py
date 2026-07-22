@@ -5,16 +5,16 @@ from __future__ import annotations
 import json
 import random
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.emotion import EmotionState
-    from llm.gateway import LLMGateway
-    from storage.database import Database
+    from qi.core.emotion import EmotionState
+    from qi.llm.gateway import LLMGateway
+    from qi.storage.database import Database
 
-_ROOT = Path(__file__).resolve().parent.parent
-_CREATION_PROMPT = _ROOT / "prompts" / "creation.txt"
+from qi import PROJECT_ROOT
+
+_CREATION_PROMPT = PROJECT_ROOT / "prompts" / "creation.txt"
 
 CREATION_BASE_PROBABILITY = 0.01
 CREATION_HIGH_EMOTION_PROBABILITY = 0.03

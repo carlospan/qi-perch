@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.emotion import EmotionState
-    from llm.gateway import LLMGateway
-    from memory.vector_store import VectorStore
-    from storage.database import Database
+    from qi.core.emotion import EmotionState
+    from qi.llm.gateway import LLMGateway
+    from qi.memory.vector_store import VectorStore
+    from qi.storage.database import Database
 
 logger = logging.getLogger("qi.memory.narrative")
 
-_ROOT = Path(__file__).resolve().parent.parent
-_WEAVE_PROMPT = _ROOT / "prompts" / "story_weaving.txt"
+from qi import PROJECT_ROOT
+
+_WEAVE_PROMPT = PROJECT_ROOT / "prompts" / "story_weaving.txt"
 
 # 人格契约：strength < 0.2 不引用；< 0.1 视为遗忘
 RECALL_MIN_STRENGTH = 0.2

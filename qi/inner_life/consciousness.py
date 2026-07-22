@@ -5,16 +5,16 @@ from __future__ import annotations
 import json
 import random
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.emotion import EmotionState
-    from llm.gateway import LLMGateway
-    from storage.database import Database
+    from qi.core.emotion import EmotionState
+    from qi.llm.gateway import LLMGateway
+    from qi.storage.database import Database
 
-_ROOT = Path(__file__).resolve().parent.parent
-_STREAM_PROMPT = _ROOT / "prompts" / "consciousness_stream.txt"
+from qi import PROJECT_ROOT
+
+_STREAM_PROMPT = PROJECT_ROOT / "prompts" / "consciousness_stream.txt"
 
 CONSCIOUSNESS_PROBABILITY = 0.05
 EMOTION_SURGE_THRESHOLD = 0.3

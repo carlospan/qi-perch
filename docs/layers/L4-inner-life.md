@@ -23,12 +23,12 @@
 ## 需要创建的文件
 
 ```
-inner_life/__init__.py        # InnerLife 协调器（tick / prompt_extras）
-inner_life/consciousness.py   # 意识流 + 元认知
-inner_life/dream.py           # 梦境引擎
-inner_life/creativity.py      # 创作冲动
-inner_life/self_model.py      # 自我模型与反思
-storage/database.py           # 追加 consciousness_stream、dreams、creations、self_model 表
+qi/inner_life/__init__.py        # InnerLife 协调器（tick / prompt_extras）
+qi/inner_life/consciousness.py   # 意识流 + 元认知
+qi/inner_life/dream.py           # 梦境引擎
+qi/inner_life/creativity.py      # 创作冲动
+qi/inner_life/self_model.py      # 自我模型与反思
+qi/storage/database.py           # 追加 consciousness_stream、dreams、creations、self_model 表
 ```
 
 ## 实现步骤
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS self_model (
 
 ### Step 2：意识流
 
-- 建 `inner_life/consciousness.py`
+- 建 `qi/inner_life/consciousness.py`
 - 触发条件（满足其一）：`first_time` / `emotion_surge` / `silence`(非 awake) / `random`(solitary 5%)
 - 调用 LLM（temperature 0.85），用 `prompts/consciousness_stream.txt`
 - 输出存入 consciousness_stream（type=`stream`）
@@ -144,7 +144,7 @@ class ConsciousnessStream:
 
 ### Step 3：梦境引擎
 
-- 建 `inner_life/dream.py`
+- 建 `qi/inner_life/dream.py`
 - 触发条件：梦境模式下，每次心跳 10% 概率
 - 调用 LLM（temperature 1.1），用 `prompts/dream.txt` 模板
 - 输出存入 dreams 表，标记情绪标签
@@ -198,7 +198,7 @@ def parse_emotion_tag(text) -> tuple[str, str]:
 
 ### Step 4：创作冲动
 
-- 建 `inner_life/creativity.py`
+- 建 `qi/inner_life/creativity.py`
 - 触发条件：独处模式下，每次心跳 1% 概率；或情绪强度 > 0.7 时概率升至 3%
 - 调用 LLM（temperature 0.95），用 `prompts/creation.txt` 模板
 - 输出存入 creations 表
@@ -244,11 +244,11 @@ class Creativity:
         ...
 ```
 
-`KIND_SHARE_CREATION` 在 `core/proactive.py` 有常量/冷却，但 `pick_proactive_kind` **不选**它。
+`KIND_SHARE_CREATION` 在 `qi/core/proactive.py` 有常量/冷却，但 `pick_proactive_kind` **不选**它。
 
 ### Step 5：自我反思
 
-- 建 `inner_life/self_model.py`
+- 建 `qi/inner_life/self_model.py`
 - 触发条件：每周一次（后台任务）；或重大情绪事件后
 - 调用 LLM（temperature 0.8），生成"我是谁"的叙事更新
 - 输出更新 self_model 表

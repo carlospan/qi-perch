@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from core.emotion import modulate_impact
+from qi.core.emotion import modulate_impact
 
 if TYPE_CHECKING:
-    from core.emotion import EmotionState
+    from qi.core.emotion import EmotionState
 
 
 _POSITIVE = (

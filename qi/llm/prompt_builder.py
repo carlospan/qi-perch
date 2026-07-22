@@ -7,10 +7,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.emotion import EmotionState
+    from qi.core.emotion import EmotionState
 
-_ROOT = Path(__file__).resolve().parent.parent
-_PROMPT_PATH = _ROOT / "prompts" / "conversation.txt"
+from qi import PROJECT_ROOT
+
+_PROMPT_PATH = PROJECT_ROOT / "prompts" / "conversation.txt"
 
 
 def _energy_level(energy: float) -> str:
@@ -104,7 +105,7 @@ class PromptBuilder:
             inner_notes_parts.append(f"你注意到他可能变了：{drift_hint}。温柔地重新认识，不要质问。")
         inner_notes = "\n".join(inner_notes_parts) if inner_notes_parts else "（无）"
 
-        from relationship.season import SEASON_BEHAVIOR_HINTS
+        from qi.relationship.season import SEASON_BEHAVIOR_HINTS
 
         season_hint = SEASON_BEHAVIOR_HINTS.get(season, "")
         rel_hint = relationship_hint or "礼貌、好奇、小心翼翼。"

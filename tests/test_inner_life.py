@@ -6,16 +6,16 @@ import tempfile
 
 import pytest
 
-from core.emotion import ConsciousnessMode, EmotionState
-from inner_life.consciousness import should_trigger_consciousness, should_trigger_meta
-from inner_life.creativity import can_share_creation
-from inner_life.dream import parse_emotion_tag, update_dream_retention
-from inner_life.dream import DreamEngine
-from storage.database import Database
+from qi.core.emotion import ConsciousnessMode, EmotionState
+from qi.inner_life.consciousness import should_trigger_consciousness, should_trigger_meta
+from qi.inner_life.creativity import can_share_creation
+from qi.inner_life.dream import parse_emotion_tag, update_dream_retention
+from qi.inner_life.dream import DreamEngine
+from qi.storage.database import Database
 
 
 def test_consciousness_trigger_solitary_random(monkeypatch):
-    monkeypatch.setattr("inner_life.consciousness.random.random", lambda: 0.01)
+    monkeypatch.setattr("qi.inner_life.consciousness.random.random", lambda: 0.01)
     ok, reason = should_trigger_consciousness(
         "solitary", 0.0, 0.0, timedelta(minutes=10)
     )

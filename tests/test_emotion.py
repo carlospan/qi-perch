@@ -1,13 +1,13 @@
 """情绪动力学单元测试。"""
 
-from core.emotion import (
+from qi.core.emotion import (
     BASELINES,
     EmotionState,
     apply_decay,
     apply_event_impact,
     clamp_emotion,
 )
-from core.perception import Perception
+from qi.core.perception import Perception
 
 
 def test_positive_impact_raises_valence():

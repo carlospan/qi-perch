@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
-from relationship.stages import STAGE_THRESHOLDS, STAGES, check_stage_upgrade
-from relationship.trust import (
+from qi.relationship.stages import STAGE_THRESHOLDS, STAGES, check_stage_upgrade
+from qi.relationship.trust import (
     apply_daily_decay,
     apply_negative_event,
     apply_positive_interaction,
@@ -17,8 +17,8 @@ from relationship.trust import (
 )
 
 if TYPE_CHECKING:
-    from llm.gateway import LLMGateway
-    from storage.database import Database
+    from qi.llm.gateway import LLMGateway
+    from qi.storage.database import Database
 
 DAILY_DEPTH_CAP = 0.03
 

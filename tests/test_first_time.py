@@ -6,14 +6,14 @@ import tempfile
 
 import pytest
 
-from core.emotion import EmotionState
-from memory.first_time import (
+from qi.core.emotion import EmotionState
+from qi.memory.first_time import (
     FirstTimeMemory,
     RECALL_COOLDOWN,
     is_comfortable_silence,
     rule_match,
 )
-from storage.database import Database
+from qi.storage.database import Database
 
 
 def test_comfortable_silence_window():
@@ -74,7 +74,7 @@ async def test_recall_weekly_cooldown():
 
 
 def test_after_first_time_triggers_consciousness_even_awake():
-    from inner_life.consciousness import should_trigger_consciousness
+    from qi.inner_life.consciousness import should_trigger_consciousness
 
     ok, reason = should_trigger_consciousness(
         "awake", 0.0, 0.0, timedelta(0), after_first_time=True
