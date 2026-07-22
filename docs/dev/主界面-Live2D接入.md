@@ -19,13 +19,15 @@
 
 | 模式 / 时机 | 动作 | 说明 |
 |------|------|------|
-| awake / ambient / interacting | `01_idle_1` / `06_idle_2` / `15_idle_3` 轮换 | 清醒时的自然待机 |
-| solitary | `15_idle_3`（或最安静的一个 idle） | 独处时更安静 |
+| awake / ambient / interacting | `01_idle_1` / `06_idle_2` 轮换 | 清醒待机（**不用** `15_idle_3`，见 §九） |
+| solitary | `06_idle_2` | 独处更安静 |
 | dreaming | `02_sleeptouch_1` / `03_sleeptouch_2` / `04_sleeptouch_3` | 睡眠 |
 | dreaming → awake 的瞬间 | `05_wake` 播放一次，再转 idle | 醒来 |
-| 可选：用户发来消息且栖心情高 | `07_touch_head`（轻柔反应，低频） | 点缀，别滥用 |
+| 可选：栖**开始回复**且心情/依恋够高 | `07_touch_head`（稀疏） | 点缀；见 §九 实现约定 |
 
 > **`08`–`16` 那些动作（掀裙/脱衣/触摸类）一律不映射、不播放。** 它们不出现在栖的任何行为里。这不是可选项。
+>
+> 穿衣态：每帧锁定衣物相关参数（`ParamTackOffSkirt`/`ParamTakeOffPants`=1 等），避免 idle 关键帧把衣服「脱掉」。
 
 ---
 
@@ -151,6 +153,17 @@ src/
 - [ ] 说话时嘴部有"在说"的动态，说完闭嘴
 - [ ] 任何情况下都不播放 08–16 动作
 - [ ] 脸色变化含蓄、不夸张（感受验证）
+
+---
+
+## 九、实现偏离（相对初稿，以代码为准）
+
+<!-- 回写(2026-07-22)：对齐 useLive2D.ts -->
+
+1. **`15_idle_3` 不进日常轮换**：该动作会把脱衣参数打到 0；清醒用 `01_idle_1`/`06_idle_2`，solitary 用 `06_idle_2`。
+2. **`07_touch_head` 触发点**：挂在「栖开始回复」（`typing`/`speech` 的 replyEpoch），**不是**用户刚发消息。条件：`valence ≥ 0.5` 且 `attachment ≥ 0.6`、冷却 5 分钟、约 25% 概率；dreaming 跳过。宁可极少，也不要条件反射。
+3. **Cubism Core 5 API**：`renderOrders` 在模型根上；`pixi-live2d-display@0.4` 需补丁（`patchCubismRenderOrders`）。Vite 需 dedupe `@pixi/*`，避免双实例导致不绘制。
+4. **构图**：Live2D 按模型顶点包围盒做 content-box 适配，避免头发左侧被裁。
 
 ---
 

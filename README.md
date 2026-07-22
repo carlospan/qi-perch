@@ -52,6 +52,8 @@ npm install
 npm run tauri:dev
 ```
 
+**首次具身**：从 [Live2D Cubism SDK for Web](https://www.live2d.com/download/cubism-sdk/download-web/) 取出 `live2dcubismcore.min.js`，放到 `qi/embodiment/desktop/public/`（**不入库**）。没有它形象不会显示。详见 [换机搭建.md](docs/dev/换机搭建.md) §5。
+
 仅浏览器调试可用 `npm run dev`，打开 http://localhost:5173。  
 后端 WebSocket：`ws://127.0.0.1:9527`。
 

@@ -6,7 +6,7 @@
 
 ## 职责
 
-实现栖的具身层：桌面应用（Tauri + Vue3）、虚拟形象（CSS 动画形象（未来方向：帧动画/Live2D））、情绪→表情映射、语音（TTS 输出，可选 ASR 输入）。
+实现栖的具身层：桌面应用（Tauri + Vue3）、「黄昏的枝」主界面（静/谈/忆）、Live2D 人形形象、情绪→氛围与脸色、语音（TTS 输出；ASR 仍为未来方向）。
 
 ## 前置依赖
 
@@ -18,35 +18,47 @@
 - `docs/design/栖·意识设计.md` → §八（表达：Avatar 状态映射）、§九（节奏）
 - `docs/design/栖·工程手记.md` → §十（部署：Tauri 架构）
 - `docs/contract.md` → 全文
+- `docs/dev/主界面设计-黄昏的枝.md` → 主界面规格（氛围/三视图/令牌）
+- `docs/dev/主界面-Live2D接入.md` → Live2D 形象接入（实现依据）
 
 ## 需要创建的文件
 
 ```
-# <!-- 回写(2026-07)：按现状清单；ASR/Fish Audio/sidecar 未实现，依据：qi/embodiment/ -->
+# <!-- 回写(2026-07-22)：对齐黄昏的枝 + Live2D；依据：qi/embodiment/desktop/src/ -->
 qi/embodiment/
 ├── avatar/
-│   ├── controller.py      # 情绪→动画状态映射
-│   └── states.py          # Avatar 状态（idle/talking/thinking/happy/sleeping；无 focused）
+│   ├── controller.py      # 情绪→动画状态映射（仍推 posture/expression/effect）
+│   └── states.py          # Avatar 状态枚举
 ├── voice/
-│   ├── tts.py             # TTS（仅 edge-tts；create_tts 读 voice.enabled）
-│   └── asr.py             # 【未实现】ASR（FunASR / Whisper）— 未来方向
+│   ├── tts.py             # TTS（仅 edge-tts）
+│   └── asr.py             # 【未实现】ASR — 未来方向
 ├── server.py              # WebSocket 服务端（127.0.0.1:9527）
 ├── __init__.py
-└── desktop/               # Tauri 2 + Vue3 前端（两进程，非 sidecar）
-    ├── scripts/
-    │   └── run-tauri.mjs  # 补 cargo PATH 后调 @tauri-apps/cli
+└── desktop/               # Tauri 2 + Vue3（两进程，非 sidecar）
+    ├── public/
+    │   ├── live2dcubismcore.min.js   # 【不入库】官方 Cubism Core，需本地放置
+    │   └── models/qi/                # Live2D 模型资源（已入库）
     ├── src/
     │   ├── App.vue
+    │   ├── style.css                 # 设计令牌
     │   ├── components/
-    │   │   ├── AvatarView.vue     # CSS 几何体 Avatar（非 PNG/Lottie）
-    │   │   ├── ChatBubble.vue
-    │   │   ├── StatusIndicator.vue
+    │   │   ├── SceneView.vue         # 氛围场景
+    │   │   ├── Live2DView.vue        # Live2D 人形
+    │   │   ├── WhisperView.vue       # 低语（含等待态）
+    │   │   ├── TalkView.vue          # 谈 · 对话记忆
+    │   │   ├── JournalView.vue       # 忆 · 内在日记
+    │   │   ├── StatusBar.vue
+    │   │   ├── ViewTabs.vue          # 静/谈/忆
     │   │   └── InputBox.vue
-    │   ├── ws.ts                  # WebSocket 客户端（无 useWebSocket.ts）
+    │   ├── composables/
+    │   │   ├── useEmotion.ts         # 情绪→氛围 CSS 变量
+    │   │   ├── useLive2D.ts          # 模型/动作/脸色/口型
+    │   │   └── useQi.ts              # WS + 会话状态
+    │   ├── ws.ts
     │   └── types.ts
-    ├── src-tauri/                 # 透明无边框壳；无 tray / sidecar
-    └── package.json               # tauri:dev / tauri:build
-qi/cli.py                          # qi-desktop：Brain + EmbodimentServer
+    ├── src-tauri/                    # 420×680 透明无边框
+    └── package.json
+qi/cli.py                             # qi-desktop：Brain + EmbodimentServer
 ```
 
 ## 实现步骤
@@ -91,7 +103,8 @@ class EmbodimentServer:
         # user_message → send_typing → brain.receive_user_message；空回复则 speech "……"
         # presence → brain.user_online + perception.set_user_presence
         # pong → pass
-        # command "/state" → emotion_update（含 stage）；前端 UI 未发此命令
+        # command "/state" → emotion_update（含 stage）
+        # 前端 useQi 连接时 + 每 ~8s 发 command /state 拉情绪快照（Brain 心跳未主动 push emotion_update）
         ...
 
     async def broadcast(self, message: dict) -> None: ...
@@ -100,15 +113,16 @@ class EmbodimentServer:
         # 仅 avatar_state；Brain 日常同步走 broadcast 自带 season/mode
         ...
     async def send_typing(self) -> None: ...
-    async def send_emotion_update(self, snapshot: dict) -> None: ...  # Brain 心跳未调用
+    async def send_emotion_update(self, snapshot: dict) -> None: ...  # 接口在；心跳未调，靠前端 /state 轮询
     async def send_audio(self, audio_b64: str, mime: str = "audio/mpeg") -> None: ...
 
 # 协议：
 # 后端→前端：speech | state{avatar_state,season?,mode?} | typing | emotion_update | ping | audio{data,mime}
 # 前端→后端：user_message | presence | pong | command
 #
-# 前端重连（ws.ts）：指数退避 1s→…→30s；onopen 发 presence online；无 HEARTBEAT_TIMEOUT
+# 前端重连（ws.ts）：指数退避 1s→…→30s；onopen 发 presence online
 # 启动：qi-desktop（Brain∥WS）+ npm run tauri:dev（或 npm run dev）
+# Cubism Core：见 docs/dev/主界面-Live2D接入.md / 换机搭建.md（不入库）
 ```
 
 </details>
@@ -196,103 +210,71 @@ class AvatarController:
 # Brain：_sync_avatar 去重后 broadcast state；说话 set_talking；LLM 前后 set_thinking
 # 关系阶段不入 map_state（仅经情绪间接影响）；季节有视觉 effect + L5 apply_season_effect 情绪微调
 #
-# Avatar 渲染：MVP = CSS 几何体（AvatarView.vue），非 PNG/Lottie/Live2D
-# <!-- 回写：MVP 用 CSS 几何体 Avatar（无 PNG 序列） -->
+# Avatar 渲染（2026-07-22）：前端 Live2D（Live2DView + useLive2D），按 docs/dev/主界面-Live2D接入.md
+# posture/expression/effect 仍经 WS state 下发；前端用 mode + emotion 驱动动作与脸色，dream_bubbles 驱动梦泡
 # <!-- 回写：已加 Tauri 2 壳；Python 仍独立进程，尚未 sidecar -->
 # <!-- 回写：state 推送带 season/mode；edge-tts pitch 用 Hz -->
 ```
 
 </details>
 
-### Step 3：Tauri 前端
+### Step 3：Tauri 前端（黄昏的枝 + Live2D）
 
-- 初始化 Tauri 2 + Vue3 项目
-- 实现：
-  - AvatarView：CSS 几何体按 `avatar_state` 切换 posture/expression/effect
-  - ChatBubble：打字机效果（约 28ms/字）
-  - StatusIndicator：模式 / 季节 / 连接状态
-  - InputBox：文本输入（max 500）
-- 窗口：透明无边框 360×560（min 320×480）；header `data-tauri-drag-region`
-- 验收：打开应用，能看到栖的形象，能打字聊天
+- 窗口：**420×680**，透明无边框；header `data-tauri-drag-region`
+- 主界面按 `docs/dev/主界面设计-黄昏的枝.md`：
+  - 静 / 谈 / 忆（`ViewTabs`）；谈=本次会话内存历史；忆=诚实空占位（第二期再接后端）
+  - `SceneView` 氛围 + `useEmotion` §五公式；`WhisperView` 低语（等待态文案符合人设）
+  - Live2D 形象见 `docs/dev/主界面-Live2D接入.md`（`Live2DView` / `useLive2D`）
+- 依赖：`pixi.js@6.5.10` + `pixi-live2d-display@0.4.0`；Cubism Core **不入库**，须本地放入 `public/live2dcubismcore.min.js`
+- 验收：打开应用能看到她、能聊天、情绪能改变天色与脸色；08–16 动作永不播放
 
 <details>
 <summary>实现规格（Cursor 编码用）</summary>
 
 ```
 # Tauri 项目结构（qi/embodiment/desktop/）
-# <!-- 回写(2026-07)：对齐现状目录；无 composables/useWebSocket、无 PNG assets、无 sidecar -->
+# <!-- 回写(2026-07-22)：黄昏的枝 + Live2D -->
 
 desktop/
-├── index.html
-├── package.json              # scripts: dev / tauri:dev / tauri:build
-├── scripts/run-tauri.mjs     # 前置 %USERPROFILE%\.cargo\bin 再调 CLI
-├── vite.config.ts            # Vite :5173
+├── index.html                 # 先加载 /live2dcubismcore.min.js
+├── package.json
+├── scripts/run-tauri.mjs
+├── vite.config.ts             # dedupe @pixi/*；port 5173
+├── public/
+│   ├── live2dcubismcore.min.js   # gitignored
+│   └── models/qi/
 ├── src/
-│   ├── main.ts
-│   ├── App.vue               # WS 订阅；audio 用 HTML5 Audio(data:…)
-│   ├── style.css             # html/body 透明
-│   ├── components/
-│   │   ├── AvatarView.vue    # CSS posture-*/expr-*/fx-*
-│   │   ├── ChatBubble.vue
-│   │   ├── StatusIndicator.vue
-│   │   └── InputBox.vue
+│   ├── App.vue
+│   ├── style.css
+│   ├── components/            # Scene / Live2D / Whisper / Talk / Journal / StatusBar / ViewTabs / InputBox
+│   ├── composables/           # useEmotion / useLive2D / useQi
 │   ├── ws.ts
 │   └── types.ts
-├── src-tauri/
-│   ├── tauri.conf.json
-│   ├── .cargo/config.toml    # rsproxy 稀疏索引
-│   └── src/lib.rs            # 默认 builder，无自定义 command / tray
-└── （无 public/assets/avatar PNG）
+└── src-tauri/
+    └── tauri.conf.json        # 420×680 transparent
 ```
 
 ```json
-// src-tauri/tauri.conf.json 关键（Tauri 2）
+// src-tauri/tauri.conf.json 窗口关键
 {
-  "productName": "qi",
-  "identifier": "com.qi.desktop",
-  "build": {
-    "devUrl": "http://localhost:5173",
-    "frontendDist": "../dist",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
-  },
   "app": {
     "windows": [{
-      "label": "main",
       "title": "栖",
-      "width": 360, "height": 560,
-      "minWidth": 320, "minHeight": 480,
-      "resizable": true,
+      "width": 420, "height": 680,
       "transparent": true,
-      "decorations": false,
-      "alwaysOnTop": false,
-      "shadow": false
+      "decorations": false
     }]
   }
 }
-// <!-- 回写：360×560 聊天 MVP；系统托盘 / sidecar 未做；两进程启动 -->
 ```
 
 ```typescript
-// src/ws.ts — 与 Python 后端通信
-// <!-- 回写(2026-07)：对齐 ws.ts；无 HEARTBEAT_TIMEOUT；依据：desktop/src/ws.ts -->
+// 情绪通路（现状）：Brain 心跳不 push emotion_update；
+// useQi 定时 qiWs.send({ type:"command", payload:{ text:"/state" } }) → 收 emotion_update → useEmotion
+```
 
-const WS_URL = "ws://127.0.0.1:9527";
-const RECONNECT_MAX_DELAY = 30000;
-
-export class QiWebSocket {
-  connect(): void;           // onopen → presence online；ping → pong
-  disconnect(): void;        // presence false + close
-  send(msg: ClientMessage): void;
-  sendUserMessage(text: string): void;
-  setPresence(online: boolean): void;
-  on(type: string, handler: Handler): void;
-  // 断线指数退避 1s→2s→…→30s；closedByUser 不重连
-}
-export const qiWs = new QiWebSocket();
-
-# 技术栈：Vue3 + TS + Vite；无 UI 框架
-# 通信：纯 WS；非 sidecar——手动 qi-desktop + npm run tauri:dev
+# 技术栈：Vue3 + TS + Vite；Pixi v6 + pixi-live2d-display；无 UI 框架 / 无 router / 无 Pinia
+# 通信：纯 WS；两进程：qi-desktop + npm run tauri:dev（或 npm run dev）
 ```
 
 </details>
@@ -370,9 +352,9 @@ def create_tts(config: dict) -> TTSProvider | None:
 ### 可测试的
 
 - [ ] WebSocket 通信稳定（发消息、收消息、断线重连；ping 30s，无 90s 踢线）
-- [ ] Avatar 状态正确映射（情绪→表情对应；CSS 几何体）
+- [ ] Live2D 加载正常；mode→idle/sleep/wake；08–16 永不播放；情绪改天色与脸色
 - [ ] TTS：`voice.enabled` 时 `audio` 推送可播；pitch 为 Hz
-- [ ] 窗口透明无边框、360×560
+- [ ] 窗口透明无边框、420×680
 - [ ] 前端崩溃不影响后端 Brain Loop（两进程）
 - [ ] ASR：未接入（标为未来）
 

@@ -1,6 +1,10 @@
 # 栖 · 桌面端（Vue3 + Tauri 2）
 
-透明无边框小窗；前端连本机 WebSocket `ws://127.0.0.1:9527`。Python 大脑仍单独进程启动（尚未做成 Tauri sidecar）。
+透明无边框小窗（420×680）；「黄昏的枝」主界面 + Live2D 形象。前端连本机 WebSocket `ws://127.0.0.1:9527`。Python 大脑仍单独进程启动（尚未做成 Tauri sidecar）。
+
+## Cubism Core（必做）
+
+`public/live2dcubismcore.min.js` **不入库**。从 [Cubism SDK for Web](https://www.live2d.com/download/cubism-sdk/download-web/) 取出后放到 `public/`。缺此文件则 Live2D 不显示。详见 [换机搭建.md](../../../docs/dev/换机搭建.md) §5、[Live2D接入.md](../../../docs/dev/主界面-Live2D接入.md)。
 
 ## 启动
 
@@ -36,7 +40,7 @@ npm run dev
 
 若 `cargo` 拉 crates.io 失败，项目已带 `src-tauri/.cargo/config.toml`（rsproxy 稀疏索引）。
 
-更多说明见仓库根目录 [README.md](../../README.md)。
+更多说明见仓库根目录 [README.md](../../../README.md)。
 
 终端文字模式仍用：`qi`（或 `python -m qi`）
 
