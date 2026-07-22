@@ -80,13 +80,13 @@ class EmbodimentServer:
                     msg = json.loads(raw)
                 except json.JSONDecodeError:
                     continue
-                await self._handle_client_message(msg)
+                await self._handle_client_message(msg, websocket)
         except Exception:
             logger.debug("前端连接关闭", exc_info=True)
         finally:
             self.clients.discard(websocket)
 
-    async def _handle_client_message(self, msg: dict) -> None:
+    async def _handle_client_message(self, msg: dict, websocket: Any = None) -> None:
         msg_type = msg.get("type")
         payload = msg.get("payload") or {}
         if msg_type == "user_message":
@@ -133,6 +133,52 @@ class EmbodimentServer:
                         },
                     }
                 )
+            elif cmd == "/history":
+                await self._send_history(websocket)
+
+    async def _send_history(self, websocket: Any | None) -> None:
+        """把 SQLite 里全部对话推给请求方（本机单用户；无 websocket 则广播）。"""
+        from datetime import datetime
+
+        db = getattr(self.brain, "_db", None)
+        rows: list[dict] = []
+        if db is not None:
+            try:
+                rows = await db.load_messages(limit=None)
+            except Exception:
+                logger.exception("拉取对话历史失败")
+
+        messages = []
+        for r in rows:
+            role = r.get("role")
+            ui_role = "me" if role == "user" else "qi"
+            ts_raw = str(r.get("timestamp") or "")
+            try:
+                at_ms = int(datetime.fromisoformat(ts_raw).timestamp() * 1000)
+            except ValueError:
+                at_ms = int(time.time() * 1000)
+            text = (r.get("content") or "").strip()
+            if not text:
+                continue
+            messages.append(
+                {
+                    "id": f"db-{r.get('id')}",
+                    "role": ui_role,
+                    "text": text,
+                    "at": at_ms,
+                    "tone": r.get("tone") or "",
+                }
+            )
+
+        packet = {"type": "history", "payload": {"messages": messages}}
+        raw = json.dumps(packet, ensure_ascii=False)
+        if websocket is not None:
+            try:
+                await websocket.send(raw)
+                return
+            except Exception:
+                logger.debug("向请求方发送 history 失败", exc_info=True)
+        await self.broadcast(packet)
 
     async def broadcast(self, message: dict) -> None:
         if not self.clients:

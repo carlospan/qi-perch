@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
+import { nextTick, onMounted, ref, watch } from "vue";
 import type { TalkDayGroup } from "../composables/useQi";
 
 const WAITING_LINES = ["……", "嗯……", "我在想。", "稍等……"] as const;
@@ -19,17 +19,26 @@ function timeLabel(at: number) {
   return `${hh}:${mm}`;
 }
 
+/** 视口锚定到时间线尾部（最新消息） */
 async function scrollBottom() {
   await nextTick();
+  // 等 Transition / 布局完成后再滚，避免 scrollHeight 仍是旧值
+  await new Promise<void>((r) => requestAnimationFrame(() => r()));
+  await new Promise<void>((r) => requestAnimationFrame(() => r()));
   const el = body.value;
   if (el) el.scrollTop = el.scrollHeight;
 }
+
+onMounted(() => {
+  void scrollBottom();
+});
 
 watch(
   () => props.groups.map((g) => g.messages.length).reduce((a, b) => a + b, 0),
   () => {
     void scrollBottom();
-  }
+  },
+  { immediate: true }
 );
 
 watch(
@@ -52,7 +61,7 @@ watch(
     </div>
     <div ref="body" class="panel-body">
       <p v-if="groups.length === 0 && !typing" class="empty">
-        还没有说过话。说一句，会留在这里。
+        还没有说过话。说一句，会留在这里——下次打开也能看见。
       </p>
       <template v-for="g in groups" :key="g.key">
         <div class="day">{{ g.label }}</div>

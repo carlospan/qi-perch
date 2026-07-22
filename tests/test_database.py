@@ -39,4 +39,9 @@ async def test_database_save_and_load_emotion():
         assert recent[0]["role"] == "user"
         assert recent[1]["role"] == "qi"
 
+        all_msgs = await db.load_messages(limit=None)
+        assert len(all_msgs) == 2
+        assert all_msgs[0]["id"] is not None
+        assert all_msgs[1]["content"] == "嗯。你好呀。"
+
         await db.close()

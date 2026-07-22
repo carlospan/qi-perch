@@ -294,27 +294,55 @@ class Database:
         await conn.commit()
 
     async def load_recent_messages(self, limit: int = 20) -> list[dict]:
+        """最近 N 条（旧→新），供 prompt / 工作记忆。"""
+        rows = await self.load_messages(limit=limit)
+        return [
+            {
+                "role": r["role"],
+                "content": r["content"],
+                "timestamp": r["timestamp"],
+            }
+            for r in rows
+        ]
+
+    async def load_messages(self, limit: int | None = None) -> list[dict]:
+        """
+        加载对话记录（旧→新）。
+        limit=None 时返回全部；否则取最近 limit 条。
+        """
         conn = self._require_conn()
-        async with conn.execute(
+        if limit is None:
+            sql = """
+                SELECT id, role, content, timestamp, tone
+                FROM messages
+                ORDER BY timestamp ASC, id ASC
             """
-            SELECT role, content, timestamp FROM messages
-            ORDER BY timestamp DESC, id DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ) as cursor:
+            params: tuple = ()
+        else:
+            sql = """
+                SELECT id, role, content, timestamp, tone
+                FROM messages
+                ORDER BY timestamp DESC, id DESC
+                LIMIT ?
+            """
+            params = (limit,)
+
+        async with conn.execute(sql, params) as cursor:
             rows = await cursor.fetchall()
 
-        messages = [
+        if limit is not None:
+            rows = list(reversed(rows))
+
+        return [
             {
+                "id": row["id"],
                 "role": row["role"],
                 "content": row["content"],
                 "timestamp": row["timestamp"],
+                "tone": row["tone"],
             }
             for row in rows
         ]
-        messages.reverse()
-        return messages
 
     # ----- 原始事件 -----
 

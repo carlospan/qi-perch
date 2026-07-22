@@ -28,7 +28,8 @@ export type ServerMessage =
   | { type: "typing"; payload: Record<string, never> }
   | { type: "emotion_update"; payload: EmotionSnapshot }
   | { type: "ping"; payload: { ts: number } }
-  | { type: "audio"; payload: { data: string; mime?: string } };
+  | { type: "audio"; payload: { data: string; mime?: string } }
+  | { type: "history"; payload: { messages: TalkMessage[] } };
 
 export type ClientMessage =
   | { type: "user_message"; payload: { text: string } }
@@ -39,7 +40,7 @@ export type ClientMessage =
 /** 静 / 谈 / 忆 */
 export type QiView = "still" | "talk" | "journal";
 
-/** 「谈」会话消息（第一期：仅内存累积本次会话） */
+/** 「谈」会话消息（来自 SQLite 全量 + 本轮追加） */
 export type TalkMessage = {
   id: string;
   role: "qi" | "me";

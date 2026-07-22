@@ -1,7 +1,7 @@
 /**
  * WS 接线 + 消息 / 历史状态（黄昏的枝 §七）。
- * 第一期：谈 = 本次会话内存累积；忆 = 无造假，空则占位。
- * 第二期：从此处接后端历史 / 日记拉取。
+ * 「谈」：连接后通过 /history 拉取 SQLite 全量记录，本轮继续 append。
+ * 「忆」：暂无源 → 空占位。
  */
 
 import { computed, ref } from "vue";
@@ -70,8 +70,9 @@ function createQi() {
     effect: "none",
   });
 
-  /** 本次会话对话；第二期可改为 merge 远端历史 */
+  /** 对话历史（启动后由 /history 灌入） */
   const talk = ref<TalkMessage[]>([]);
+  const historyLoaded = ref(false);
   /** 第一期无 WS 日记源 → 保持空，UI 显示诚实占位 */
   const journal = ref<JournalEntry[]>([]);
 
@@ -106,6 +107,16 @@ function createQi() {
   function appendTalk(role: "qi" | "me", text: string, tone?: string) {
     const t = text.trim();
     if (!t) return;
+    // 避免 history 与本轮 speech 重复叠一条
+    const last = talk.value[talk.value.length - 1];
+    if (
+      last &&
+      last.role === role &&
+      last.text === t &&
+      Date.now() - last.at < 5000
+    ) {
+      return;
+    }
     talk.value.push({
       id: uid(role),
       role,
@@ -113,6 +124,32 @@ function createQi() {
       at: Date.now(),
       tone,
     });
+  }
+
+  function applyHistory(messages: TalkMessage[]) {
+    const pendingMine =
+      typing.value && talk.value.length
+        ? talk.value.filter((m) => m.role === "me").slice(-1)
+        : [];
+
+    talk.value = messages
+      .filter((m) => m.text?.trim())
+      .map((m) => ({
+        id: m.id || uid(m.role),
+        role: m.role === "me" ? "me" : "qi",
+        text: m.text.trim(),
+        at: typeof m.at === "number" ? m.at : Date.now(),
+        tone: m.tone,
+      }));
+
+    historyLoaded.value = true;
+
+    for (const m of pendingMine) {
+      const already = talk.value.some(
+        (t) => t.role === "me" && t.text === m.text
+      );
+      if (!already) talk.value.push(m);
+    }
   }
 
   function playAudio(data: string, mime = "audio/mpeg") {
@@ -131,6 +168,10 @@ function createQi() {
     qiWs.sendUserMessage(value);
   }
 
+  function requestHistory() {
+    qiWs.send({ type: "command", payload: { text: "/history" } });
+  }
+
   function onVis() {
     qiWs.setPresence(document.visibilityState === "visible");
   }
@@ -141,6 +182,7 @@ function createQi() {
       qiWs.on("open", () => {
         connected.value = true;
         requestEmotionSnapshot();
+        requestHistory();
       });
       qiWs.on("close", () => {
         connected.value = false;
@@ -181,6 +223,9 @@ function createQi() {
       qiWs.on("audio", (payload: { data: string; mime?: string }) => {
         playAudio(payload.data, payload.mime);
       });
+      qiWs.on("history", (payload: { messages?: TalkMessage[] }) => {
+        applyHistory(payload?.messages ?? []);
+      });
     }
 
     document.addEventListener("visibilitychange", onVis);
@@ -202,9 +247,9 @@ function createQi() {
     qiWs.disconnect();
   }
 
-  /** 第二期入口：拉取远端历史 / 日记（暂空实现） */
+  /** 主动再拉一次全量历史（重连后也会自动拉） */
   async function refreshHistory() {
-    /* 留口：HTTP / WS 拉取后写入 talk / journal */
+    requestHistory();
   }
 
   return {
@@ -221,6 +266,7 @@ function createQi() {
     talk,
     talkByDay,
     journal,
+    historyLoaded,
     send,
     connect,
     disconnect,
