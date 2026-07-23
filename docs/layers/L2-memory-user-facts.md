@@ -74,7 +74,7 @@ qi/prompts/fact_noticing.txt # 必要时用 LLM 抽取事实的模板（清晰�
 - 验收：表创建成功，能插入、查询 active 事实、按 id 取代
 
 <details>
-<summary>实现规格（设计提案 · Cursor 编码前需对齐）</summary>
+<summary>实现规格（已落地）</summary>
 
 ```sql
 -- storage/database.py
@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS user_facts (
 - 验收：说"我叫小明"后 user_facts 出现一条 identity 事实；说无关闲聊不产生事实、不触发 LLM
 
 <details>
-<summary>实现规格（设计提案 · Cursor 编码前需对齐）</summary>
+<summary>实现规格（已落地）</summary>
 
 ```python
 # qi/memory/facts.py · FactNoticer
@@ -193,7 +193,7 @@ class FactNoticer:
 - 验收：重复说同一事实只刷新 last_confirmed 不新建；说"我换工作了"后旧 occupation 被取代、留痕
 
 <details>
-<summary>实现规格（设计提案 · Cursor 编码前需对齐）</summary>
+<summary>实现规格（已落地）</summary>
 
 ```python
 # qi/memory/facts.py · FactStore

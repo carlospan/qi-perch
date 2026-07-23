@@ -7,6 +7,7 @@
 > **本文档状态：Step 1–6 已落地（actions / budget / volition / permission / share / tend / explore 气质 / ActionLayer / brain 接线）。**
 > 六层（L1~L6）已完成。L7 行动层骨架与起手能力已接入心跳。
 > explore **无**真实搜索/HTTP（不编造见闻）；assist / irreversible 文件未建。
+> Step 5：actions + narrative 已接；self_model 喂入与伤疤 `save_scar` **尚未接线**。
 > 已落地处见各段 `<!-- 回写 -->`。
 
 ---
@@ -233,30 +234,27 @@ class ExploreAction:
 - 验收：成功行动让栖的自我叙事更确信"我是能为你做点什么的"；失败行动形成伤疤并影响后续谨慎度
 
 <details>
-<summary>实现规格（设计提案 · Cursor 编码前需对齐）</summary>
+<summary>实现规格（部分落地 · Step 5）</summary>
 
 ```python
-# 行动留痕的三条去向（提案，复用既有层，不另造）：
+# 行动留痕的三条去向（复用既有层，不另造）：
 #
 # 1. L2 记忆：行动结果**必写入 actions 表**（权威留痕）；显著行动另
 #    narrative.save 一条第一人称叙述（进 ChromaDB 可检索）。
 #    不另建记忆模块。行动是栖自己的事，归叙事；与 user_facts（关于用户）不冲突。
-# <!-- 回写(2026-07-23)：Step 5 规格软化——权威在 actions，显著者织入 narrative；
-#      share 路径已接线（ShareAction.deliver → insert_action + 可选 narrative.save）。
-#      伤疤分层仍待 tend/explore/assist 失败路径。不另建「我做的事」记忆类型。 -->
+# <!-- 回写(2026-07-23)：权威在 actions；share/tend 已接线 insert_action + 可选 narrative.save；
+#      explore 空手不织 narrative。依据：qi/action/share.py、tend.py、explore.py -->
 #
 # 2. L4 自我叙事：显著行动喂给 self_model.reflect 的输入。
-#    成功 → identity_narrative 更确信「我是能为你做点什么的」；
+#    【尚未接线】成功 → identity_narrative 更确信「我是能为你做点什么的」；
 #    失败 → 成为一份谨慎。
 #
 # 3. L5 伤疤：行动的失败分三层——
-#    - 能力失败（failed_capability：搜不到、找不到）：栖老实说，不形成伤疤。
-#        「我找了但没找到……可能是我搜的方式不对。」
-#    - 判断失败（failed_judgment：做了但不该在这时给你看）：形成伤疤。
-#    - 权限越界（overstepped：做了不该做的事）：严重伤疤，
-#        与「在不该说话时说话」同级后果。
-#    伤疤复用 L5 ScarManager（severity / trust_before / healed / wisdom / behavioral_mark），
-#    并让 permission.py 在该类行动上更谨慎（把手缩回去）。
+#    - 能力失败（failed_capability）：老实说，不形成伤疤。
+#    - 判断失败（failed_judgment）：形成伤疤 → db.save_scar。
+#    - 权限越界（overstepped）：严重伤疤。
+#    规则与 outcome_creates_scar 已在 permission.py；【实际 save_scar 接线待后续】。
+#    permission.scar_blocks_kind 可在有伤疤后把手缩回。
 ```
 
 </details>

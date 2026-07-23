@@ -474,7 +474,8 @@ def pick_proactive_kind(*, want_express, relationship_stage, emotion_security,
     ...
 ```
 
-**Brain：**无消息心跳 → `pick_proactive_kind` → `expression.express(..., proactive_kind=)` → `gate.record` → `proactive_queue`。
+**Brain：**无消息心跳 → **先** `action.tick`（L7；动手则跳过主动言语）→ 若未动手再 `pick_proactive_kind` → `expression.express(..., proactive_kind=)` → `gate.record` → `proactive_queue`。
+<!-- 回写(2026-07-23)：行动与主动言语同拍不叠加；依据：qi/core/brain.py -->
 
 </details>
 
@@ -506,6 +507,10 @@ L6（具身）需要：
 - 关系阶段影响 avatar 的亲密度表现（陌生期：保持距离；亲密期：靠近）
 - 季节影响 avatar 的整体氛围（冬天：安静、暖色调；夏天：活泼）
 - 情绪→表情映射需要 relationship context（同样的 valence，安全感不同时表情不同）
+
+L7（行动）需要：
+- 关系阶段 / 信任 / 伤疤 / 季节作为行动门控与节律（`permission` + `SEASON_ACTION_SCALE`）
+- 主动言语日限（ProactiveGate）与自主行动日限（ActionBudget）分轨，互不双计
 
 ## 人格契约检查点
 

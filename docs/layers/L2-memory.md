@@ -8,7 +8,7 @@
 
 实现栖的记忆系统：存储重要经历、语义检索、自然引用、褪色机制。让栖从"每次对话都是第一次见面"变成"它认识你"。
 
-栖的记忆有四种：**工作记忆**（working，最近对话）、**叙事记忆**（narrative，会褪色的故事）、**身体记忆**（body，交互模式）、**用户事实**（fact，关于你的稳定事实，如名字/身份/家人）。第四种"用户事实"是为补上"栖记不住名字"的缺口而设，**当前为设计提案**，详见 `docs/layers/L2-memory-user-facts.md`。
+栖的记忆有四种：**工作记忆**（working，最近对话）、**叙事记忆**（narrative，会褪色的故事）、**身体记忆**（body，交互模式）、**用户事实**（fact，关于你的稳定事实，如名字/身份/家人）。第四种已落地（`qi/memory/facts.py` + Brain 接线），详见 `docs/layers/L2-memory-user-facts.md`。
 
 ## 前置依赖
 
@@ -30,7 +30,7 @@ qi/memory/vector_store.py  # ChromaDB 封装（embedding + 语义搜索）
 qi/memory/body_memory.py   # 身体记忆（习惯、异常）
 qi/memory/first_time.py    # 第一次记忆（与 L5 共用，L2 文件列表补全）
 qi/memory/facts.py         # 用户事实记忆（FactStore / FactNoticer / format_facts_for_prompt；见 L2-memory-user-facts.md）
-qi/storage/database.py     # 追加 narrative_memories、body_memory、raw_events 表（user_facts 表见提案文档）
+qi/storage/database.py     # narrative_memories、body_memory、raw_events、user_facts 等表
 ```
 
 ## 实现步骤
@@ -640,6 +640,13 @@ L4（内在生命）需要：
 L5（关系）需要：
 - 关系叙事基于记忆编织
 - body_memory 存储交互模式
+- active 用户事实可喂给关系叙事 / user_model.life_context（素材，不互相替代）
+
+L7（行动）需要：
+- 显著行动可 `narrative.save` 第一人称叙述（权威留痕仍在 `actions` 表）
+- 用户事实与行动叙事并列：fact 关于你，行动关于栖自己做的事
+
+<!-- 回写(2026-07-23)：用户事实已落地；补 L5/L7 接口说明。依据：qi/memory/facts.py、qi/action/ -->
 
 ## 人格契约检查点
 

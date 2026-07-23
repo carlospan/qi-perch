@@ -82,7 +82,7 @@ voice:
 | [docs/dev/换机搭建.md](docs/dev/换机搭建.md) | **新电脑 / 换机从零搭建** |
 | [docs/progress.md](docs/progress.md) | 各层开发进度 |
 | [docs/contract.md](docs/contract.md) | 人格契约（硬规则） |
-| [docs/layers/](docs/layers/) | L1–L6 层实现规格 |
+| [docs/layers/](docs/layers/) | L1–L7 层实现规格（含用户事实、行动） |
 | [docs/dev/IDE-Agent-执行栖的开发任务.md](docs/dev/IDE-Agent-执行栖的开发任务.md) | 给 Cursor 的开发执行模板 |
 | [docs/design/](docs/design/) | 设计原文（灵魂书 / 意识设计 / 工程手记） |
 
@@ -100,7 +100,8 @@ python -m pytest -q
 qi/                 唯一顶层包
   cli.py            入口（qi / qi-desktop）
   core/             心跳、情绪、表达、主动门控
-  memory/           记忆
+  memory/           记忆（含用户事实 facts）
+  action/           行动层（预算 / 意志 / 分享·打理·探索）
   inner_life/       意识流、梦、创作、自我
   relationship/     关系
   embodiment/       具身（WS + Vue/Tauri 前端）
