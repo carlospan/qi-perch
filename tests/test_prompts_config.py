@@ -10,6 +10,7 @@ def test_read_prompt_conversation():
     assert "{emotion_description}" in text
     assert "重启进程不是失忆" in text
     assert "每次醒来都是白纸" in text  # 禁止项写在规则里
+    assert "会像水流走" in text
 
 
 def test_self_reflection_rejects_blank_slate_myth():

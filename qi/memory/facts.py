@@ -301,6 +301,21 @@ def identity_name_fragment(content: str) -> str | None:
     return None
 
 
+def _qi_asking_user_name(content: str) -> bool:
+    """栖在问对方叫什么（可武装 awaiting_name）。"""
+    t = (content or "").strip()
+    if not t:
+        return False
+    if re.search(
+        r"你叫什么(?:名字)?|你叫啥|怎么称呼你|"
+        r"你的名字(?:是什么|呢|啊)?|告诉我你(?:的)?名字|"
+        r"你呢[？?。.!！\s]*你叫",
+        t,
+    ):
+        return True
+    return False
+
+
 def _qi_recently_invited_name(recent: list[dict] | None) -> bool:
     """只看最近一条栖的话，避免更早的「告诉我」长期误武装。"""
     if not recent:
@@ -313,12 +328,24 @@ def _qi_recently_invited_name(recent: list[dict] | None) -> bool:
             break
     if not last_qi:
         return False
+    if _qi_asking_user_name(last_qi):
+        return True
     if any(cue in last_qi for cue in _QI_NAME_INVITE_CUES):
         return True
     if re.search(r"(名字|怎么称呼|叫什么)", last_qi) and any(
         x in last_qi for x in ("告诉", "说", "听")
     ):
         return True
+    return False
+
+
+def _last_qi_asked_user_name(recent: list[dict] | None) -> bool:
+    if not recent:
+        return False
+    for msg in reversed(recent):
+        role = str(msg.get("role") or "")
+        if role in ("qi", "assistant"):
+            return _qi_asking_user_name(str(msg.get("content") or ""))
     return False
 
 
@@ -495,6 +522,11 @@ class FactNoticer:
         if not memory_q and is_name_disclosure_intent(text):
             self._arm_awaiting_name(now)
             armed_this_turn = True
+        elif not memory_q and _last_qi_asked_user_name(recent_messages):
+            # 栖刚问「你叫什么名字」→ 下一拍光给名字应能落库
+            if not self._awaiting_name_active(now):
+                self._arm_awaiting_name(now)
+                armed_this_turn = True
         elif not memory_q and _user_recently_disclosed_name_intent(
             recent_messages
         ) and _qi_recently_invited_name(recent_messages):

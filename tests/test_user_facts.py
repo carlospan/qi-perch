@@ -331,6 +331,32 @@ async def test_awaiting_name_bare_utterance_script(db_store):
 
 
 @pytest.mark.asyncio
+async def test_awaiting_name_after_qi_asks_your_name(db_store):
+    """栖问「你叫什么名字」后，用户光给名字应落库。"""
+    _, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    now = datetime(2026, 7, 23, 23, 22, 42)
+    recent = [
+        {"role": "user", "content": "你叫什么名字"},
+        {
+            "role": "qi",
+            "content": "我叫栖。\n\n你呢？你叫什么名字？",
+        },
+    ]
+    results = await noticer.notice(
+        "潘纪振",
+        EmotionState(),
+        "stranger",
+        now=now,
+        recent_messages=recent,
+    )
+    assert len(results) == 1
+    facts = await store.active_facts("identity")
+    assert len(facts) == 1
+    assert "潘纪振" in facts[0]["content"]
+
+
+@pytest.mark.asyncio
 async def test_bare_name_without_await_ignored(db_store):
     _, store = db_store
     noticer = FactNoticer(store, llm=None)

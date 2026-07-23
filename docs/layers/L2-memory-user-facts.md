@@ -136,6 +136,8 @@ CREATE TABLE IF NOT EXISTS user_facts (
 #      ③ awaiting_name 状态机：用户表态要说名字后，N 拍内接受光给名字；
 #      ④ notice 传入工作记忆 recent；⑤ 非法 identity 作废（retire/supersede）。
 #      「我的名字」正则要求「是|叫」。 -->
+# <!-- 回写(2026-07-23 夜)：栖反问「你叫什么名字」亦武装 awaiting；
+#      清理会强化白纸叙事的干扰对话后，【你认识的他】有名时禁止「会流走」话术。 -->
 
 CONFIDENCE_FLOOR = 0.6   # 低于此不存（把"栖的模糊推断"挡在事实之外，留给 user_model/drift）
 
