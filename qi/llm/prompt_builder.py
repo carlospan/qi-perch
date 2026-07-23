@@ -88,7 +88,9 @@ class PromptBuilder:
         proactive_kind: str | None = None,
     ) -> list[dict]:
         extras = inner_extras or {}
-        recent_thoughts = extras.get("recent_thoughts") or "（没有特别的念头）"
+        recent_thoughts = extras.get("recent_thoughts") or (
+            "（这一阵没有留下可说的念头痕迹——可能很安静，或进程没在转；不等于你没有内在）"
+        )
         self_narrative = extras.get("self_narrative") or "（还在认识自己）"
         dream_hint = extras.get("dream_hint") or ""
         creation_hint = extras.get("creation_hint") or ""
