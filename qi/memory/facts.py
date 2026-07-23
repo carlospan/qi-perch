@@ -31,6 +31,67 @@ IDENTITY_SIGNALS = (
     "我姓",
 )
 
+# 用户表示「就要告诉你名字」但本句可能还没给出——武装 awaiting_name
+_NAME_DISCLOSURE_INTENTS = (
+    "告诉你我的名字",
+    "告诉你名字",
+    "跟你说我的名字",
+    "和你说我的名字",
+    "说一下我的名字",
+    "我是说我的名字",
+    "我想告诉你我的名字",
+    "想告诉你我叫",
+    "我跟你说下我叫",
+)
+
+# 栖侧邀名（工作记忆里最近 qi 句）
+_QI_NAME_INVITE_CUES = (
+    "告诉我",
+    "你告诉我",
+    "说吧",
+    "说啊",
+    "说呀",
+    "我听着",
+    "愿意听",
+    "你说",
+)
+
+# 绝不能当成人名的碎片
+_NAME_REJECT_TOKENS = frozenset(
+    {
+        "吗",
+        "呢",
+        "啊",
+        "呀",
+        "吧",
+        "么",
+        "什麼",
+        "什么",
+        "谁",
+        "哪",
+        "好的",
+        "好",
+        "嗯",
+        "哦",
+        "啊哈",
+        "记得",
+        "重启",
+        "项目",
+        "名字",
+        "姓名",
+        "叫什么",
+        "什么名",
+        "不知道",
+        "不想",
+        "算了",
+        "再见",
+        "你好",
+    }
+)
+
+_AWAITING_NAME_USER_LIMIT = 6  # 武装后最多再等几条用户消息
+_AWAITING_NAME_SECONDS = 1800  # 或半小时
+
 # 其他事实信号：关系 ≥ acquaintance 才留意。
 OTHER_FACT_SIGNALS = (
     "我妈",
@@ -138,6 +199,10 @@ def format_facts_for_prompt(facts: list[dict], relationship_stage: str) -> str:
         content = str(f.get("content") or "").strip()
         if not content:
             continue
+        if f.get("fact_type") == "identity":
+            frag = identity_name_fragment(content)
+            if frag is not None and not looks_like_person_name(frag):
+                continue
         if not content.endswith(("。", "！", "？", ".", "!", "?")):
             content = f"{content}。"
         sentences.append(content)
@@ -146,6 +211,126 @@ def format_facts_for_prompt(facts: list[dict], relationship_stage: str) -> str:
 
 def stage_at_least(stage: str, minimum: str) -> bool:
     return _STAGE_RANK.get(stage, 0) >= _STAGE_RANK.get(minimum, 0)
+
+
+def looks_like_person_name(name: str) -> bool:
+    """人名形态门控：拒疑问尾、拒常见非名碎片。"""
+    name = (name or "").strip().strip("的了啊呀呢吧嘛哟欸")
+    if not name:
+        return False
+    if name in _NAME_REJECT_TOKENS:
+        return False
+    if any(
+        x in name
+        for x in (
+            "什么",
+            "什麼",
+            "名字",
+            "姓名",
+            "记得",
+            "重启",
+            "项目",
+            "叫什么",
+            "不知道",
+        )
+    ):
+        return False
+    if name.endswith(("吗", "呢", "么", "吧", "啊", "呀", "嘛", "？", "?")):
+        return False
+    if len(name) > 12:
+        return False
+    # 汉字名（可含 ·）；或较短拉丁名
+    if re.fullmatch(r"[\u4e00-\u9fff·]{1,8}", name):
+        return True
+    if re.fullmatch(r"[A-Za-z][A-Za-z\-'. ]{0,30}", name) and len(name) <= 32:
+        return True
+    return False
+
+
+def is_name_memory_question(text: str) -> bool:
+    """在问「记不记得 / 叫什么」——绝不当介绍自己。"""
+    t = (text or "").strip()
+    if not t:
+        return False
+    if re.search(r"(记得|想起|还记得).{0,12}(名字|我叫|叫什么)", t):
+        return True
+    if re.search(r"(我叫|叫我|我的名字).{0,8}什么", t):
+        return True
+    if re.search(r"我的名字[吗麼呢么]", t):
+        return True
+    if re.search(r"你还记得我.{0,6}名", t):
+        return True
+    if "记得我叫什么" in t or "记得我的名字" in t:
+        return True
+    return False
+
+
+def is_name_disclosure_intent(text: str) -> bool:
+    """用户表示即将 / 正在交代名字，但本句未必已给出可落库的人名。"""
+    t = (text or "").strip()
+    if not t or is_name_memory_question(t):
+        return False
+    if any(s in t for s in _NAME_DISCLOSURE_INTENTS):
+        return True
+    # 「我的名字啊 / 说名字」类软信号（无「吗」问句）
+    if re.search(r"(告诉你|跟你说|和你说).{0,6}(我的)?名字", t):
+        return True
+    if re.search(r"我是说.{0,4}(我的)?名字", t):
+        return True
+    return False
+
+
+def is_bare_name_utterance(text: str) -> bool:
+    """整句几乎就是一个人名（可带句末标点）。"""
+    t = (text or "").strip()
+    t = re.sub(r"^[「『\"'（(]+|[」』\"'）)。.!！？?…]+$", "", t).strip()
+    if not t or any(ch in t for ch in ("，", ",", "。", "！", "？", " ", "\t")):
+        # 允许中间空格的英文名：上面已因空格失败；英文另行放宽
+        if re.fullmatch(r"[A-Za-z][A-Za-z\-'. ]{0,30}", t):
+            return looks_like_person_name(t)
+        return False
+    return looks_like_person_name(t)
+
+
+def identity_name_fragment(content: str) -> str | None:
+    """从「他叫X / 他希望被叫做X」里取出名字片段。"""
+    c = (content or "").strip()
+    for prefix in ("他希望被叫做", "他叫", "他姓"):
+        if c.startswith(prefix):
+            return c[len(prefix) :].rstrip("。.!！？?").strip() or None
+    return None
+
+
+def _qi_recently_invited_name(recent: list[dict] | None) -> bool:
+    """只看最近一条栖的话，避免更早的「告诉我」长期误武装。"""
+    if not recent:
+        return False
+    last_qi: str | None = None
+    for msg in reversed(recent):
+        role = str(msg.get("role") or "")
+        if role in ("qi", "assistant"):
+            last_qi = str(msg.get("content") or "")
+            break
+    if not last_qi:
+        return False
+    if any(cue in last_qi for cue in _QI_NAME_INVITE_CUES):
+        return True
+    if re.search(r"(名字|怎么称呼|叫什么)", last_qi) and any(
+        x in last_qi for x in ("告诉", "说", "听")
+    ):
+        return True
+    return False
+
+
+def _user_recently_disclosed_name_intent(recent: list[dict] | None) -> bool:
+    if not recent:
+        return False
+    for msg in reversed(recent[-4:]):
+        if str(msg.get("role") or "") != "user":
+            continue
+        if is_name_disclosure_intent(str(msg.get("content") or "")):
+            return True
+    return False
 
 
 def _normalize_fact_text(text: str) -> str:
@@ -218,6 +403,10 @@ class FactStore:
     async def supersede(self, old_id: int, new_id: int) -> None:
         await self.db.supersede_user_fact(old_id, new_id)
 
+    async def retire(self, fact_id: int) -> None:
+        """作废一条事实（不指向继任者）：superseded_by = 自身。"""
+        await self.db.supersede_user_fact(fact_id, fact_id)
+
     async def find_similar(self, fact_type: str, content: str) -> dict | None:
         """在 active 同 type 里找最像的一条；不够像则 None。"""
         best: dict | None = None
@@ -243,6 +432,37 @@ class FactNoticer:
     def __init__(self, store: FactStore, llm: LLMGateway | None = None):
         self.store = store
         self.llm = llm
+        # 进程内短状态：邀名后等待光给名字（重启清空，可接受）
+        self._awaiting_name_until: datetime | None = None
+        self._awaiting_name_turns_left: int = 0
+
+    def _arm_awaiting_name(self, now: datetime) -> None:
+        from datetime import timedelta
+
+        self._awaiting_name_until = now + timedelta(seconds=_AWAITING_NAME_SECONDS)
+        self._awaiting_name_turns_left = _AWAITING_NAME_USER_LIMIT
+
+    def _clear_awaiting_name(self) -> None:
+        self._awaiting_name_until = None
+        self._awaiting_name_turns_left = 0
+
+    def _awaiting_name_active(self, now: datetime) -> bool:
+        if self._awaiting_name_turns_left <= 0:
+            return False
+        if self._awaiting_name_until is None:
+            return False
+        if now > self._awaiting_name_until:
+            self._clear_awaiting_name()
+            return False
+        return True
+
+    def _tick_awaiting_name(self, now: datetime) -> None:
+        """每条用户消息消耗一拍等待额度。"""
+        if not self._awaiting_name_active(now):
+            return
+        self._awaiting_name_turns_left -= 1
+        if self._awaiting_name_turns_left <= 0:
+            self._clear_awaiting_name()
 
     async def notice(
         self,
@@ -250,9 +470,13 @@ class FactNoticer:
         emotion: EmotionState,
         relationship_stage: str,
         now: datetime | None = None,
+        recent_messages: list[dict] | None = None,
     ) -> list[dict]:
         """
         返回本拍新记下 / 确认 / 取代的事实摘要列表。
+
+        recent_messages：当前句尚未入工作记忆前的近期对话（含 user / qi），
+        用于邀名与多拍「光给名字」上下文。
         """
         now = now or datetime.now()
         text = (message or "").strip()
@@ -265,10 +489,44 @@ class FactNoticer:
                 await self._notice_corrections(text, relationship_stage, now)
             )
 
-        drafts = self._rule_extract(text, relationship_stage)
-        if not drafts and self._needs_llm(text, relationship_stage):
-            drafts = await self._llm_extract(text, emotion, relationship_stage)
+        # 问「记得名字吗」：绝不抽取；也不武装 awaiting
+        memory_q = is_name_memory_question(text)
+        armed_this_turn = False
+        if not memory_q and is_name_disclosure_intent(text):
+            self._arm_awaiting_name(now)
+            armed_this_turn = True
+        elif not memory_q and _user_recently_disclosed_name_intent(
+            recent_messages
+        ) and _qi_recently_invited_name(recent_messages):
+            # 用户已表态要说名字、栖刚邀名：补武装（防中间空拍把等待耗尽）
+            if not self._awaiting_name_active(now):
+                self._arm_awaiting_name(now)
+                armed_this_turn = True
 
+        drafts: list[dict] = []
+        if not memory_q:
+            drafts = self._rule_extract(text, relationship_stage)
+            # 待名状态下的光给名字
+            if self._awaiting_name_active(now) and is_bare_name_utterance(text):
+                bare = re.sub(
+                    r"^[「『\"'（(]+|[」』\"'）)。.!！？?…]+$", "", text.strip()
+                ).strip()
+                if looks_like_person_name(bare):
+                    drafts.append(
+                        {
+                            "fact_type": "identity",
+                            "content": f"他叫{bare}",
+                            "confidence": 0.93,
+                            "stability": "stable",
+                            "emotional_weight": 0.85,
+                            "source": "他在被问起或表示要告诉名字后说的",
+                            "force_supersede_type": True,
+                        }
+                    )
+            if not drafts and self._needs_llm(text, relationship_stage):
+                drafts = await self._llm_extract(text, emotion, relationship_stage)
+
+        landed_identity = False
         for draft in drafts:
             conf = float(draft.get("confidence") or 0.0)
             if conf < CONFIDENCE_FLOOR:
@@ -276,7 +534,60 @@ class FactNoticer:
             applied = await self._land(draft, text, now)
             if applied:
                 results.append(applied)
+                if applied.get("fact_type") == "identity":
+                    landed_identity = True
+                    self._clear_awaiting_name()
+
+        # 消耗等待：本拍刚武装或已落库则不扣
+        if (
+            not armed_this_turn
+            and not landed_identity
+            and self._awaiting_name_active(now)
+        ):
+            self._tick_awaiting_name(now)
+
+        await self._purge_bogus_identity(
+            now,
+            keep_ids={int(r["id"]) for r in results if r.get("fact_type") == "identity"},
+        )
+
         return results
+
+    async def _purge_bogus_identity(
+        self, now: datetime, keep_ids: set[int] | None = None
+    ) -> None:
+        """作废人名门控失败的 active identity（如「他叫吗」），不硬删。"""
+        del now  # 保留签名与调用一致；作废不依赖时钟
+        keep_ids = keep_ids or set()
+        actives = await self.store.active_facts("identity")
+        good = next(
+            (
+                row
+                for row in actives
+                if looks_like_person_name(
+                    identity_name_fragment(str(row.get("content") or "")) or ""
+                )
+            ),
+            None,
+        )
+        for row in actives:
+            rid = int(row["id"])
+            if rid in keep_ids:
+                continue
+            frag = identity_name_fragment(str(row.get("content") or ""))
+            if frag is not None and looks_like_person_name(frag):
+                continue
+            if frag is None:
+                # 无法解析出名字的 identity 也不该占 active（清理占位污染）
+                content = str(row.get("content") or "")
+                if content.startswith(("他叫", "他姓", "他希望被叫做")):
+                    pass  # 解析失败仍视为非法
+                else:
+                    continue
+            if good is not None and rid != int(good["id"]):
+                await self.store.supersede(rid, int(good["id"]))
+            else:
+                await self.store.retire(rid)
 
     async def _notice_corrections(
         self, text: str, stage: str, now: datetime
@@ -293,7 +604,7 @@ class FactNoticer:
         if m:
             old_hint = m.group(1).strip("的了啊呀呢吧")
             new_name = m.group(2).strip("的了啊呀呢吧")
-            if new_name:
+            if new_name and looks_like_person_name(new_name):
                 applied = await self._correct_identity(
                     f"他叫{new_name}",
                     text,
@@ -311,7 +622,7 @@ class FactNoticer:
         )
         if m:
             new_name = m.group(1).strip("的了啊呀呢吧")
-            if new_name:
+            if new_name and looks_like_person_name(new_name):
                 applied = await self._correct_identity(
                     f"他叫{new_name}", text, now
                 )
@@ -419,6 +730,8 @@ class FactNoticer:
         # 优先对上 identity
         for row in await self.store.active_facts("identity"):
             if old_hint in str(row.get("content") or ""):
+                if not looks_like_person_name(new_val):
+                    return None
                 return await self._correct_identity(
                     f"他叫{new_val}", text, now, old_hint=old_hint
                 )
@@ -548,15 +861,16 @@ class FactNoticer:
         return out
 
     def _extract_identity(self, text: str) -> list[dict]:
+        # 「我的名字」必须跟 是/叫，避免「我的名字吗」吞进「吗」
         patterns: list[tuple[str, str]] = [
             (r"你可以叫我\s*([^\s，。！？,.!?]{1,20})", "他希望被叫做{name}"),
             (r"称呼我\s*([^\s，。！？,.!?]{1,20})", "他希望被叫做{name}"),
             (r"叫我\s*([^\s，。！？,.!?]{1,20})", "他希望被叫做{name}"),
-            (r"我的名字(?:是|叫)?\s*([^\s，。！？,.!?]{1,20})", "他叫{name}"),
-            (r"我名字(?:是|叫)?\s*([^\s，。！？,.!?]{1,20})", "他叫{name}"),
-            (r"我大名(?:是|叫)?\s*([^\s，。！？,.!?]{1,20})", "他叫{name}"),
-            (r"我小名(?:是|叫)?\s*([^\s，。！？,.!?]{1,20})", "他叫{name}"),
-            (r"我英文名(?:是|叫)?\s*([^\s，。！？,.!?]{1,20})", "他叫{name}"),
+            (r"我的名字(?:是|叫)\s*([^\s，。！？,.!?]{1,20})", "他叫{name}"),
+            (r"我名字(?:是|叫)\s*([^\s，。！？,.!?]{1,20})", "他叫{name}"),
+            (r"我大名(?:是|叫)\s*([^\s，。！？,.!?]{1,20})", "他叫{name}"),
+            (r"我小名(?:是|叫)\s*([^\s，。！？,.!?]{1,20})", "他叫{name}"),
+            (r"我英文名(?:是|叫)\s*([^\s，。！？,.!?]{1,20})", "他叫{name}"),
             (r"我姓\s*([^\s，。！？,.!?]{1,10})", "他姓{name}"),
             (r"我叫\s*([^\s，。！？,.!?]{1,20})", "他叫{name}"),
         ]
@@ -569,8 +883,9 @@ class FactNoticer:
             name = m.group(1).strip("的了啊呀呢吧")
             if not name or name in seen:
                 continue
-            # 过滤「我叫你别…」类：名字过长或含动词常见词
-            if len(name) > 12 or any(x in name for x in ("你别", "一声", "什么")):
+            if not looks_like_person_name(name):
+                continue
+            if any(x in name for x in ("你别", "一声")):
                 continue
             seen.add(name)
             content = tmpl.format(name=name)
@@ -582,6 +897,7 @@ class FactNoticer:
                     "stability": "stable",
                     "emotional_weight": 0.85,
                     "source": "他介绍自己时说的",
+                    "force_supersede_type": True,
                 }
             )
         return found
@@ -898,5 +1214,9 @@ __all__ = [
     "content_similarity",
     "default_stability",
     "format_facts_for_prompt",
+    "is_bare_name_utterance",
+    "is_name_disclosure_intent",
+    "is_name_memory_question",
+    "looks_like_person_name",
     "stage_at_least",
 ]

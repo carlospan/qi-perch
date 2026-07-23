@@ -279,3 +279,95 @@ async def test_prompt_contains_user_facts_after_reopen():
         assert "小明" in system
         assert "不要每句都喊" in system
         await db2.close()
+
+
+@pytest.mark.asyncio
+async def test_name_question_does_not_extract_ma(db_store):
+    """「记得我的名字吗」不得抽出「他叫吗」。"""
+    _, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    now = datetime(2026, 7, 23, 22, 21)
+
+    results = await noticer.notice(
+        "我已经重启了，你还记得我的名字吗？",
+        EmotionState(),
+        "stranger",
+        now=now,
+    )
+    assert results == []
+    assert await store.active_facts("identity") == []
+
+
+@pytest.mark.asyncio
+async def test_awaiting_name_bare_utterance_script(db_store):
+    """实测剧本：我是说我的名字 →（栖邀名）→ 潘纪振。"""
+    _, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    t0 = datetime(2026, 7, 23, 22, 21, 0)
+    t1 = datetime(2026, 7, 23, 22, 21, 30)
+
+    r0 = await noticer.notice(
+        "我是说我的名字", EmotionState(), "stranger", now=t0
+    )
+    assert r0 == []
+    assert noticer._awaiting_name_active(t0)
+
+    recent = [
+        {"role": "user", "content": "我是说我的名字"},
+        {"role": "qi", "content": "好啊，你告诉我。"},
+    ]
+    r1 = await noticer.notice(
+        "潘纪振",
+        EmotionState(),
+        "stranger",
+        now=t1,
+        recent_messages=recent,
+    )
+    assert len(r1) == 1
+    assert r1[0]["action"] in ("add", "supersede")
+    facts = await store.active_facts("identity")
+    assert len(facts) == 1
+    assert "潘纪振" in facts[0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_bare_name_without_await_ignored(db_store):
+    _, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    now = datetime(2026, 7, 23, 12, 0)
+    results = await noticer.notice(
+        "潘纪振", EmotionState(), "stranger", now=now
+    )
+    assert results == []
+    assert await store.active_facts("identity") == []
+
+
+@pytest.mark.asyncio
+async def test_purge_bogus_identity_on_notice(db_store):
+    _, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    now = datetime(2026, 7, 23, 12, 0)
+    await store.add(
+        "identity",
+        "他叫吗",
+        0.95,
+        "stable",
+        "误抽",
+        0.8,
+        now,
+    )
+    assert len(await store.active_facts("identity")) == 1
+
+    await noticer.notice("今天天气真好", EmotionState(), "acquaintance", now=now)
+    assert await store.active_facts("identity") == []
+
+
+@pytest.mark.asyncio
+async def test_looks_like_person_name_gate():
+    from qi.memory.facts import looks_like_person_name
+
+    assert looks_like_person_name("潘纪振")
+    assert looks_like_person_name("小明")
+    assert not looks_like_person_name("吗")
+    assert not looks_like_person_name("什么")
+    assert not looks_like_person_name("好的")

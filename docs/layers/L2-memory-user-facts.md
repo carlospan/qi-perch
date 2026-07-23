@@ -131,6 +131,11 @@ CREATE TABLE IF NOT EXISTS user_facts (
 #      出入：① 增加 _OCCUPATION_CHANGE_SIGNALS（换工作/跳槽等）以覆盖验收「我换工作了」，
 #            设计稿 OTHER_FACT_SIGNALS 原文未含「换工作」；② fact_noticing.txt 已建；
 #            ③ Brain 接线见 Step 6（memory.notice_facts 与 first_times.check 并列）。 -->
+# <!-- 回写(2026-07-23 晚)：名字抽取加固——
+#      ① 问句拒抽（记得我的名字吗 → 不落「他叫吗」）；② 人名形态门控；
+#      ③ awaiting_name 状态机：用户表态要说名字后，N 拍内接受光给名字；
+#      ④ notice 传入工作记忆 recent；⑤ 非法 identity 作废（retire/supersede）。
+#      「我的名字」正则要求「是|叫」。 -->
 
 CONFIDENCE_FLOOR = 0.6   # 低于此不存（把"栖的模糊推断"挡在事实之外，留给 user_model/drift）
 
@@ -362,6 +367,8 @@ def format_facts_for_prompt(facts: list[dict], relationship_stage: str) -> str:
 
 - [x] 说"我叫小明"后，user_facts 出现一条 `identity` 事实，confidence≈0.95，stability=stable
 - [x] 身份事实在 stranger 阶段也被记下（不受阶段门控）
+- [x] 「记得我的名字吗」类问句不误抽；「我是说我的名字」→ 光给「潘纪振」可落库
+- [x] 形态非法的旧 identity（如「他叫吗」）会被作废，不进 prompt
 - [x] 其他事实在 stranger 阶段**不**被记下；acquaintance 及以上才记
 - [x] 无关闲聊不产生事实、不触发 LLM 调用
 - [x] 重复说同一事实只刷新 last_confirmed，不新建重复行

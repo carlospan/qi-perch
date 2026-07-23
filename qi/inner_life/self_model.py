@@ -111,7 +111,8 @@ class SelfModel:
         self._pending_major = False
         return narrative
 
-    async def summary_for_prompt(self, max_chars: int = 100) -> str:
+    async def summary_for_prompt(self, max_chars: int = 220) -> str:
+        """注入对话的自我认知摘要。默认略放宽，避免只截到过时开头。"""
         row = await self.db.load_self_model()
         if not row or not row.get("identity_narrative"):
             return ""

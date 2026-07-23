@@ -68,8 +68,17 @@ class MemoryManager:
         relationship_stage: str,
         now: datetime | None = None,
     ) -> list[dict]:
+        # 当前句尚未 on_user_message，用既有工作记忆作多拍上下文
+        recent = [
+            {"role": m.role, "content": m.content}
+            for m in self.working.get_messages()
+        ]
         return await self.fact_noticer.notice(
-            message, emotion, relationship_stage, now=now
+            message,
+            emotion,
+            relationship_stage,
+            now=now,
+            recent_messages=recent,
         )
 
     async def active_facts(self, fact_type: str | None = None) -> list[dict]:
