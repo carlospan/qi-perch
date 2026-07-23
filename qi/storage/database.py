@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS creations (
     emotion_context TEXT,
     shared BOOLEAN DEFAULT 0,
     shared_at DATETIME,
+    mentioned_at DATETIME,
     user_reaction TEXT
 )
 """
@@ -174,6 +175,36 @@ CREATE TABLE IF NOT EXISTS user_model (
 )
 """
 
+_CREATE_USER_FACTS = """
+CREATE TABLE IF NOT EXISTS user_facts (
+    id INTEGER PRIMARY KEY,
+    fact_type TEXT NOT NULL,
+    content TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 1.0,
+    stability TEXT NOT NULL DEFAULT 'stable',
+    source TEXT,
+    first_learned DATETIME NOT NULL,
+    last_confirmed DATETIME,
+    superseded_by INTEGER,
+    emotional_weight REAL NOT NULL DEFAULT 0.5,
+    FOREIGN KEY (superseded_by) REFERENCES user_facts(id)
+)
+"""
+
+_CREATE_ACTIONS = """
+CREATE TABLE IF NOT EXISTS actions (
+    id INTEGER PRIMARY KEY,
+    timestamp DATETIME NOT NULL,
+    kind TEXT NOT NULL,
+    target TEXT,
+    summary TEXT NOT NULL,
+    outcome TEXT,
+    emotion_context TEXT,
+    season TEXT,
+    created_scar BOOLEAN DEFAULT 0
+)
+"""
+
 
 class Database:
     """栖的记忆仓库。"""
@@ -202,6 +233,9 @@ class Database:
         await self._conn.execute(_CREATE_FIRST_TIMES)
         await self._conn.execute(_CREATE_SCARS)
         await self._conn.execute(_CREATE_USER_MODEL)
+        await self._conn.execute(_CREATE_USER_FACTS)
+        await self._conn.execute(_CREATE_ACTIONS)
+        await self._migrate_creations_mentioned_at()
         await self._conn.execute(
             """
             INSERT OR IGNORE INTO relationship
@@ -211,6 +245,16 @@ class Database:
             (datetime.now().isoformat(timespec="seconds"),),
         )
         await self._conn.commit()
+
+    async def _migrate_creations_mentioned_at(self) -> None:
+        """旧库补 mentioned_at（提起 vs 递出拆分，L7）。"""
+        conn = self._require_conn()
+        async with conn.execute("PRAGMA table_info(creations)") as cursor:
+            cols = {str(row[1]) for row in await cursor.fetchall()}
+        if "mentioned_at" not in cols:
+            await conn.execute(
+                "ALTER TABLE creations ADD COLUMN mentioned_at DATETIME"
+            )
 
     def _require_conn(self) -> aiosqlite.Connection:
         if self._conn is None:
@@ -676,6 +720,7 @@ class Database:
         return dict(row) if row else None
 
     async def mark_creation_shared(self, creation_id: int) -> None:
+        """真正递出（L7 share.deliver）：写 shared=1 与 shared_at。"""
         conn = self._require_conn()
         await conn.execute(
             """
@@ -685,7 +730,22 @@ class Database:
         )
         await conn.commit()
 
+    async def mark_creation_mentioned(
+        self, creation_id: int, now: datetime | None = None
+    ) -> None:
+        """对话中提起（L4 maybe_share_hint）：只写 mentioned_at，不动 shared。"""
+        conn = self._require_conn()
+        when = now or datetime.now()
+        await conn.execute(
+            """
+            UPDATE creations SET mentioned_at = ? WHERE id = ?
+            """,
+            (when.isoformat(timespec="seconds"), creation_id),
+        )
+        await conn.commit()
+
     async def last_creation_share_time(self) -> datetime | None:
+        """最近一次真正递出的时间（shared_at）。"""
         conn = self._require_conn()
         async with conn.execute(
             """
@@ -699,6 +759,24 @@ class Database:
             return None
         try:
             return datetime.fromisoformat(str(row["shared_at"]))
+        except ValueError:
+            return None
+
+    async def last_creation_mention_time(self) -> datetime | None:
+        """最近一次提起的时间（mentioned_at）；用于提起 24h 冷却。"""
+        conn = self._require_conn()
+        async with conn.execute(
+            """
+            SELECT mentioned_at FROM creations
+            WHERE mentioned_at IS NOT NULL
+            ORDER BY mentioned_at DESC LIMIT 1
+            """
+        ) as cursor:
+            row = await cursor.fetchone()
+        if not row or not row["mentioned_at"]:
+            return None
+        try:
+            return datetime.fromisoformat(str(row["mentioned_at"]))
         except ValueError:
             return None
 
@@ -971,6 +1049,156 @@ class Database:
         ) as cursor:
             rows = await cursor.fetchall()
         return [dict(r) for r in rows]
+
+    # ----- 用户事实（L2 fact） -----
+
+    async def insert_user_fact(
+        self,
+        fact_type: str,
+        content: str,
+        confidence: float,
+        stability: str,
+        source: str | None,
+        emotional_weight: float,
+        *,
+        now: datetime | None = None,
+    ) -> int:
+        when = now or datetime.now()
+        ts = when.isoformat(timespec="seconds")
+        conn = self._require_conn()
+        cursor = await conn.execute(
+            """
+            INSERT INTO user_facts
+                (fact_type, content, confidence, stability, source,
+                 first_learned, last_confirmed, superseded_by, emotional_weight)
+            VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)
+            """,
+            (
+                fact_type,
+                content,
+                confidence,
+                stability,
+                source,
+                ts,
+                ts,
+                emotional_weight,
+            ),
+        )
+        await conn.commit()
+        return int(cursor.lastrowid)
+
+    async def list_active_user_facts(
+        self, fact_type: str | None = None
+    ) -> list[dict]:
+        conn = self._require_conn()
+        if fact_type:
+            sql = """
+                SELECT * FROM user_facts
+                WHERE superseded_by IS NULL AND fact_type = ?
+                ORDER BY emotional_weight DESC, id ASC
+            """
+            params: tuple = (fact_type,)
+        else:
+            sql = """
+                SELECT * FROM user_facts
+                WHERE superseded_by IS NULL
+                ORDER BY emotional_weight DESC, id ASC
+            """
+            params = ()
+        async with conn.execute(sql, params) as cursor:
+            rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+    async def get_user_fact(self, fact_id: int) -> dict | None:
+        conn = self._require_conn()
+        async with conn.execute(
+            "SELECT * FROM user_facts WHERE id = ?", (fact_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def confirm_user_fact(
+        self, fact_id: int, *, now: datetime | None = None
+    ) -> None:
+        when = now or datetime.now()
+        conn = self._require_conn()
+        await conn.execute(
+            "UPDATE user_facts SET last_confirmed = ? WHERE id = ?",
+            (when.isoformat(timespec="seconds"), fact_id),
+        )
+        await conn.commit()
+
+    async def supersede_user_fact(self, old_id: int, new_id: int) -> None:
+        conn = self._require_conn()
+        await conn.execute(
+            "UPDATE user_facts SET superseded_by = ? WHERE id = ?",
+            (new_id, old_id),
+        )
+        await conn.commit()
+
+    # ----- 行动留痕（L7） -----
+
+    async def insert_action(
+        self,
+        kind: str,
+        summary: str,
+        *,
+        target: str | None = None,
+        outcome: str | None = None,
+        emotion_context: str | None = None,
+        season: str | None = None,
+        created_scar: bool = False,
+        now: datetime | None = None,
+    ) -> int:
+        conn = self._require_conn()
+        when = now or datetime.now()
+        cursor = await conn.execute(
+            """
+            INSERT INTO actions
+                (timestamp, kind, target, summary, outcome,
+                 emotion_context, season, created_scar)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                when.isoformat(timespec="seconds"),
+                kind,
+                target,
+                summary,
+                outcome,
+                emotion_context,
+                season,
+                1 if created_scar else 0,
+            ),
+        )
+        await conn.commit()
+        return int(cursor.lastrowid)
+
+    async def list_recent_actions(self, limit: int = 10) -> list[dict]:
+        conn = self._require_conn()
+        async with conn.execute(
+            """
+            SELECT * FROM actions
+            ORDER BY timestamp DESC, id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+    async def count_actions_on_day(self, day: str, *, autonomous_only: bool = False) -> int:
+        """day 格式 YYYY-MM-DD。autonomous_only 时排除 assist（响应式不占自主预算统计时可选用）。"""
+        conn = self._require_conn()
+        if autonomous_only:
+            sql = """
+                SELECT COUNT(*) AS n FROM actions
+                WHERE date(timestamp) = ? AND kind != 'assist'
+            """
+        else:
+            sql = "SELECT COUNT(*) AS n FROM actions WHERE date(timestamp) = ?"
+        async with conn.execute(sql, (day,)) as cursor:
+            row = await cursor.fetchone()
+        return int(row["n"] if row else 0)
 
     async def close(self) -> None:
         if self._conn is not None:

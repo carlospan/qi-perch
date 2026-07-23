@@ -22,6 +22,7 @@ llm:
     dream: "deepseek:fast"
     creation: "deepseek:fast"
     reflection: "deepseek:strong"
+    fact: "deepseek:fast"
 
 # 心跳配置
 rhythm:
@@ -61,6 +62,15 @@ proactive_cooldown:
   reach_out: 28800
   share_creation: 86400
   express_feeling: 7200
+
+# 行动层（L7）：自主行动紧于言语日限 3
+action:
+  autonomous_daily_limit: 1
+  season_scale:
+    spring: 1.0
+    summer: 0.8
+    autumn: 0.5
+    winter: 0.2
 
 # 关系
 relationship:

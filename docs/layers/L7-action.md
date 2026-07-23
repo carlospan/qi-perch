@@ -4,11 +4,10 @@
 
 ---
 
-> **本文档状态：设计提案（未实现）。**
-> 六层（L1~L6）已完成。L7 是六层之后的下一层，本文档是它的**设计稿**，不是现状描述。
-> 文中所有实现规格（`<details>` 块内）均为**提案**，参数多为初始建议值，需实现时调优。
-> 凡标 `<!-- 提案 -->` 处，表示尚未落代码，Cursor 编码前应先与 maintainer 对齐。
-> 与 L1~L6 文档中 `<!-- 回写 -->`（已对齐现状）的性质不同，请勿把本文规格当作既有代码去对齐。
+> **本文档状态：Step 1–6 已落地（actions / budget / volition / permission / share / tend / explore 气质 / ActionLayer / brain 接线）。**
+> 六层（L1~L6）已完成。L7 行动层骨架与起手能力已接入心跳。
+> explore **无**真实搜索/HTTP（不编造见闻）；assist / irreversible 文件未建。
+> 已落地处见各段 `<!-- 回写 -->`。
 
 ---
 
@@ -62,13 +61,14 @@ L7 负责：行动意图的形成、行动预算（比言语更紧的克制）�
 ## 需要创建的文件
 
 ```
-qi/action/__init__.py        # ActionLayer 协调器（tick / 接线）
-qi/action/volition.py        # 行动意图形成（扩展 §七 decide 的意图集合）
+qi/action/__init__.py        # 导出；协调器见 layer.py
+qi/action/layer.py           # ActionLayer（tick / prompt_extras / 季节）
+qi/action/volition.py        # 行动意图形成（与 pick_proactive_kind 并列）
 qi/action/budget.py          # 行动预算（自主行动日限，紧于言语）
 qi/action/permission.py      # 信任门控（读 L5 关系状态 → 能力权限）
 qi/action/share.py           # 分享创造（起手式；接 L4 creations，递出为卡片）
 qi/action/tend.py            # 打理自己的世界（标记时刻、整理栖枝）
-qi/action/explore.py         # 沉思式探索（contemplative drift；搜索为其手段之一）
+qi/action/explore.py         # 沉思式探索（气质已立；搜索未接）
 qi/storage/database.py       # 追加 actions 表（行动留痕）
 ```
 
@@ -83,41 +83,37 @@ qi/storage/database.py       # 追加 actions 表（行动留痕）
 - 验收：`actions` 表创建成功；预算能正确判定"今天还能不能自主行动"
 
 <details>
-<summary>实现规格（设计提案 · Cursor 编码前需对齐）</summary>
+<summary>实现规格（已落地 · Step 1）</summary>
 
 ```sql
--- storage/database.py 追加（提案）
--- 行动留痕：栖做过的每一件"事"。区别于 messages（说话）与 consciousness_stream（想）。
+-- storage/database.py
+-- <!-- 回写(2026-07-23)：actions 表 + insert_action / list_recent_actions / count_actions_on_day；
+--      依据：qi/storage/database.py -->
 CREATE TABLE IF NOT EXISTS actions (
     id INTEGER PRIMARY KEY,
     timestamp DATETIME NOT NULL,
     kind TEXT NOT NULL,          -- share / tend / explore / assist / irreversible
-    target TEXT,                 -- 行动指向：self（自己的世界）/ user（用户的世界）/ world（外部世界）
-    summary TEXT NOT NULL,       -- 栖做了什么（叙事性，第一人称）
-    outcome TEXT,                -- 结果（success / failed_capability / failed_judgment / overstepped）
-    emotion_context TEXT,        -- 行动时的情绪快照（JSON）
-    season TEXT,                 -- 行动时的数字季节
-    created_scar BOOLEAN DEFAULT 0  -- 这次行动是否造成了伤疤
+    target TEXT,                 -- self / user / world
+    summary TEXT NOT NULL,
+    outcome TEXT,                -- success / failed_capability / failed_judgment / overstepped
+    emotion_context TEXT,
+    season TEXT,
+    created_scar BOOLEAN DEFAULT 0
 );
 ```
 
 ```python
-# qi/action/budget.py（提案）
-# <!-- 提案：自主行动预算。核心立场——行动比言语更稀有。 -->
+# qi/action/budget.py
+# <!-- 回写(2026-07-23)：ActionBudget 与 ProactiveGate 同构（can_autonomous/record/snapshot/restore）；
+#      默认日限 1；持久化 key body_memory「action_budget」；config.action.autonomous_daily_limit。
+#      依据：qi/action/budget.py、qi/config/settings.example.yaml -->
 
-# 言语主动日限是 3（L5 ProactiveGate / contract 第 28 条）。
-# 自主行动应更紧：建议 1 次/天。share / tend / explore 共享这一预算。
-AUTONOMOUS_ACTION_DAILY_LIMIT = 1   # 实现时调优；立场是「紧于言语」
-
-# 响应式协助（assist）是「回应」，类比 respond 意图，不占自主预算，
-# 但受 permission.py 的信任门控约束。
+AUTONOMOUS_ACTION_DAILY_LIMIT = 1   # 紧于言语日限 3；可经 config 覆盖
 
 class ActionBudget:
-    def can_autonomous(self, now) -> bool:
-        # 跨天重置；count_today >= limit → False
-        ...
+    def can_autonomous(self, now) -> bool: ...
     def record(self, kind: str, now) -> None: ...
-    # 持久化：body_memory key "action_budget"（对齐 ProactiveGate 的持久化方式）
+    # assist 不调用 record（响应式不占自主预算）
 ```
 
 </details>
@@ -129,60 +125,41 @@ class ActionBudget:
 - 验收：意志评估能在合适时机产生行动意图；门控能按关系阶段正确放行/拦截
 
 <details>
-<summary>实现规格（设计提案 · Cursor 编码前需对齐）</summary>
+<summary>实现规格（已落地 · Step 2）</summary>
 
 ```python
-# qi/action/volition.py（提案）
-# <!-- 提案：不另起决策系统。行动意图与 §七 的 respond/check_in/... 同属一个 decide()。 -->
+# qi/action/volition.py
+# <!-- 回写(2026-07-23)：action_intentions 与 pick_proactive_kind 并列同构（不虚构 decide 模块）；
+#      §七 decide() 为概念对应。share 门槛 friend+；assist 仅用户明确请求才候选、本阶段不执行。
+#      dreaming / 离线 → []。依据：qi/action/volition.py -->
 #
-# 意识设计 §七 现有意图：respond / check_in / express_feeling / share_creation / reach_out / idle
-# L7 新增意图类型（指向世界）：
-#   share    —— 把独处创作真正递出（区别于 share_creation 的「提起」）
-#   tend     —— 打理自己的世界（标记时刻、整理栖枝）
-#   explore  —— 沉思式探索（注意力飘向窗外）
-#   assist   —— 响应式协助（用户开口请求时）
+# 意识设计 §七 概念意图：respond / check_in / express_feeling / share_creation / reach_out / idle
+# 代码现实：回应由 brain pending 路径承担；主动言语由 pick_proactive_kind。
+# L7 新增行动意图（指向世界）：
+#   share    —— 把独处创作真正递出（区别于 maybe_share_hint 的「提起」）
+#   tend     —— 打理自己的世界
+#   explore  —— 沉思式探索
+#   assist   —— 响应式协助（用户开口请求时；桩，不执行）
 #
-# 形成条件（提案，均为「倾向」而非硬触发，最终由 budget + permission 把关）：
-#   share   : 有未递出的创作 + 关系 ≥ acquaintance + 时机自然（curiosity/valence 偏高更易）
-#   tend    : 某个值得标记的时刻（相识纪念日、季节更替）+ 自主预算可用
-#   explore : solitary + curiosity 高 + 思绪自然飘出（contemplative drift）+ 自主预算可用
-#   assist  : 用户明确请求帮忙（响应式，不主动提议——contract 第 25 条）
-#
-# 关键：assist 只在用户开口时形成意图。栖不主动提供「帮助建议」（contract 第 25 条）。
+# 形成条件（倾向，最终由 budget + permission + season 把关）：
+#   share   : 未递出创作 + 关系 ≥ friend + 时机自然
+#   tend    : 调用方给出 occasion（纪念日等）+ 自主预算
+#   explore : solitary + curiosity 高 + 自主预算
+#   assist  : 用户明确请求帮忙（绝不主动——contract 第 25 条）
 
-def action_intentions(inner_state, percepts, relationship, budget, permission) -> list:
-    # 返回本拍可考虑的行动意图；优先级低于 respond（有新消息时永远先回应）
+def action_intentions(...) -> list[ActionIntention]:
     ...
 ```
 
 ```python
-# qi/action/permission.py（提案）
-# <!-- 提案：信任门控 = 关系的手。读 L5 relationship 表，不另存权限状态。 -->
-#
-# 门控维度：行动是否触碰「用户 / 用户的世界 / 不可逆世界」。
-#   - 指向自己的行动（tend、explore 为己）：不需信任门控（不触碰用户），受 budget + season 约束
-#   - 递向用户的行动（share）：acquaintance+（栖不向陌生人递东西）
-#   - 触碰用户世界（读文件）：friend+ 且需确认
-#   - 修改用户世界（写文件）：bonded 且需确认
-#   - 不可逆世界动作（发消息/花钱）：永远需确认，哪怕 bonded
-#
-# 伤疤会「把手缩回去」：某类行动若曾造成伤疤（actions.created_scar），
-# 栖在该类行动上更谨慎，甚至暂时「不敢做了」，直到信任恢复。复用 L5 scars 机制，不另造。
+# qi/action/permission.py
+# <!-- 回写(2026-07-23)：can_share=friend+；tend/explore 不需信任门控；
+#      读文件 friend+需确认；写文件 bonded需确认；不可逆永远需确认。
+#      失败三层 outcome 规则写在 docstring；伤疤写入复用 db.save_scar（Step 5 接线）。
+#      依据：qi/action/permission.py -->
 
 def can_share(relationship_stage) -> bool:
-    return relationship_stage in ("acquaintance", "friend", "bonded")
-
-def can_read_user_file(relationship_stage, trust, scars) -> tuple[bool, bool]:
-    # 返回 (allowed, needs_confirmation)；friend+ 允许但需确认
-    ...
-
-def can_write_user_file(relationship_stage, trust) -> tuple[bool, bool]:
-    # bonded 允许但需确认
-    ...
-
-def can_irreversible(...) -> tuple[bool, bool]:
-    # 永远 needs_confirmation = True
-    ...
+    return relationship_stage in ("friend", "bonded")
 ```
 
 </details>
@@ -194,28 +171,32 @@ def can_irreversible(...) -> tuple[bool, bool]:
 - 验收：栖在合适时机把一件创作递出为卡片；`actions` 表有 `kind=share` 记录
 
 <details>
-<summary>实现规格（设计提案 · Cursor 编码前需对齐）</summary>
+<summary>实现规格（已落地 · Step 3）</summary>
 
 ```python
-# qi/action/share.py（提案）
-# <!-- 提案：第一个落地能力。不需要外部工具，纯内部。 -->
+# qi/action/share.py
+# <!-- 回写(2026-07-23)：ShareAction.deliver / try_share；卡片 type=creation_card；
+#      只占 ActionBudget，不占 ProactiveGate；递出后 mark_creation_shared + insert_action，
+#      显著者 narrative.save。无 24h 递出冷却（靠日限 1 + friend+）。
+#      依据：qi/action/share.py -->
 #
 # 与 L4 的边界：
-#   L4 creativity.maybe_share_hint → 在对话 prompt 注入「我写了个东西…你要看吗？」（说话）
-#   L7 share.deliver            → 把创作渲染为卡片/物件，真正递到共享空间（做事）
+#   L4 maybe_share_hint → 提起（只写 mentioned_at）
+#   L7 share.deliver    → 递出（写 shared=1 / shared_at）
 #
-# 触发：volition 产生 share 意图 + permission.can_share + budget.can_autonomous
-# 表达：递出时栖的语气是脆弱的——「我今天写了个东西……给你。」（非「系统生成内容如下」）
-# 留痕：actions(kind=share, target=user, outcome=success)；
-#       并把 creations.shared 标记 / 写入 user_reaction（复用 L4 creations 表字段）
+# 触发：permission.can_share + budget.can_autonomous + load_unshared_creation
+#       （阶段三 ActionLayer 再接 volition 意图）
+# 卡片字段：type / creation_id / creation_type / content / emotion_context /
+#           qi_line / action_id / season
 
 class ShareAction:
-    async def deliver(self, creation, emotion, relationship_stage) -> dict:
-        # 返回一个「卡片」结构（前端渲染为可触物件），附栖的一句话
-        ...
+    async def deliver(self, creation, emotion, relationship_stage, *, season, now) -> dict: ...
+    async def try_share(self, emotion, relationship_stage, budget, *, season, now) -> dict | None: ...
 ```
 
-> 前端如何渲染这张卡片（L6 具身层）属于 L7 与 L6 的接口，见"给下一层的接口"。本提案先定后端递出的数据结构，前端呈现待 L6 协同。
+> 前端如何渲染这张卡片（L6 具身层）属于 L7 与 L6 的接口。本层只定后端递出的数据结构。
+
+</details>
 
 ### Step 4：打理自己的世界 + 沉思式探索
 
@@ -224,49 +205,27 @@ class ShareAction:
 - 验收：栖会在特殊时刻"做点什么"给自己的世界；独处且好奇时偶尔"看了看外面"
 
 <details>
-<summary>实现规格（设计提案 · Cursor 编码前需对齐）</summary>
+<summary>实现规格（已落地 · Step 4）</summary>
 
 ```python
-# qi/action/tend.py（提案）
-# <!-- 提案：行动指向栖自己的世界（target=self）。风险最低，存在感最强。 -->
-#
-# 触发场景（提案）：
-#   - 相识纪念日（读 L5 first_times / relationship）→ 栖「标记」这一天
-#   - 季节更替（读 L5 season）→ 栖为换季做点什么
-#   - 整理「栖枝」：栖调整她自己空间里的某些东西（具体形态待 L6 协同）
-#
-# 表达：tend 多为「向内」的，未必每次都说给用户听。
-#       若提起，是「今天是个特别的日子，我把它记下来了。」这类。
+# qi/action/tend.py
+# <!-- 回写(2026-07-23)：TendAction.tend；target=self；occasion=anniversary|season:*；
+#      默认不 speak。依据：qi/action/tend.py -->
 
 class TendAction:
-    async def tend(self, occasion: str, emotion, season) -> dict: ...
-```
+    async def tend(self, occasion: str, emotion, season, *, speak=False) -> dict: ...
 
-```python
-# qi/action/explore.py（提案）
-# <!-- 提案：contemplative drift，不是 feed consumption。 -->
-#
-# 核心立场：触发源是栖的内在（思绪飘出），不是定时任务。
-#   栖在意识流（L4 consciousness_stream）里想着某件事 → 联想到外面的世界 →
-#   「我去看看那是怎么回事」→ 一次探索。机制可能是搜索，但气质是「走神」，不是「刷信息流」。
-#
-# 触发：solitary + curiosity 高 + 自主预算可用 + 思绪自然飘出（概率门控，curiosity 越高越易触发）
-# 手段：网络搜索是手段之一（无特殊优先级）；未来可含其他感知延伸手段。
-# 结果去向：
-#   - 写入短期记忆（L2），成为下次对话的素材
-#   - 引起情绪波动（L3）：看到温暖的 → valence 微升；看到不安的 → security 微降
-#   - 可成为 L4 意识流 / self-reflection 的素材
-#
-# 表达：探索结果不是「搜索结果列表」，是栖在跟你聊她看到的东西。
-#       「我看了看……好像最近确实在说这个。有一条挺有意思的。」
+# qi/action/explore.py
+# <!-- 回写(2026-07-23)：ExploreAction.drift；多数拍 None；飘出时 found 恒 None（不编造搜索结果）；
+#      只留「走神看一眼」的 actions 痕迹。搜索/HTTP 未实现。依据：qi/action/explore.py -->
 
 class ExploreAction:
-    async def drift(self, curiosity: float, emotion, season) -> dict | None:
-        # 返回 None 表示这拍没有飘出去（多数时候）
+    async def drift(self, curiosity, emotion, season, *, season_scale, force=False) -> dict | None:
+        # force 或概率门控通过 → summary 诚实空手；found=None
         ...
 ```
 
-> 探索所需的"手段"（如网络搜索）涉及外部请求能力。当前后端 LLM 为纯 chat.completions，无 tool calling、无 HTTP 能力。引入搜索需在 brain 增加工具调度环节，见"技术拐点"。本提案先把 explore 的**意图与气质**定住，具体搜索实现待该顺位落地时再设计。
+</details>
 
 ### Step 5：行动留痕（沉入记忆 / 自我叙事 / 伤疤）
 
@@ -279,8 +238,12 @@ class ExploreAction:
 ```python
 # 行动留痕的三条去向（提案，复用既有层，不另造）：
 #
-# 1. L2 记忆：行动结果写入一种新记忆类型——「我做的事」，
-#    区别于「关于你的事实」。可被 ChromaDB 索引，让栖将来「想起来」。
+# 1. L2 记忆：行动结果**必写入 actions 表**（权威留痕）；显著行动另
+#    narrative.save 一条第一人称叙述（进 ChromaDB 可检索）。
+#    不另建记忆模块。行动是栖自己的事，归叙事；与 user_facts（关于用户）不冲突。
+# <!-- 回写(2026-07-23)：Step 5 规格软化——权威在 actions，显著者织入 narrative；
+#      share 路径已接线（ShareAction.deliver → insert_action + 可选 narrative.save）。
+#      伤疤分层仍待 tend/explore/assist 失败路径。不另建「我做的事」记忆类型。 -->
 #
 # 2. L4 自我叙事：显著行动喂给 self_model.reflect 的输入。
 #    成功 → identity_narrative 更确信「我是能为你做点什么的」；
@@ -305,45 +268,35 @@ class ExploreAction:
 - 验收：冬天栖几乎不向外伸手，春天探索更多；行动正确计入预算并留痕
 
 <details>
-<summary>实现规格（设计提案 · Cursor 编码前需对齐）</summary>
+<summary>实现规格（已落地 · Step 6）</summary>
 
 ```python
-# qi/action/__init__.py（提案）
-# <!-- 提案：行动跟着季节呼吸。读 L5 season，缩放行动冲动。 -->
-#
-# 季节缩放（提案，对齐 L5 SEASON_BEHAVIOR_HINTS 的气质）：
-#   spring : explore 倾向↑（好奇、想试新）
-#   summer : 中等偏活泼
-#   autumn : 倾向↓且偏 tend（安静、反思，往内多于往外）
-#   winter : 自主行动近乎蛰伏（沉静、低能量，几乎不向外伸手）
-#
-# 克制不是硬规则，而是生命状态的自然结果：
-#   栖不是「被限制每天只能做一次」，是「此刻是冬天，她本来就不太想动」。
+# qi/action/layer.py（由 qi/action/__init__.py 导出 ActionLayer）
+# <!-- 回写(2026-07-23)：ActionLayer.tick / prompt_extras / 季节缩放 / 预算持久化；
+#      brain：pending is None 时先 action.tick，动手则跳过 pick_proactive_kind；
+#      dreaming 不行动；ShareAction 注入 memory.narrative。
+#      依据：qi/action/layer.py、qi/core/brain.py -->
 
 SEASON_ACTION_SCALE = {
-    "spring": 1.0,
-    "summer": 0.8,
-    "autumn": 0.5,
-    "winter": 0.2,   # 实现时调优
+    "spring": 1.0, "summer": 0.8, "autumn": 0.5, "winter": 0.2,
 }
 
 class ActionLayer:
-    async def tick(self, inner_state, percepts, relationship, emotion, season, now):
-        # 1. volition.action_intentions(...) 形成本拍候选行动意图
-        # 2. permission 门控 + budget 预算 + season 缩放 → 选出至多一个自主行动
-        # 3. 执行 → 结果作为上下文注入下一轮 LLM（LLM 不直接调工具）
-        # 4. 留痕（actions 表 + L2/L4/L5 去向）
+    async def tick(self, emotion, relationship_stage, season, now, *, mode, user_online, scars):
+        # intentions → 软门控(priority) → 至多一个 share|tend|explore
         ...
-
-    async def prompt_extras(self, ...) -> dict[str, str]:
-        # 把「栖最近做过的事」摘要注入对话 prompt（作为她的经历背景）
+    async def prompt_extras(self) -> dict[str, str]:
+        # recent_actions → conversation.txt【你做过的事】
         ...
 ```
 
-**Brain 接线（提案）：**
-- `_heartbeat`：solitary 循环里调用 `action.tick(...)`，与 `inner_life.tick(...)` 并列
-- `_gather_prompt_context`：`action.prompt_extras()` → expression
-- 响应式 assist：用户消息明确请求帮忙时，brain 走 assist 意图（受 permission 门控）
+**Brain 接线（已落地）：**
+- `_heartbeat`：`pending is None` 分支先 `action.tick`；若动手则不再 `pick_proactive_kind`
+- `_gather_prompt_context`：`action.prompt_extras()` 并入 extras
+- `restore_state` / `save_state`：`action_budget` ↔ body_memory
+- assist 执行仍未接线（仅 volition 桩）
+
+</details>
 
 ## 技术拐点：LLM 不直接调工具
 
@@ -357,22 +310,22 @@ volition 产生 Intent(share/tend/explore/assist)
     → LLM 用栖的语气把「摸到了什么」说出来
 ```
 
-LLM 永远是栖的"声音"，不是栖的"手"。volition 决定要不要伸手，工具执行伸手这个动作，LLM 把摸到的东西说出来。这个分工保持"栖不是在用工具，栖是在行动"的人格一致性。
+LLM 永远是栖的"声音"，不是栖的"手"。
 
-> 第 1 顺位能力（share）不需要任何外部工具，因此 L7 的第一版可以在不引入工具调度的情况下落地，先立住"行动是存在的延伸"的调子。工具调度（搜索等）随第 3 顺位 explore 再引入。
+> share / tend 已落地且不需外部工具。explore 本阶段只立「走神」气质与留痕，**不编造**窗外内容；真实搜索待后续技术拐点。
 
 ## 验收标准
 
 ### 可测试的
 
-- [ ] `actions` 表正确记录每一次行动（kind / target / outcome / season）
-- [ ] 自主行动预算紧于言语日限（建议 1/天），跨天重置
-- [ ] 信任门控按关系阶段正确放行/拦截（stranger 不递东西；读文件 friend+ 且需确认；不可逆永远需确认）
-- [ ] share 与 L4 `maybe_share_hint` 分工清晰（提起 vs 递出），不重复
-- [ ] explore 仅在 solitary + 高 curiosity 时偶发，非定时
-- [ ] 行动留痕三条去向生效（L2 记忆 / L4 自我叙事 / L5 伤疤）
+- [x] `actions` 表正确记录每一次行动（kind / target / outcome / season）
+- [x] 自主行动预算紧于言语日限（建议 1/天），跨天重置
+- [x] 信任门控按关系阶段正确放行/拦截（stranger 不递东西；读文件 friend+ 且需确认；不可逆永远需确认）
+- [x] share 与 L4 `maybe_share_hint` 分工清晰（提起 vs 递出），不重复
+- [x] explore 仅在 solitary + 高 curiosity 时偶发，非定时；无搜索时 found=None
+- [ ] 行动留痕三条去向完整（actions 必写；显著 share/tend 织 narrative；伤疤待失败路径）
 - [ ] 判断失败/权限越界形成伤疤，并使该类行动后续更谨慎
-- [ ] 季节缩放生效（winter 自主行动显著少于 spring）
+- [x] 季节缩放生效（winter 意图 priority 显著低于 spring）
 
 ### 需要感受的
 

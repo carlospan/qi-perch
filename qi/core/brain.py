@@ -21,6 +21,8 @@ from qi.core.rhythm import determine_mode, next_interval
 from qi.embodiment.avatar.controller import AvatarController
 from qi.embodiment.voice.tts import create_tts, emotion_to_voice_params
 from qi.inner_life import InnerLife
+from qi.action import ActionLayer
+from qi.memory.facts import format_facts_for_prompt
 from qi.memory.first_time import FirstTimeMemory
 from qi.memory.manager import MemoryManager
 from qi.relationship import RelationshipEngine
@@ -68,6 +70,7 @@ class Brain:
         self._accumulated_suppressed = 0.0
         self.proactive = ProactiveGate(config)
         self.proactive_queue: asyncio.Queue[str] = asyncio.Queue()
+        self.action: ActionLayer | None = None
         self._drift_signals: list[str] = []
         self._last_avatar_payload: dict | None = None
 
@@ -211,6 +214,14 @@ class Brain:
                 recent = recent[:-1]
             query = pending or "此刻的心情"
             memories = await self.memory.retrieve(query, top_k=3)
+            try:
+                facts = await self.memory.active_facts()
+                extras["user_facts"] = format_facts_for_prompt(
+                    facts, self.relationship_stage
+                )
+            except Exception:
+                logger.exception("组装用户事实 prompt 出错")
+                extras["user_facts"] = "（你还不太了解他）"
         elif self._db is not None:
             recent = await self._db.load_recent_messages(limit=20)
             if (
@@ -223,12 +234,18 @@ class Brain:
 
         if self.inner_life is not None:
             try:
-                extras = await self.inner_life.prompt_extras(
+                life_extras = await self.inner_life.prompt_extras(
                     self.emotion, self.relationship_stage
                 )
+                extras.update(life_extras)
             except Exception:
                 logger.exception("内在生命 prompt 组装出错")
-                extras = {}
+
+        if self.action is not None:
+            try:
+                extras.update(await self.action.prompt_extras())
+            except Exception:
+                logger.exception("行动层 prompt 组装出错")
 
         if pending and self.first_times is not None:
             hint = await self.first_times.maybe_recall_hint(pending, now)
@@ -318,6 +335,14 @@ class Brain:
                     silence_before=silence_before,
                 )
 
+            if self.memory is not None:
+                await self.memory.notice_facts(
+                    pending,
+                    self.emotion,
+                    self.relationship_stage,
+                    now,
+                )
+
             impact = self.perception.assess_impact(
                 pending, self.emotion, self.relationship_stage
             )
@@ -398,17 +423,45 @@ class Brain:
 
         elif pending is None:
             silence_seconds = self.perception.detect_silence(self.last_interaction, now)
-            kind = pick_proactive_kind(
-                want_express=want_express,
-                relationship_stage=self.relationship_stage,
-                emotion_security=self.emotion.security,
-                emotion_attachment=self.emotion.attachment,
-                silence_seconds=silence_seconds,
-                mode=self.emotion.mode.value,
-                user_online=self.user_online,
-                gate=self.proactive,
-                now=now,
-            )
+            # 行动与主动言语同拍不叠加：先评估自主行动（更稀有）；
+            # 动了手则不再 pick_proactive_kind；没动手再 fall through 到主动言语。
+            acted = False
+            if self.action is not None:
+                try:
+                    scars = (
+                        await self._db.list_scars()
+                        if self._db is not None
+                        else None
+                    )
+                    action_result = await self.action.tick(
+                        self.emotion,
+                        self.relationship_stage,
+                        self._current_season(),
+                        now,
+                        mode=self.emotion.mode.value,
+                        user_online=self.user_online,
+                        scars=scars,
+                    )
+                    if action_result is not None:
+                        acted = True
+                        await self._persist_action_budget()
+                        await self._deliver_action_result(action_result, now)
+                except Exception:
+                    logger.exception("行动层 tick 出错")
+
+            kind = None
+            if not acted:
+                kind = pick_proactive_kind(
+                    want_express=want_express,
+                    relationship_stage=self.relationship_stage,
+                    emotion_security=self.emotion.security,
+                    emotion_attachment=self.emotion.attachment,
+                    silence_seconds=silence_seconds,
+                    mode=self.emotion.mode.value,
+                    user_online=self.user_online,
+                    gate=self.proactive,
+                    now=now,
+                )
             if kind is not None:
                 (
                     recent,
@@ -615,6 +668,33 @@ class Brain:
         except Exception:
             logger.exception("主动门控持久化失败")
 
+    async def _persist_action_budget(self) -> None:
+        if self.action is None:
+            return
+        await self.action.persist_budget()
+
+    async def _deliver_action_result(
+        self, result: dict, now: datetime
+    ) -> None:
+        """行动结果：卡片推前端；share 的 qi_line 作为这一拍的开口（非主动言语通道）。"""
+        if self.embodiment is not None:
+            try:
+                await self.embodiment.broadcast(
+                    {"type": "action", "payload": result}
+                )
+            except Exception:
+                logger.exception("行动结果推送失败")
+
+        # share 递出时说一句脆弱的话；tend/explore 默认向内不说
+        if result.get("type") == "creation_card":
+            line = (result.get("qi_line") or "").strip()
+            if line:
+                await self._deliver_qi_message(line, now, proactive=True)
+        elif result.get("speak") and result.get("qi_line"):
+            await self._deliver_qi_message(
+                str(result["qi_line"]), now, proactive=True
+            )
+
     async def restore_state(self, db: Database) -> None:
         self._db = db
         self.memory = MemoryManager(db, self.config, llm=self.llm)
@@ -625,6 +705,11 @@ class Brain:
         await self.memory.restore()
         await self.relationship.restore()
         self.perception.relationship_stage = self.relationship.state.stage
+        # L7：叙事注入 ShareAction；预算从 body_memory 恢复
+        self.action = ActionLayer(
+            db, self.config, narrative=self.memory.narrative
+        )
+        await self.action.restore_budget()
         saved_gate = await db.get_body_memory("proactive_gate")
         if isinstance(saved_gate, dict):
             self.proactive.restore(saved_gate)
@@ -640,5 +725,6 @@ class Brain:
     async def save_state(self, db: Database) -> None:
         await db.save_emotion(self.emotion)
         await self._persist_proactive_gate()
+        await self._persist_action_budget()
         if self.relationship is not None:
             await self.relationship.persist()

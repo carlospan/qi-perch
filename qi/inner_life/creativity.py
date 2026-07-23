@@ -23,16 +23,17 @@ STAGE_ORDER = ("stranger", "acquaintance", "friend", "bonded")
 
 def can_share_creation(
     relationship_stage: str,
-    last_share_time: datetime | None,
+    last_mention_time: datetime | None,
     now: datetime,
     cooldown_hours: float | None = None,
 ) -> bool:
+    """提起门槛：friend+，且距上次提起（mentioned_at）超过冷却。"""
     if relationship_stage not in ("friend", "bonded"):
         return False
     hours = (
         CREATION_SHARE_COOLDOWN_HOURS if cooldown_hours is None else cooldown_hours
     )
-    if last_share_time and (now - last_share_time) < timedelta(hours=hours):
+    if last_mention_time and (now - last_mention_time) < timedelta(hours=hours):
         return False
     return True
 
@@ -136,11 +137,11 @@ class Creativity:
         relationship_stage: str,
         now: datetime | None = None,
     ) -> str | None:
-        """对话中可注入的分享提示（脆弱语气）。"""
+        """对话中可注入的分享提示（脆弱语气）。只提起，不递出。"""
         now = now or datetime.now()
         if emotion.mode.value != "awake":
             return None
-        last = await self.db.last_creation_share_time()
+        last = await self.db.last_creation_mention_time()
         if not can_share_creation(
             relationship_stage,
             last,
@@ -154,7 +155,7 @@ class Creativity:
         # 低概率，避免每次对话都塞
         if random.random() > 0.25:
             return None
-        await self.db.mark_creation_shared(int(creation["id"]))
+        await self.db.mark_creation_mentioned(int(creation["id"]), now=now)
         snippet = creation["content"][:60]
         return (
             "你有一段未分享的创作。如果时机自然，可以带着一点不好意思提起，"

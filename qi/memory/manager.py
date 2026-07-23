@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from qi.memory.body_memory import BodyMemory
+from qi.memory.facts import FactNoticer, FactStore
 from qi.memory.narrative import NarrativeMemory
 from qi.memory.vector_store import VectorStore
 from qi.memory.working import WorkingMemory
@@ -36,7 +37,7 @@ _PROMISE = ("下次", "以后", "改天", "回头", "等我", "明天给你", "�
 
 
 class MemoryManager:
-    """统一入口，协调工作记忆、叙事记忆、身体记忆。"""
+    """统一入口，协调工作记忆、叙事记忆、身体记忆、用户事实。"""
 
     def __init__(self, db: Database, config: dict, llm: LLMGateway | None = None):
         self.db = db
@@ -49,14 +50,30 @@ class MemoryManager:
         self.vector_store = VectorStore(persist_dir=chroma_dir)
         self.narrative = NarrativeMemory(db, self.vector_store, llm=llm)
         self.body = BodyMemory(db)
+        self.facts = FactStore(db)
+        self.fact_noticer = FactNoticer(self.facts, llm=llm)
         self.llm = llm
 
     async def restore(self) -> None:
-        """醒来时把最近对话装回工作记忆。"""
+        """醒来时把最近对话装回工作记忆。事实按需从 DB 读，不必预装。"""
         recent = await self.db.load_recent_messages(
             limit=self.working.max_size
         )
         self.working.load_from_db(recent)
+
+    async def notice_facts(
+        self,
+        message: str,
+        emotion: EmotionState,
+        relationship_stage: str,
+        now: datetime | None = None,
+    ) -> list[dict]:
+        return await self.fact_noticer.notice(
+            message, emotion, relationship_stage, now=now
+        )
+
+    async def active_facts(self, fact_type: str | None = None) -> list[dict]:
+        return await self.facts.active_facts(fact_type)
 
     async def save(
         self,

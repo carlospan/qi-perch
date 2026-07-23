@@ -94,6 +94,8 @@ class PromptBuilder:
         creation_hint = extras.get("creation_hint") or ""
         first_time_hint = extras.get("first_time_hint") or ""
         drift_hint = extras.get("drift_hint") or ""
+        user_facts = extras.get("user_facts") or "（你还不太了解他）"
+        recent_actions = extras.get("recent_actions") or "（最近没有特别伸过手）"
 
         inner_notes_parts = []
         if dream_hint:
@@ -123,6 +125,8 @@ class PromptBuilder:
             season_hint=season_hint,
             scar_hint=scars,
             relevant_memories=self._format_memories(memories),
+            user_facts=user_facts,
+            recent_actions=recent_actions,
             shared_culture=shared_culture or "（还没有只属于你们的默契）",
             user_profile=user_profile or "（还在认识你）",
             recent_thoughts=recent_thoughts,

@@ -1,0 +1,16 @@
+从用户这句话里，抽出关于「用户自己」的稳定事实（不是情绪发泄、不是问你的话）。
+
+要求：
+- 每条用「他……」第三人称陈述
+- 给出 fact_type（identity/family/occupation/location/preference/health/important_date/life_event/concern/other）
+- confidence：用户明说约 0.9；隐含约 0.7；你猜的约 0.4（低于 0.6 的不要输出）
+- stability：会变的用 state（工作/城市/当前愁），其余 stable
+- 没有可抽的事实就返回空数组 []
+- 只输出 JSON 数组，不要解释
+
+用户说：{message}
+关系阶段：{stage}
+当下情绪：{emotion}
+
+示例输出：
+[{{"fact_type":"occupation","content":"他在做设计工作","confidence":0.9,"stability":"state","emotional_weight":0.6}}]

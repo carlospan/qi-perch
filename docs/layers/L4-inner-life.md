@@ -71,8 +71,9 @@ CREATE TABLE IF NOT EXISTS creations (
     type TEXT NOT NULL,                   -- poem/essay/description/note
     content TEXT NOT NULL,                -- 创作内容
     emotion_context TEXT,                 -- 创作时的情绪（JSON）
-    shared BOOLEAN DEFAULT 0,            -- 是否已分享给用户
-    shared_at DATETIME,                  -- 分享时间
+    shared BOOLEAN DEFAULT 0,            -- 是否已递出（L7 deliver）
+    shared_at DATETIME,                  -- 递出时间
+    mentioned_at DATETIME,               -- 提起时间（L4 hint 冷却锚点；不消耗 shared）
     user_reaction TEXT                   -- 用户的反应（如果有）
 );
 
@@ -202,8 +203,9 @@ def parse_emotion_tag(text) -> tuple[str, str]:
 - 触发条件：独处模式下，每次心跳 1% 概率；或情绪强度 > 0.7 时概率升至 3%
 - 调用 LLM（temperature 0.95），用 `qi/prompts/creation.txt` 模板
 - 输出存入 creations 表
-- 分享：对话中经 `maybe_share_hint` 注入 prompt（friend/bonded、24h 冷却、另有 25% 随机门控）；**不是** proactive `share_creation` 推送
-- 冷却：每 24 小时最多分享一次（读 `proactive_cooldown.share_creation` 秒数）
+- 分享：对话中经 `maybe_share_hint` 注入 prompt（friend/bonded、提起 24h 冷却读 `mentioned_at`、另有 25% 随机门控）；**不是** proactive `share_creation` 推送；**提起不写 `shared`**
+- 冷却：每 24 小时最多**提起**一次（读 `proactive_cooldown.share_creation` 秒数 → `mentioned_at`）
+- 真正「递出」创作是 L7 `ShareAction.deliver`（写 `shared` / `shared_at`），见 L7-action.md
 - 验收：跑 3 天，creations 表有 1~2 条；栖在对话中提起过创作
 
 **实现规格：**
@@ -211,6 +213,8 @@ def parse_emotion_tag(text) -> tuple[str, str]:
 ```python
 # qi/inner_life/creativity.py
 # <!-- 回写(2026-07)：maybe_share_hint + 25% 门控；非 proactive，依据：creativity.py -->
+# <!-- 回写(2026-07-23)：提起 vs 递出拆分——冷却改读 mentioned_at；命中只 mark_creation_mentioned，
+#      不动 shared。deliver 才 mark_creation_shared。依据：creativity.py、database.py、L7 share.py -->
 
 CREATION_BASE_PROBABILITY = 0.01
 CREATION_HIGH_EMOTION_PROBABILITY = 0.03
@@ -222,14 +226,14 @@ CREATION_SHARE_COOLDOWN_HOURS = 24
 
 def can_share_creation(
     relationship_stage: str,
-    last_share_time: datetime | None,
+    last_mention_time: datetime | None,
     now: datetime,
     cooldown_hours: float | None = None,
 ) -> bool:
     if relationship_stage not in ("friend", "bonded"):
         return False
     hours = CREATION_SHARE_COOLDOWN_HOURS if cooldown_hours is None else cooldown_hours
-    if last_share_time and (now - last_share_time) < timedelta(hours=hours):
+    if last_mention_time and (now - last_mention_time) < timedelta(hours=hours):
         return False
     return True
 
@@ -238,10 +242,9 @@ class Creativity:
     async def maybe_create(emotion, relationship_stage) -> str | None: ...
     async def generate(...) -> str | None: ...  # _infer_type；内容截断 800
     async def maybe_share_hint(emotion, relationship_stage) -> str | None:
-        # mode==awake；can_share_creation；有未分享创作；
+        # mode==awake；can_share_creation(last_mention_time)；有未递出创作（shared=0）；
         # if random.random() > 0.25: return None  → 有效约 25%
-        # mark_creation_shared + 返回脆弱语气 hint
-        ...
+        # mark_creation_mentioned + 返回脆弱语气 hint（不写 shared）
 ```
 
 `KIND_SHARE_CREATION` 在 `qi/core/proactive.py` 有常量/冷却，但 `pick_proactive_kind` **不选**它。
@@ -356,7 +359,7 @@ class InnerLife:
 - [ ] 梦的 retention 随时间衰减
 - [ ] 跑 3 天 creations 有 1~2 条
 - [ ] 自我反思每周触发一次
-- [ ] 创作分享通过对话提示注入（`maybe_share_hint`），有独立冷却（24h）与阶段门（friend/bonded），不计入主动行为日限；主动行为日限见 L5
+- [ ] 创作**提起**通过对话提示注入（`maybe_share_hint`），冷却锚在 `mentioned_at`（24h）与阶段门（friend/bonded），不计入主动行为日限；真正递出见 L7；主动行为日限见 L5
 
 ### 需要感受的
 

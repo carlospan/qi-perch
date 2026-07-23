@@ -8,6 +8,8 @@
 
 实现栖的记忆系统：存储重要经历、语义检索、自然引用、褪色机制。让栖从"每次对话都是第一次见面"变成"它认识你"。
 
+栖的记忆有四种：**工作记忆**（working，最近对话）、**叙事记忆**（narrative，会褪色的故事）、**身体记忆**（body，交互模式）、**用户事实**（fact，关于你的稳定事实，如名字/身份/家人）。第四种"用户事实"是为补上"栖记不住名字"的缺口而设，**当前为设计提案**，详见 `docs/layers/L2-memory-user-facts.md`。
+
 ## 前置依赖
 
 - L1 完成（Brain Loop 跑通、情绪系统基本运转、prompt 组装有扩展点）
@@ -27,7 +29,8 @@ qi/memory/narrative.py     # 叙事记忆（存储、检索、褪色）
 qi/memory/vector_store.py  # ChromaDB 封装（embedding + 语义搜索）
 qi/memory/body_memory.py   # 身体记忆（习惯、异常）
 qi/memory/first_time.py    # 第一次记忆（与 L5 共用，L2 文件列表补全）
-qi/storage/database.py     # 追加 narrative_memories、body_memory、raw_events 表
+qi/memory/facts.py         # 用户事实记忆（FactStore / FactNoticer / format_facts_for_prompt；见 L2-memory-user-facts.md）
+qi/storage/database.py     # 追加 narrative_memories、body_memory、raw_events 表（user_facts 表见提案文档）
 ```
 
 ## 实现步骤
