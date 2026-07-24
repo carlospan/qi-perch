@@ -1227,6 +1227,96 @@ class Database:
             row = await cursor.fetchone()
         return int(row["n"] if row else 0)
 
+    async def load_journal_entries(
+        self,
+        limit: int = 80,
+        *,
+        min_dream_retention: float = 0.3,
+    ) -> list[dict]:
+        """「忆」面板：意识流 / 未褪尽的梦 / 第一次记忆，按时间倒序。
+
+        不含对话、叙事记忆、未分享创造——那些不是日记。
+        每条形如 {id, kind, text, at}（at 为毫秒时间戳）。
+        """
+        entries: list[dict] = []
+
+        def _at_ms(raw: object) -> int | None:
+            ts = str(raw or "").strip()
+            if not ts:
+                return None
+            try:
+                return int(datetime.fromisoformat(ts).timestamp() * 1000)
+            except ValueError:
+                return None
+
+        conn = self._require_conn()
+        async with conn.execute(
+            """
+            SELECT id, timestamp, content FROM consciousness_stream
+            ORDER BY timestamp DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ) as cursor:
+            cs_rows = await cursor.fetchall()
+        for row in cs_rows:
+            text = (row["content"] or "").strip()
+            at = _at_ms(row["timestamp"])
+            if not text or at is None:
+                continue
+            entries.append(
+                {
+                    "id": f"cs-{row['id']}",
+                    "kind": "独白",
+                    "text": text,
+                    "at": at,
+                }
+            )
+
+        async with conn.execute(
+            """
+            SELECT id, created_at, content, retention FROM dreams
+            WHERE retention >= ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (min_dream_retention, limit),
+        ) as cursor:
+            dream_rows = await cursor.fetchall()
+        for row in dream_rows:
+            text = (row["content"] or "").strip()
+            at = _at_ms(row["created_at"])
+            if not text or at is None:
+                continue
+            entries.append(
+                {
+                    "id": f"dream-{row['id']}",
+                    "kind": "梦",
+                    "text": text,
+                    "at": at,
+                }
+            )
+
+        for row in await self.list_first_times():
+            text = (
+                (row.get("inner_experience") or "").strip()
+                or (row.get("content") or "").strip()
+            )
+            at = _at_ms(row.get("timestamp"))
+            if not text or at is None:
+                continue
+            entries.append(
+                {
+                    "id": f"ft-{row.get('id')}",
+                    "kind": "第一次",
+                    "text": text,
+                    "at": at,
+                }
+            )
+
+        entries.sort(key=lambda e: int(e["at"]), reverse=True)
+        return entries[:limit]
+
     async def close(self) -> None:
         if self._conn is not None:
             await self._conn.close()

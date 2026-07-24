@@ -1,7 +1,7 @@
 /**
  * WS 接线 + 消息 / 历史状态（黄昏的枝 §七）。
  * 「谈」：连接后通过 /history 拉取 SQLite 全量记录，本轮继续 append。
- * 「忆」：暂无源 → 空占位。
+ * 「忆」：连接后通过 /journal 拉取独白 / 梦 / 第一次；无则诚实空占位。
  */
 
 import { computed, ref } from "vue";
@@ -73,7 +73,7 @@ function createQi() {
   /** 对话历史（启动后由 /history 灌入） */
   const talk = ref<TalkMessage[]>([]);
   const historyLoaded = ref(false);
-  /** 第一期无 WS 日记源 → 保持空，UI 显示诚实占位 */
+  /** 内在日记（启动后由 /journal 灌入；库空则保持空） */
   const journal = ref<JournalEntry[]>([]);
 
   const mode = computed(
@@ -152,6 +152,17 @@ function createQi() {
     }
   }
 
+  function applyJournal(entries: JournalEntry[]) {
+    journal.value = (entries ?? [])
+      .filter((e) => e.text?.trim())
+      .map((e) => ({
+        id: e.id || uid("j"),
+        kind: e.kind || "独白",
+        text: e.text.trim(),
+        at: typeof e.at === "number" ? e.at : Date.now(),
+      }));
+  }
+
   function playAudio(data: string, mime = "audio/mpeg") {
     const audio = new Audio(`data:${mime};base64,${data}`);
     void audio.play().catch(() => {});
@@ -172,6 +183,10 @@ function createQi() {
     qiWs.send({ type: "command", payload: { text: "/history" } });
   }
 
+  function requestJournal() {
+    qiWs.send({ type: "command", payload: { text: "/journal" } });
+  }
+
   function onVis() {
     qiWs.setPresence(document.visibilityState === "visible");
   }
@@ -183,6 +198,7 @@ function createQi() {
         connected.value = true;
         requestEmotionSnapshot();
         requestHistory();
+        requestJournal();
       });
       qiWs.on("close", () => {
         connected.value = false;
@@ -225,6 +241,9 @@ function createQi() {
       });
       qiWs.on("history", (payload: { messages?: TalkMessage[] }) => {
         applyHistory(payload?.messages ?? []);
+      });
+      qiWs.on("journal", (payload: { entries?: JournalEntry[] }) => {
+        applyJournal(payload?.entries ?? []);
       });
     }
 

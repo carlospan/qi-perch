@@ -91,3 +91,33 @@ async def test_load_recent_emotions_time_window():
         all_rows = await db.load_recent_emotions(limit=10)
         assert len(all_rows) == 2
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_load_journal_entries_merges_kinds():
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+
+        await db.save_consciousness("今晚有点安静。", trigger="stream")
+        await db.save_dream("梦见一棵树。", retention=0.8)
+        await db.save_dream("快忘干净的梦。", retention=0.1)
+        await db.save_first_time(
+            "first_name",
+            "他说：「小潘」。",
+            inner_experience="心里被轻轻叫了一声。",
+        )
+
+        entries = await db.load_journal_entries(limit=80)
+        kinds = {e["kind"] for e in entries}
+        assert kinds == {"独白", "梦", "第一次"}
+        assert all(e["text"] for e in entries)
+        assert all(isinstance(e["at"], int) for e in entries)
+        # 褪尽的梦不入忆
+        assert not any("快忘干净" in e["text"] for e in entries)
+        # 第一次优先用内在体验
+        ft = next(e for e in entries if e["kind"] == "第一次")
+        assert "轻轻叫" in ft["text"]
+        # 倒序：最新在前
+        assert entries[0]["at"] >= entries[-1]["at"]
+        await db.close()

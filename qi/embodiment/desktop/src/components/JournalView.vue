@@ -7,9 +7,18 @@ defineProps<{
 
 function whenLabel(at: number) {
   const d = new Date(at);
+  const today = new Date();
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
+  const time = `${hh}:${mm}`;
+  if (
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate()
+  ) {
+    return time;
+  }
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${time}`;
 }
 </script>
 

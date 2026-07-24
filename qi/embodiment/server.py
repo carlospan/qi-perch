@@ -136,6 +136,8 @@ class EmbodimentServer:
                 )
             elif cmd == "/history":
                 await self._send_history(websocket)
+            elif cmd == "/journal":
+                await self._send_journal(websocket)
 
     async def _send_history(self, websocket: Any | None) -> None:
         """把 SQLite 里全部对话推给请求方（本机单用户；无 websocket 则广播）。"""
@@ -179,6 +181,26 @@ class EmbodimentServer:
                 return
             except Exception:
                 logger.debug("向请求方发送 history 失败", exc_info=True)
+        await self.broadcast(packet)
+
+    async def _send_journal(self, websocket: Any | None) -> None:
+        """把内在日记（独白/梦/第一次）推给请求方。"""
+        db = getattr(self.brain, "_db", None)
+        entries: list[dict] = []
+        if db is not None:
+            try:
+                entries = await db.load_journal_entries(limit=80)
+            except Exception:
+                logger.exception("拉取内在日记失败")
+
+        packet = {"type": "journal", "payload": {"entries": entries}}
+        raw = json.dumps(packet, ensure_ascii=False)
+        if websocket is not None:
+            try:
+                await websocket.send(raw)
+                return
+            except Exception:
+                logger.debug("向请求方发送 journal 失败", exc_info=True)
         await self.broadcast(packet)
 
     async def broadcast(self, message: dict) -> None:

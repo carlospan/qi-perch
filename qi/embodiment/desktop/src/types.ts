@@ -29,7 +29,8 @@ export type ServerMessage =
   | { type: "emotion_update"; payload: EmotionSnapshot }
   | { type: "ping"; payload: { ts: number } }
   | { type: "audio"; payload: { data: string; mime?: string } }
-  | { type: "history"; payload: { messages: TalkMessage[] } };
+  | { type: "history"; payload: { messages: TalkMessage[] } }
+  | { type: "journal"; payload: { entries: JournalEntry[] } };
 
 export type ClientMessage =
   | { type: "user_message"; payload: { text: string } }
@@ -49,7 +50,7 @@ export type TalkMessage = {
   tone?: string;
 };
 
-/** 「忆」日记条目（第二期由后端拉；第一期可为空） */
+/** 「忆」日记条目（连上后经 /journal 从后端拉） */
 export type JournalEntry = {
   id: string;
   kind: "梦" | "独白" | "第一次" | string;
