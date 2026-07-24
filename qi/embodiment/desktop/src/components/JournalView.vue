@@ -144,7 +144,7 @@ function whenLabel(at: number) {
 .entry p {
   margin: 0;
   font-size: 13.5px;
-  line-height: 1.85;
+  line-height: 1.75;
   color: var(--ink-dim);
   font-weight: 300;
 }

@@ -149,9 +149,10 @@ onUnmounted(() => disconnect());
   z-index: 2;
   pointer-events: none;
   background: radial-gradient(
-    120% 95% at 50% 42%,
-    transparent 55%,
-    rgba(5, 8, 14, 0.85) 100%
+    125% 100% at 50% 58%,
+    transparent 42%,
+    rgba(5, 8, 14, 0.5) 70%,
+    rgba(5, 8, 14, 0.88) 100%
   );
   opacity: var(--vig-a);
   transition: opacity 1.6s ease;

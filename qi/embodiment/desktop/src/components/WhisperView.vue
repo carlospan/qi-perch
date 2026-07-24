@@ -101,9 +101,9 @@ onUnmounted(() => {
   max-width: 280px;
   text-align: center;
   font-family: var(--serif);
-  font-size: 15px;
-  line-height: 1.8;
-  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.75;
+  font-weight: 300;
   color: var(--ink);
   text-shadow: 0 1px 12px rgba(8, 12, 20, 0.7);
   padding: 0 24px;

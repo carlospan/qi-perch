@@ -13,21 +13,38 @@ const props = defineProps<{
   dreaming?: boolean;
 }>();
 
-const moteEls = ref<{ style: Record<string, string> }[]>([]);
+const moteEls = ref<{ style: Record<string, string>; cls?: string }[]>([]);
 const bubbleEls = ref<{ style: Record<string, string> }[]>([]);
 
 onMounted(() => {
-  const motes = [];
+  const motes: { style: Record<string, string>; cls: string }[] = [];
   for (let i = 0; i < 14; i++) {
-    const size = `${2 + Math.random() * 2}px`;
+    const tumble = i < 3;
+    let width: number;
+    let height: number;
+    let cls = "";
+    if (tumble) {
+      // 近处浮粒：微椭圆，在光里轻轻翻
+      width = 3.8 + Math.random() * 1.6;
+      height = width * (0.5 + Math.random() * 0.28);
+      cls = "tumble";
+    } else if (i < 7) {
+      // 远处微尘
+      width = height = 1 + Math.random() * 0.9;
+      cls = "far";
+    } else {
+      // 中景
+      width = height = 2.2 + Math.random() * 1.6;
+    }
     motes.push({
+      cls,
       style: {
         left: `${5 + Math.random() * 90}%`,
         top: `${18 + Math.random() * 62}%`,
         animationDuration: `${6 + Math.random() * 8}s`,
         animationDelay: `${-Math.random() * 8}s`,
-        width: size,
-        height: size,
+        width: `${width}px`,
+        height: `${height}px`,
       },
     });
   }
@@ -67,39 +84,80 @@ const sceneClass = computed(() => ({
 
     <div class="branch">
       <svg viewBox="0 0 420 170" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="qi-branch-fade" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="var(--branch)" stop-opacity="0.12" />
+            <stop offset="12%" stop-color="var(--branch)" stop-opacity="0.92" />
+            <stop offset="88%" stop-color="var(--branch)" stop-opacity="0.88" />
+            <stop offset="100%" stop-color="var(--branch)" stop-opacity="0.18" />
+          </linearGradient>
+          <linearGradient id="qi-branch-twig" x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0%" stop-color="var(--branch)" stop-opacity="0.85" />
+            <stop offset="100%" stop-color="var(--branch)" stop-opacity="0.15" />
+          </linearGradient>
+        </defs>
+        <!-- 月光勾边：略宽、极淡冷色 -->
+        <path
+          class="glow"
+          d="M -10 128 C 70 104, 150 122, 232 96 C 300 76, 352 84, 432 62"
+          stroke="color-mix(in srgb, var(--mist) 55%, transparent)"
+          stroke-width="10"
+          fill="none"
+          stroke-linecap="round"
+          opacity="0.22"
+        />
         <path
           d="M -10 128 C 70 104, 150 122, 232 96 C 300 76, 352 84, 432 62"
-          stroke="var(--branch)"
+          stroke="url(#qi-branch-fade)"
           stroke-width="7"
           fill="none"
           stroke-linecap="round"
-          opacity=".9"
+        />
+        <path
+          class="glow"
+          d="M 232 96 C 252 78, 268 70, 288 58"
+          stroke="color-mix(in srgb, var(--mist) 50%, transparent)"
+          stroke-width="6"
+          fill="none"
+          stroke-linecap="round"
+          opacity="0.18"
         />
         <path
           d="M 232 96 C 252 78, 268 70, 288 58"
-          stroke="var(--branch)"
+          stroke="url(#qi-branch-twig)"
           stroke-width="4"
           fill="none"
           stroke-linecap="round"
-          opacity=".8"
+        />
+        <path
+          class="glow"
+          d="M 150 116 C 162 104, 172 98, 186 90"
+          stroke="color-mix(in srgb, var(--mist) 50%, transparent)"
+          stroke-width="5.5"
+          fill="none"
+          stroke-linecap="round"
+          opacity="0.16"
         />
         <path
           d="M 150 116 C 162 104, 172 98, 186 90"
-          stroke="var(--branch)"
+          stroke="url(#qi-branch-twig)"
           stroke-width="3.5"
           fill="none"
           stroke-linecap="round"
-          opacity=".7"
         />
-        <circle cx="288" cy="56" r="3" fill="var(--branch)" opacity=".7" />
-        <circle cx="187" cy="88" r="2.6" fill="var(--branch)" opacity=".6" />
+        <circle cx="288" cy="56" r="3" fill="var(--branch)" opacity=".45" />
+        <circle cx="187" cy="88" r="2.6" fill="var(--branch)" opacity=".38" />
       </svg>
     </div>
 
     <div class="motes">
-      <i v-for="(m, idx) in moteEls" :key="idx" :style="m.style" />
+      <i
+        v-for="(m, idx) in moteEls"
+        :key="idx"
+        :class="m.cls"
+        :style="m.style"
+      />
     </div>
-
     <div v-show="dreaming" class="dream-bubbles">
       <i v-for="(b, idx) in bubbleEls" :key="'b' + idx" :style="b.style" />
     </div>
@@ -260,6 +318,15 @@ const sceneClass = computed(() => ({
   filter: blur(0.4px);
   animation: mote 9s ease-in-out infinite;
 }
+.motes i.far {
+  filter: blur(0.6px);
+  opacity: 0.7;
+}
+.motes i.tumble {
+  border-radius: 50%;
+  filter: blur(0.35px);
+  animation-name: mote-tumble;
+}
 
 @keyframes mote {
   0%,
@@ -273,6 +340,17 @@ const sceneClass = computed(() => ({
   }
 }
 
+@keyframes mote-tumble {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-12deg);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translateY(-22px) rotate(18deg);
+    opacity: 0.9;
+  }
+}
 @keyframes fade-soft {
   to {
     opacity: 0.38;

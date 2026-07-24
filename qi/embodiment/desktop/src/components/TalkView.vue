@@ -179,10 +179,12 @@ watch(
   from {
     opacity: 0;
     transform: translateY(8px);
+    filter: blur(2px);
   }
   to {
     opacity: 1;
     transform: none;
+    filter: blur(0);
   }
 }
 
