@@ -182,6 +182,7 @@ onUnmounted(() => disconnect());
 .content :deep(footer),
 .content :deep(form),
 .content :deep(input),
+.content :deep(textarea),
 .content :deep(button),
 .content :deep(.panel) {
   pointer-events: auto;

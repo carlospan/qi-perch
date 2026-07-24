@@ -1,69 +1,111 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { nextTick, ref, watch } from "vue";
 
 const emit = defineEmits<{
   send: [text: string];
 }>();
 
 const text = ref("");
+const field = ref<HTMLTextAreaElement | null>(null);
 
-function submit() {
+/** 大厂常见：约 1～5 行可视，超出内部滚动 */
+const MIN_HEIGHT_PX = 44;
+const MAX_HEIGHT_PX = 132; // ~5 行 @ 14px/1.5
+
+function resize() {
+  const el = field.value;
+  if (!el) return;
+  el.style.height = "auto";
+  const next = Math.min(Math.max(el.scrollHeight, MIN_HEIGHT_PX), MAX_HEIGHT_PX);
+  el.style.height = `${next}px`;
+  el.style.overflowY = el.scrollHeight > MAX_HEIGHT_PX ? "auto" : "hidden";
+}
+
+async function submit() {
   const value = text.value.trim();
   if (!value) return;
   emit("send", value);
   text.value = "";
+  await nextTick();
+  resize();
+  field.value?.focus();
 }
+
+function onKeydown(e: KeyboardEvent) {
+  // Enter 发送；Shift+Enter 换行（ChatGPT / Claude / 飞书等）
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    void submit();
+  }
+}
+
+watch(text, () => {
+  void nextTick(resize);
+});
 </script>
 
 <template>
-  <form class="input" @submit.prevent="submit">
-    <input
+  <form class="composer" @submit.prevent="submit">
+    <textarea
+      ref="field"
       v-model="text"
-      type="text"
+      rows="1"
       maxlength="500"
       placeholder="说点什么……"
       autocomplete="off"
+      enterkeyhint="send"
+      @keydown="onKeydown"
+      @input="resize"
     />
-    <button type="submit">说</button>
+    <button type="submit" aria-label="发送" :disabled="!text.trim()">说</button>
   </form>
 </template>
 
 <style scoped>
-.input {
+.composer {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 10px;
   pointer-events: auto;
 }
 
-input {
+textarea {
   flex: 1;
+  min-height: 44px;
+  max-height: 132px;
+  resize: none;
   border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
   background: color-mix(in srgb, var(--ink) 4.5%, transparent);
   color: var(--ink);
-  border-radius: 999px;
-  padding: 11px 18px;
+  /* 多行不用全圆角胶囊，用聊天气泡式圆角矩形 */
+  border-radius: 18px;
+  padding: 11px 16px;
   outline: none;
   font-family: var(--serif);
   font-size: 14px;
+  line-height: 1.5;
+  overflow-y: hidden;
+  field-sizing: content; /* 支持的浏览器可辅助增高 */
   transition:
     border-color 0.35s ease,
     background 0.35s ease;
 }
 
-input::placeholder {
+textarea::placeholder {
   color: var(--ink-faint);
   font-weight: 300;
 }
 
-input:focus {
+textarea:focus {
   border-color: color-mix(in srgb, var(--ember) 45%, transparent);
   background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
 button {
+  flex-shrink: 0;
   width: 38px;
   height: 38px;
+  margin-bottom: 3px;
   border: none;
   border-radius: 50%;
   padding: 0;
@@ -76,12 +118,19 @@ button {
   place-items: center;
   transition:
     transform 0.25s ease,
-    box-shadow 0.25s ease;
+    box-shadow 0.25s ease,
+    opacity 0.2s ease;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 
-button:hover {
+button:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 4px 16px color-mix(in srgb, #8fb4c6 35%, transparent);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+  box-shadow: none;
 }
 </style>
