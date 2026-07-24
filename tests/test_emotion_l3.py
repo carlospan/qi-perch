@@ -33,11 +33,16 @@ def test_mood_cycle_has_periodicity_over_7_days():
     base = datetime(2026, 7, 1, 12, 0, 0)
     offsets = [mood_cycle_offset(base + timedelta(hours=h)) for h in range(0, 7 * 24, 6)]
     assert max(offsets) - min(offsets) > 0.05
-    # 同日噪声相同，但主/次周期随小时变；同一时刻应可重复
+    # 同日噪声应稳定（hashlib/toordinal，不依赖 PYTHONHASHSEED）
     t = datetime(2026, 7, 2, 15, 0, 0)
     assert mood_cycle_offset(t) == mood_cycle_offset(t)
-    assert mood_cycle_offset(datetime(2026, 7, 2, 3, 0, 0)) != mood_cycle_offset(
-        datetime(2026, 7, 2, 21, 0, 0)
+    # 同日不同小时：正弦项变，但日噪声分量相同 → 差值应主要来自周期项
+    morning = mood_cycle_offset(datetime(2026, 7, 2, 3, 0, 0))
+    evening = mood_cycle_offset(datetime(2026, 7, 2, 21, 0, 0))
+    assert morning != evening
+    # 跨日噪声一般不同
+    assert mood_cycle_offset(datetime(2026, 7, 2, 12, 0, 0)) != mood_cycle_offset(
+        datetime(2026, 7, 3, 12, 0, 0)
     )
 
 

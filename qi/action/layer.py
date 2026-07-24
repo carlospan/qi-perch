@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import random
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from qi.action.budget import BODY_MEMORY_KEY, ActionBudget
 from qi.action.explore import ExploreAction

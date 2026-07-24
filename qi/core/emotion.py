@@ -5,6 +5,7 @@ L3：在衰减与冲击之上，长出内在天气。
 
 from __future__ import annotations
 
+import hashlib
 import math
 from datetime import datetime
 from enum import Enum
@@ -195,11 +196,12 @@ def mood_cycle_offset(now: datetime) -> float:
         2 * math.pi * t / MOOD_CYCLE_SECONDARY_PERIOD_HOURS
         + MOOD_CYCLE_SECONDARY_PHASE
     )
-    noise = (
-        MOOD_CYCLE_NOISE_AMPLITUDE
-        * (hash(str(now.date())) % 100 - 50)
-        / 50
-    )
+    # 用 toordinal + md5，跨进程/解释器稳定（builtin hash 会随 PYTHONHASHSEED 变）
+    day_digest = hashlib.md5(
+        f"qi-mood-day:{now.date().toordinal()}".encode()
+    ).digest()
+    day_unit = (int.from_bytes(day_digest[:2], "big") % 100 - 50) / 50.0
+    noise = MOOD_CYCLE_NOISE_AMPLITUDE * day_unit
     return primary + secondary + noise
 
 

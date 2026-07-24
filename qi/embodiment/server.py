@@ -36,7 +36,8 @@ class EmbodimentServer:
         self._server = await websockets.serve(self._handler, self.host, self.port)
         self._ping_task = asyncio.create_task(self._ping_loop())
         logger.info("具身通道已打开 ws://%s:%s", self.host, self.port)
-        await asyncio.Future()  # run forever until cancelled
+        # stop() 关闭 server 后这里返回，避免永久 Future 只能靠 cancel 收尾
+        await self._server.wait_closed()
 
     async def stop(self) -> None:
         self.running = False

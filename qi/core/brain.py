@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
+from collections import deque
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from qi.action import ActionLayer
 from qi.core.emotion import (
     EmotionState,
     apply_event_impact,
@@ -21,7 +25,6 @@ from qi.core.rhythm import determine_mode, next_interval
 from qi.embodiment.avatar.controller import AvatarController
 from qi.embodiment.voice.tts import create_tts, emotion_to_voice_params
 from qi.inner_life import InnerLife
-from qi.action import ActionLayer
 from qi.memory.facts import format_facts_for_prompt
 from qi.memory.first_time import FirstTimeMemory
 from qi.memory.manager import MemoryManager
@@ -38,6 +41,22 @@ if TYPE_CHECKING:
     from qi.storage.database import Database
 
 logger = logging.getLogger("qi.brain")
+
+# 用户消息短队列上限：满则丢最早一条，避免连发冲掉/堵死
+PENDING_QUEUE_MAX = 8
+# 情绪落盘最小间隔（秒）；用户来消息时仍立即写
+EMOTION_SAVE_MIN_INTERVAL = 30.0
+# 季节判定读取的情绪时间窗（小时）
+SEASON_EMOTION_HOURS = 24.0
+
+
+@dataclass
+class _PendingSpeech:
+    """生成已完成、待在心跳锁外停顿后再推送的话语。"""
+
+    text: str
+    now: datetime
+    proactive: bool
 
 
 class Brain:
@@ -61,7 +80,9 @@ class Brain:
         self.user_online = True
         self.last_interaction = datetime.now()
         self.heartbeat_count = 0
-        self._pending_message: str | None = None
+        self._pending_queue: deque[str] = deque(maxlen=PENDING_QUEUE_MAX)
+        self._pending_speech: _PendingSpeech | None = None
+        self._last_emotion_saved_at: datetime | None = None
         self._heartbeat_lock = asyncio.Lock()
         self._db: Database | None = None
         self._last_response: str | None = None
@@ -158,6 +179,12 @@ class Brain:
             while self.alive:
                 async with self._heartbeat_lock:
                     await self._heartbeat()
+                    speech = self._take_pending_speech()
+                if speech is not None:
+                    # 主动开口：出锁后推送，不再人工停顿（用户回复才「想了想」）
+                    await self._deliver_qi_message(
+                        speech.text, speech.now, proactive=speech.proactive
+                    )
                 if not self.alive:
                     break
                 interval = next_interval(self.emotion, self.config)
@@ -310,7 +337,7 @@ class Brain:
         now = datetime.now()
         self.proactive.reset_day(now)
         response: str | None = None
-        pending = self._pending_message
+        pending = self._pending_queue.popleft() if self._pending_queue else None
         impact_mult = 1.0
         triggered_first: str | None = None
         silence_before = self.perception.detect_silence(self.last_interaction, now)
@@ -411,10 +438,10 @@ class Brain:
             finally:
                 self.avatar.set_thinking(False)
 
-            self._pending_message = None
-
             if response:
-                await self._deliver_qi_message(response, now, proactive=False)
+                self._pending_speech = _PendingSpeech(
+                    text=response, now=now, proactive=False
+                )
             else:
                 # gateway 已打失败日志；这里标明「用户消息被吞、无回复」便于排障
                 logger.warning(
@@ -497,7 +524,9 @@ class Brain:
                     self.proactive.record(kind, now)
                     if kind == "express_feeling":
                         self._consume_expression_want()
-                    await self._deliver_qi_message(response, now, proactive=True)
+                    self._pending_speech = _PendingSpeech(
+                        text=response, now=now, proactive=True
+                    )
                     await self._persist_proactive_gate()
                 else:
                     logger.warning(
@@ -511,15 +540,56 @@ class Brain:
         await self._sync_avatar(now)
 
         if self._db is not None:
-            await self._db.save_emotion(self.emotion)
+            await self._maybe_save_emotion(now, force=pending is not None)
 
         self._last_response = response
         return response
 
+    def _take_pending_speech(self) -> _PendingSpeech | None:
+        speech = self._pending_speech
+        self._pending_speech = None
+        return speech
+
+    async def _maybe_save_emotion(self, now: datetime, *, force: bool = False) -> None:
+        """空心跳节流落盘；有用户消息或强制时立即写。"""
+        if self._db is None:
+            return
+        interval = float(
+            self.config.get("emotion", {}).get(
+                "save_interval_seconds", EMOTION_SAVE_MIN_INTERVAL
+            )
+        )
+        if (
+            not force
+            and self._last_emotion_saved_at is not None
+            and (now - self._last_emotion_saved_at).total_seconds() < interval
+        ):
+            return
+        await self._db.save_emotion(self.emotion)
+        self._last_emotion_saved_at = now
+
     async def receive_user_message(self, message: str) -> str | None:
-        self._pending_message = message
+        text = (message or "").strip()
+        if not text:
+            return None
         async with self._heartbeat_lock:
-            return await self._heartbeat()
+            if len(self._pending_queue) >= PENDING_QUEUE_MAX:
+                dropped = self._pending_queue.popleft()
+                logger.warning(
+                    "待处理消息队列已满，丢弃最早一条: %s",
+                    dropped[:40],
+                )
+            self._pending_queue.append(text)
+            await self._heartbeat()
+            speech = self._take_pending_speech()
+        if speech is None:
+            return None
+        # 生成已在锁内完成；出锁后再「想了想」，再推送——不堵心跳
+        await asyncio.sleep(random.uniform(0.5, 1.5))
+        await self._deliver_qi_message(
+            speech.text, speech.now, proactive=speech.proactive
+        )
+        return speech.text
 
     async def _background_narrative_weaving(self) -> None:
         interval = float(
@@ -605,7 +675,14 @@ class Brain:
         while self.alive:
             if self.relationship is not None and self._db is not None:
                 try:
-                    history = await self._db.load_recent_emotions(limit=30)
+                    hours = float(
+                        self.config.get("relationship", {}).get(
+                            "season_emotion_hours", SEASON_EMOTION_HOURS
+                        )
+                    )
+                    history = await self._db.load_recent_emotions(
+                        since_hours=hours, limit=200
+                    )
                     old = self.relationship.state.season
                     new = determine_season(history)
                     if new != old:
@@ -724,6 +801,7 @@ class Brain:
 
     async def save_state(self, db: Database) -> None:
         await db.save_emotion(self.emotion)
+        self._last_emotion_saved_at = datetime.now()
         await self._persist_proactive_gate()
         await self._persist_action_budget()
         if self.relationship is not None:

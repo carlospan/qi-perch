@@ -422,8 +422,8 @@ async def test_action_layer_tick_dreaming_and_season(db, monkeypatch):
 @pytest.mark.asyncio
 async def test_prompt_extras_recent_actions(db):
     from qi.action import ActionLayer
-    from qi.llm.prompt_builder import PromptBuilder
     from qi.core.emotion import EmotionState
+    from qi.llm.prompt_builder import PromptBuilder
 
     layer = ActionLayer(db, {})
     await db.insert_action(

@@ -44,6 +44,15 @@ class LLMGateway:
             models = cfg.get("models") or {}
             if not base_url or not models:
                 continue
+            key = str(api_key).strip()
+            if not key or key == "no-key" or (
+                key.startswith("${") and key.endswith("}")
+            ):
+                logger.warning(
+                    "LLM provider %s 的 api_key 为空或未展开，对话可能沉默；"
+                    "请检查 settings.yaml / 环境变量",
+                    name,
+                )
             self.providers[name] = OpenAICompatProvider(
                 name=name,
                 base_url=base_url,

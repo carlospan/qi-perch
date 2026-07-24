@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -84,6 +84,14 @@ CREATE TABLE IF NOT EXISTS consciousness_stream (
     emotion_snapshot TEXT
 )
 """
+
+_CREATE_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)",
+    "CREATE INDEX IF NOT EXISTS idx_emotion_states_timestamp ON emotion_states(timestamp)",
+    "CREATE INDEX IF NOT EXISTS idx_raw_events_processed ON raw_events(processed)",
+    "CREATE INDEX IF NOT EXISTS idx_consciousness_stream_timestamp "
+    "ON consciousness_stream(timestamp)",
+)
 
 _CREATE_DREAMS = """
 CREATE TABLE IF NOT EXISTS dreams (
@@ -236,6 +244,8 @@ class Database:
         await self._conn.execute(_CREATE_USER_FACTS)
         await self._conn.execute(_CREATE_ACTIONS)
         await self._migrate_creations_mentioned_at()
+        for ddl in _CREATE_INDEXES:
+            await self._conn.execute(ddl)
         await self._conn.execute(
             """
             INSERT OR IGNORE INTO relationship
@@ -1038,15 +1048,32 @@ class Database:
         )
         await conn.commit()
 
-    async def load_recent_emotions(self, limit: int = 30) -> list[dict]:
+    async def load_recent_emotions(
+        self,
+        limit: int = 200,
+        *,
+        since_hours: float | None = None,
+    ) -> list[dict]:
+        """按时间窗（优先）或条数上限取近期情绪轨迹。
+
+        季节判定必须用时间窗，避免「最近 N 行」随心跳频率漂移语义。
+        """
         conn = self._require_conn()
-        async with conn.execute(
-            """
+        sql = """
             SELECT energy, valence, arousal, curiosity, security, attachment, timestamp
-            FROM emotion_states ORDER BY timestamp DESC LIMIT ?
-            """,
-            (limit,),
-        ) as cursor:
+            FROM emotion_states
+            """
+        params: list[Any]
+        if since_hours is not None:
+            since = (
+                datetime.now() - timedelta(hours=since_hours)
+            ).isoformat(timespec="seconds")
+            sql += " WHERE timestamp >= ? ORDER BY timestamp DESC LIMIT ?"
+            params = [since, limit]
+        else:
+            sql += " ORDER BY timestamp DESC LIMIT ?"
+            params = [limit]
+        async with conn.execute(sql, params) as cursor:
             rows = await cursor.fetchall()
         return [dict(r) for r in rows]
 

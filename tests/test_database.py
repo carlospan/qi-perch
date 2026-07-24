@@ -1,6 +1,7 @@
 """数据库初始化与情绪持久化测试。"""
 
 import tempfile
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -44,4 +45,49 @@ async def test_database_save_and_load_emotion():
         assert all_msgs[0]["id"] is not None
         assert all_msgs[1]["content"] == "嗯。你好呀。"
 
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_database_indexes_created():
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        conn = db._require_conn()
+        async with conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index'"
+        ) as cur:
+            names = {row[0] for row in await cur.fetchall()}
+        assert "idx_messages_timestamp" in names
+        assert "idx_emotion_states_timestamp" in names
+        assert "idx_raw_events_processed" in names
+        assert "idx_consciousness_stream_timestamp" in names
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_load_recent_emotions_time_window():
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        conn = db._require_conn()
+        old_ts = (datetime.now() - timedelta(hours=48)).isoformat(timespec="seconds")
+        new_ts = (datetime.now() - timedelta(hours=1)).isoformat(timespec="seconds")
+        for ts, energy in ((old_ts, 0.5), (new_ts, 0.9)):
+            await conn.execute(
+                """
+                INSERT INTO emotion_states
+                    (timestamp, energy, valence, arousal, security, curiosity, attachment, mode)
+                VALUES (?, ?, 0.1, 0.4, 0.5, 0.6, 0.3, 'awake')
+                """,
+                (ts, energy),
+            )
+        await conn.commit()
+
+        recent = await db.load_recent_emotions(since_hours=24, limit=200)
+        assert len(recent) == 1
+        assert recent[0]["energy"] == pytest.approx(0.9)
+
+        all_rows = await db.load_recent_emotions(limit=10)
+        assert len(all_rows) == 2
         await db.close()

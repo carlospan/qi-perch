@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import random
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -15,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class Expression:
-    """栖开口的地方。想了想，再说话。"""
+    """栖开口的地方。想了想，再说话（停顿由 Brain 在心跳锁外完成）。"""
 
     def __init__(self, config: dict, llm: LLMGateway):
         self.config = config
@@ -37,8 +35,6 @@ class Expression:
         season: str = "spring",
         proactive_kind: str | None = None,
     ) -> str:
-        await asyncio.sleep(random.uniform(0.5, 1.5))
-
         messages = self.prompt_builder.build_conversation_prompt(
             user_message=user_message,
             emotion=emotion,
