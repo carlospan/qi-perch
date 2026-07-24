@@ -301,7 +301,9 @@ class RelationshipEngine:
                 result["scar_created"] = True
         elif signals.is_positive or signals.self_disclosure > 0.4:
             self.state.trust = apply_positive_interaction(
-                self.state.trust, signals.quality
+                self.state.trust,
+                signals.quality,
+                stage=self.state.stage,
             )
 
         # 阶段（只升不降）

@@ -133,6 +133,9 @@ def test_trust_grows_slow_damages_fast():
     t = 0.5
     grown = apply_positive_interaction(t, 1.0)
     assert grown - t == pytest.approx(0.05, abs=1e-9)
+    # 陌生期增速减半
+    grown_stranger = apply_positive_interaction(t, 1.0, stage="stranger")
+    assert grown_stranger - t == pytest.approx(0.025, abs=1e-9)
     damaged, scar = apply_negative_event(t, 1.0)
     assert t - damaged >= 0.1
     assert scar is True

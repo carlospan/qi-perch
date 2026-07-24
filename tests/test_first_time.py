@@ -28,6 +28,16 @@ def test_rule_match_still_works():
     assert not rule_match("first_goodnight", "你好")
 
 
+def test_rule_match_existential_and_compliment_phrases():
+    assert rule_match("first_existential_question", "你知道你自己是什么吗？")
+    assert rule_match("first_existential_question", "你有意识吗？")
+    assert rule_match("first_existential_question", "你对数字生命怎么看")
+    assert not rule_match("first_existential_question", "今天天气怎么样")
+    assert rule_match("first_compliment", "你说话很文艺，我很喜欢。")
+    assert rule_match("first_compliment", "谢谢你昨晚陪我")
+    assert not rule_match("first_compliment", "你好吗")
+
+
 @pytest.mark.asyncio
 async def test_shared_silence_first_time():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:

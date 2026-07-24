@@ -165,8 +165,11 @@ def depth_increment(signals: InteractionSignals, already_today: float) -> float:
 
 # trust：权威实现见 Step 2 / qi/relationship/trust.py
 # TRUST_GROWTH_RANGE=(0.02,0.05)、TRUST_DAMAGE_RANGE=(0.1,0.3)
-# apply_positive_interaction / apply_negative_event / apply_daily_decay
+# apply_positive_interaction(trust, quality, stage=…) / apply_negative_event / apply_daily_decay
+# 阶段系数 STAGE_TRUST_GROWTH：stranger 0.5 / acquaintance 0.7 / friend·bonded 1.0
 # （本 Step 旧名 trust_update / TRUST_GROWTH_PER_POSITIVE 已废弃）
+# <!-- 回写(2026-07-25)：生人信任增速减半，近似设计中的 consistency_factor，不追踪履约。
+#      依据：qi/relationship/trust.py · engine.on_user_message -->
 ```
 
 </details>
@@ -269,6 +272,8 @@ def apply_scar_healed_bonus(trust: float) -> float:
 ```python
 # qi/memory/first_time.py
 # <!-- 回写(2026-07)：FirstTimeMemory.check / maybe_recall_hint；依据：qi/memory/first_time.py -->
+# <!-- 回写(2026-07-25)：放宽 first_existential_question / first_compliment 初筛
+#      （如「你自己是什么」「你有意识吗」「我很喜欢」「你说话很…」）；仍先 rule 再可选 LLM 确认。 -->
 
 RECALL_COOLDOWN = timedelta(days=7)
 # 7 种：first_goodnight / first_i_miss_you / first_argument / first_vulnerability /
