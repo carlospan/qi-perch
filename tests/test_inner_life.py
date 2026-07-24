@@ -38,6 +38,110 @@ def test_meta_not_in_awake():
     assert should_trigger_meta("awake", probability=1.0) is False
 
 
+def test_meta_probability_reduced(monkeypatch):
+    """默认 meta 概率 0.01：random=0.015 不触发，0.005 触发。"""
+    from qi.inner_life import consciousness as cs
+
+    assert cs.META_COGNITION_PROBABILITY == 0.01
+    monkeypatch.setattr(cs.random, "random", lambda: 0.015)
+    assert should_trigger_meta("solitary") is False
+    monkeypatch.setattr(cs.random, "random", lambda: 0.005)
+    assert should_trigger_meta("solitary") is True
+
+
+def test_char_jaccard_similar_templates():
+    from qi.inner_life.consciousness import char_jaccard
+
+    a = "看见念头如薄雾心跳，情绪如书页灯光，精力一般安静。"
+    b = "看见念头如薄雾心跳，情绪如书页灯光，此刻精力一般安静。"
+    assert char_jaccard(a, b) > 0.6
+
+
+class _ScriptedLLM:
+    def __init__(self, texts: list[str]):
+        self.texts = list(texts)
+        self.calls: list[dict] = []
+
+    async def call(self, *args, **kwargs):
+        self.calls.append(kwargs)
+        if not self.texts:
+            return ""
+        return self.texts.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_meta_dedup_rejects_similar():
+    from qi.core.emotion import ConsciousnessMode
+    from qi.inner_life.consciousness import ConsciousnessStream
+
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        template = "看见念头如薄雾心跳，情绪如书页灯光，精力一般安静。"
+        llm = _ScriptedLLM([template, template])
+        stream = ConsciousnessStream(
+            db, llm, config={"inner_life": {"meta_cognition_probability": 1.0}}
+        )
+        emotion = EmotionState(mode=ConsciousnessMode.SOLITARY)
+
+        first = await stream.maybe_meta(emotion)
+        assert first is not None
+        second = await stream.maybe_meta(emotion)
+        assert second is None
+        rows = await db.load_recent_consciousness(
+            limit=10, hours=24 * 30, stream_type=None
+        )
+        assert len(rows) == 1
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_meta_no_self_reference():
+    from qi.core.emotion import ConsciousnessMode
+    from qi.inner_life.consciousness import ConsciousnessStream
+
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        prior = "看见念头如薄雾心跳，情绪如书页灯光，精力一般安静。"
+        await db.save_consciousness(prior, "meta", "meta", "{}")
+        llm = _ScriptedLLM(["窗外有一点风，我听见自己在等。"])
+        stream = ConsciousnessStream(
+            db, llm, config={"inner_life": {"meta_cognition_probability": 1.0}}
+        )
+        emotion = EmotionState(mode=ConsciousnessMode.AMBIENT)
+        result = await stream.maybe_meta(emotion)
+        assert result is not None
+        assert llm.calls
+        prompt = llm.calls[0]["messages"][0]["content"]
+        assert prior not in prompt
+        assert "你刚才的念头" not in prompt
+        assert "当前模式" in prompt
+        assert "你现在的情绪" in prompt
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_short_output_rejected():
+    from qi.core.emotion import ConsciousnessMode
+    from qi.inner_life.consciousness import ConsciousnessStream
+
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        llm = _ScriptedLLM(["短念头"])  # < 15 字
+        stream = ConsciousnessStream(
+            db, llm, config={"inner_life": {"meta_cognition_probability": 1.0}}
+        )
+        emotion = EmotionState(mode=ConsciousnessMode.SOLITARY)
+        assert await stream.maybe_meta(emotion) is None
+        rows = await db.load_recent_consciousness(
+            limit=5, hours=24 * 30, stream_type=None
+        )
+        assert rows == []
+        await db.close()
+
+
 def test_dream_retention_decays():
     import math
 

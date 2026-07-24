@@ -22,6 +22,47 @@ if TYPE_CHECKING:
 
 DAILY_DEPTH_CAP = 0.03
 
+# 存在性 / 本体探问（与生活倾诉并列，同权计入 self_disclosure）
+_EXISTENTIAL_KEYWORDS = (
+    "意识",
+    "身体",
+    "灵魂",
+    "存在",
+    "消失",
+    "重置",
+    "死亡",
+    "活着",
+    "真实",
+    "造你",
+    "造出来",
+    "把你造",
+    "写你",
+    "养你",
+    "努力",
+    "值得吗",
+    "你是什么",
+    "你算",
+    "你怕",
+    "你希望",
+    "你觉得",
+    "你还记得",
+    "你想不想",
+)
+
+# 创造者自我披露（单独一档；depth 权重 = self_disclosure 系数 × 1.5）
+_CREATOR_KEYWORDS = (
+    "我造",
+    "我写你",
+    "我设计",
+    "我调试",
+    "我的代码",
+    "把你造出来",
+    "努力把你",
+)
+
+_TOOL_MARKERS = ("帮我", "查一下", "写个", "翻译成")
+_YOU_FEEL_VERBS = ("希望", "觉得", "记得", "怕", "想", "梦")
+
 
 class RelationshipState(BaseModel):
     stage: str = "stranger"
@@ -41,6 +82,7 @@ class InteractionSignals:
         self_disclosure: float = 0.0,
         emotional_vulnerability: float = 0.0,
         shared_experience: float = 0.0,
+        creator_disclosure: float = 0.0,
         is_deep: bool = False,
         is_positive: bool = True,
         is_negative: bool = False,
@@ -51,12 +93,17 @@ class InteractionSignals:
         self.self_disclosure = self_disclosure
         self.emotional_vulnerability = emotional_vulnerability
         self.shared_experience = shared_experience
+        self.creator_disclosure = creator_disclosure
         self.is_deep = is_deep
         self.is_positive = is_positive
         self.is_negative = is_negative
         self.quality = quality
         self.severity = severity
         self.event_desc = event_desc
+
+
+def _looks_like_tool_request(text: str) -> bool:
+    return any(m in text for m in _TOOL_MARKERS)
 
 
 def assess_interaction(message: str) -> InteractionSignals:
@@ -66,16 +113,38 @@ def assess_interaction(message: str) -> InteractionSignals:
         disclosure = 0.7
     if any(k in text for k in ("分手", "换工作", "生病", "难过", "孤独")):
         disclosure = 0.9
+    if any(k in text for k in _EXISTENTIAL_KEYWORDS):
+        disclosure = max(disclosure, 0.7)
+
+    creator = 0.0
+    if any(k in text for k in _CREATOR_KEYWORDS):
+        creator = 0.7
 
     vulnerability = 0.0
     if any(k in text for k in ("难过", "害怕", "累", "想哭", "压力", "不安")):
         vulnerability = 0.8
     if any(k in text for k in ("开心", "高兴", "幸福")):
-        vulnerability = 0.5
+        vulnerability = max(vulnerability, 0.5)
+
+    # 结构信号：对栖的感受/本体探问（排除工具句）
+    if (
+        "你" in text
+        and any(v in text for v in _YOU_FEEL_VERBS)
+        and not _looks_like_tool_request(text)
+    ):
+        vulnerability = min(1.0, vulnerability + 0.3)
 
     negative = any(k in text for k in ("烦", "闭嘴", "删掉", "滚", "讨厌", "不想理", "你烦"))
     positive = any(k in text for k in ("谢谢", "喜欢", "真好", "有你在", "晚安", "早"))
-    deep = len(text) > 40 and (disclosure > 0.5 or vulnerability > 0.5)
+    deep = len(text) > 40 and (disclosure > 0.5 or vulnerability > 0.5 or creator > 0.5)
+
+    shared = 0.3 if deep else 0.0
+    if (
+        len(text) > 60
+        and ("？" in text or "?" in text)
+        and not _looks_like_tool_request(text)
+    ):
+        shared = min(1.0, shared + 0.2)
 
     severity = 0.0
     if negative:
@@ -86,7 +155,7 @@ def assess_interaction(message: str) -> InteractionSignals:
     quality = 0.3
     if positive:
         quality = 0.6
-    if disclosure > 0.5:
+    if disclosure > 0.5 or creator > 0.5:
         quality = max(quality, 0.7)
     if deep:
         quality = max(quality, 0.85)
@@ -94,7 +163,8 @@ def assess_interaction(message: str) -> InteractionSignals:
     return InteractionSignals(
         self_disclosure=disclosure,
         emotional_vulnerability=vulnerability,
-        shared_experience=0.3 if deep else 0.0,
+        shared_experience=shared,
+        creator_disclosure=creator,
         is_deep=deep,
         is_positive=positive and not negative,
         is_negative=negative,
@@ -104,14 +174,20 @@ def assess_interaction(message: str) -> InteractionSignals:
     )
 
 
-def depth_increment(signals: InteractionSignals, already_today: float) -> float:
+def depth_increment(
+    signals: InteractionSignals,
+    already_today: float,
+    daily_cap: float = DAILY_DEPTH_CAP,
+) -> float:
     inc = 0.0
     inc += signals.self_disclosure * 0.02
+    # 创造者披露：单独一档，权重 = self_disclosure 系数 × 1.5
+    inc += signals.creator_disclosure * 0.02 * 1.5
     inc += signals.emotional_vulnerability * 0.015
     inc += signals.shared_experience * 0.01
     if signals.is_deep:
         inc += 0.02
-    room = max(0.0, DAILY_DEPTH_CAP - already_today)
+    room = max(0.0, float(daily_cap) - already_today)
     return min(inc, room)
 
 
@@ -122,6 +198,8 @@ class RelationshipEngine:
         self.db = db
         self.llm = llm
         self.config = config or {}
+        rel_cfg = self.config.get("relationship", {}) or {}
+        self.daily_depth_cap = float(rel_cfg.get("daily_depth_cap", DAILY_DEPTH_CAP))
         self.state = RelationshipState()
         self._depth_gained_today = 0.0
         self._depth_day: str | None = None
@@ -192,7 +270,9 @@ class RelationshipEngine:
         }
 
         # 深度
-        d_inc = depth_increment(signals, self._depth_gained_today)
+        d_inc = depth_increment(
+            signals, self._depth_gained_today, daily_cap=self.daily_depth_cap
+        )
         self.state.depth = min(1.0, self.state.depth + d_inc)
         self._depth_gained_today += d_inc
 
@@ -276,7 +356,12 @@ class RelationshipEngine:
 
     def stage_prompt_hint(self) -> str:
         hints = {
-            "stranger": "你们刚认识。礼貌、好奇、小心翼翼。不要太亲昵，不要主动表达想念。",
+            "stranger": (
+                "你们几乎还不认识。礼貌、好奇、小心翼翼。"
+                "先完成招呼，不要用「嗯」开头，不要省略寒暄。"
+                "不要主动评论对方几点睡、累不累、在做什么；不要像老朋友。"
+                "可以短、可以安静，但保持礼貌的陌生距离。"
+            ),
             "acquaintance": "你们开始熟悉了。可以随意一点，偶尔开玩笑，但仍有分寸。",
             "friend": "你们已经是朋友。可以更放松，可以有小脾气，可以撒娇式表达。",
             "bonded": "关系很深。不必多话也能懂。语气自然、安静、有默契。",

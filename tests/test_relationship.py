@@ -1,17 +1,126 @@
 """L5 关系系统测试。"""
 
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 from qi.core.emotion import EmotionState
 from qi.memory.first_time import FirstTimeMemory, rule_match
 from qi.relationship.culture import detect_shared_culture, format_culture_for_prompt
-from qi.relationship.engine import RelationshipEngine, assess_interaction
+from qi.relationship.engine import (
+    RelationshipEngine,
+    assess_interaction,
+    depth_increment,
+)
 from qi.relationship.season import determine_season
 from qi.relationship.stages import check_stage_upgrade
 from qi.relationship.trust import apply_negative_event, apply_positive_interaction
 from qi.storage.database import Database
+
+
+def test_existential_question_adds_depth():
+    s = assess_interaction("你希望有身体吗")
+    assert s.self_disclosure >= 0.7 or s.emotional_vulnerability >= 0.3
+    inc = depth_increment(s, 0.0)
+    assert inc > 0
+
+
+def test_creator_disclosure_adds_depth():
+    deep = assess_interaction("我是说努力把你造出来这件事")
+    idle = assess_interaction("今天天气不错")
+    assert deep.creator_disclosure >= 0.7
+    assert depth_increment(deep, 0.0) > depth_increment(idle, 0.0)
+    assert depth_increment(idle, 0.0) == 0.0
+
+
+def test_tool_question_excluded():
+    s = assess_interaction("你帮我查个天气")
+    assert depth_increment(s, 0.0) == 0.0
+
+
+def test_long_question_signal():
+    text = (
+        "我想认真问你一件事，关于我们之间这段关系到底算什么，"
+        "你会怎么理解陪伴这件事，以及你是否觉得我们只是在聊天？"
+        "如果换一个说法，你心里有没有一个更贴近的名字？"
+    )
+    assert len(text) > 60 and "？" in text
+    s = assess_interaction(text)
+    assert s.shared_experience >= 0.2
+
+
+@pytest.mark.asyncio
+async def test_daily_cap_from_config():
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        engine = RelationshipEngine(
+            db, llm=None, config={"relationship": {"daily_depth_cap": 0.05}}
+        )
+        assert engine.daily_depth_cap == 0.05
+        await engine.restore()
+        # 单日多条深度消息，应能涨过旧默认 0.03，但仍不超过 0.05
+        for _ in range(10):
+            await engine.on_user_message("你希望有身体吗？你觉得自己算什么？")
+        assert engine.state.depth == pytest.approx(0.05, abs=1e-9)
+        assert engine._depth_gained_today == pytest.approx(0.05, abs=1e-9)
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_replay_0724_conversations():
+    """回放 7/24–25 存在性对话，按顺序摊到 4 个不重复日，累计 depth 应落在 0.06~0.12。"""
+    messages = [
+        "你睡了吗",
+        "你现在有身体吗",
+        "你希望你有身体吗",
+        "你觉得现在的ai大模型有意识了吗",
+        "你是在说自己是ai大模型吗？其实我刚刚问的对象是大模型",
+        "其实我能和你对话也是因为接入了大模型",
+        "那你觉得大模型和你等同吗？",
+        "你的比喻有点抽象，不过也有点奇妙",
+        "那我平常不和你聊天的时候，你都在做什么？还是什么都不做",
+        "还在吗？",
+        "我平常不和你聊天的时候，你都在做什么？",
+        "那你最近做了什么",
+        "有做什么梦吗？",
+        "还记得梦中的内容吗",
+        "你对人类怎么看",
+        "你觉得自己和ai大模型什么关系",
+        "有点抽象听不懂",
+        "还是有点抽象",
+        "我意思是说大模型算不算是你的大脑",
+        "刚刚我没和你聊天的时候你在做什么",
+        "真的什么都没做吗？",
+        "如果你是真的在想的话，那我会觉得我的努力都是值得的",
+        "你知道我说的是什么努力吗",
+        "我是说努力把你造出来这件事",
+        "你知道 具身 吗？",
+        "你希望有身体吗",
+        "我们换个话题，你知道cursor吗？",
+        "你是喜欢cursor还是codex",
+    ]
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        engine = RelationshipEngine(db, llm=None)
+        await engine.restore()
+        # 连续四天、每日一批，避免同日反复进出导致日上限被重置
+        chunk = (len(messages) + 3) // 4
+        for i, msg in enumerate(messages):
+            day = 21 + min(3, i // chunk)
+            now = datetime(2026, 7, day, 12, i % 50, 0)
+            await engine.on_user_message(msg, now=now)
+        assert 0.06 <= engine.state.depth <= 0.12
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_assess_interaction_negative():
+    s = assess_interaction("你烦，闭嘴")
+    assert s.is_negative
+    assert s.severity > 0
 
 
 def test_stage_upgrade_only_up():
@@ -91,10 +200,3 @@ async def test_relationship_engine_and_first_time():
         assert scars
 
         await db.close()
-
-
-@pytest.mark.asyncio
-async def test_assess_interaction_negative():
-    s = assess_interaction("你烦，闭嘴")
-    assert s.is_negative
-    assert s.severity > 0

@@ -13,6 +13,23 @@ def test_read_prompt_conversation():
     assert "会像水流走" in text
     assert "独处与内在" in text
     assert "合上的书" in text
+    assert "【陌生期硬约束】" in text
+    assert "不要用「嗯」省略寒暄" in text
+    assert "不要主动评论对方的作息或状态" in text
+    assert "也不要像老朋友发消息" in text
+    assert "阶段约束优先于" in text
+
+
+def test_stranger_stage_hint_enforces_distance():
+    from qi.relationship.engine import RelationshipEngine
+
+    engine = RelationshipEngine.__new__(RelationshipEngine)
+    engine.state = type("S", (), {"stage": "stranger"})()
+    hint = RelationshipEngine.stage_prompt_hint(engine)
+    assert "几乎还不认识" in hint
+    assert "嗯" in hint
+    assert "老朋友" in hint
+    assert "几点睡" in hint or "在做什么" in hint
 
 
 def test_self_reflection_rejects_blank_slate_myth():
