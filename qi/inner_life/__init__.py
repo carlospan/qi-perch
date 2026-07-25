@@ -5,7 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from qi.inner_life.consciousness import ConsciousnessStream
+from qi.inner_life.consciousness import (
+    ConsciousnessStream,
+    emotion_residue_hint,
+)
 from qi.inner_life.creativity import Creativity
 from qi.inner_life.dream import DreamEngine
 from qi.inner_life.self_model import SelfModel
@@ -29,6 +32,11 @@ class InnerLife:
         self._prev_valence = 0.1
         self._prev_arousal = 0.4
         self._afterglow_done_for: int | None = None
+        self._just_woke = False
+
+    def mark_waking(self) -> None:
+        """重启后标记：下一次非 awake 心跳触发醒来回溯意识流。"""
+        self._just_woke = True
 
     async def tick(
         self,
@@ -56,14 +64,19 @@ class InnerLife:
         self.self_model.note_emotion_surge(delta_v)
 
         # 第一次之后即使在对话中，也允许写一笔意识流；其余内在活动仍只在非 awake
+        # waking 旗标：仅在非 awake 尝试；成功生成后才清除，避免 awake 首拍白耗
         if mode != "awake" or after_first_time:
-            await self.consciousness.maybe_generate(
+            try_waking = bool(self._just_woke and mode != "awake")
+            thought = await self.consciousness.maybe_generate(
                 emotion,
                 silence,
                 after_first_time=after_first_time,
+                just_woke=try_waking,
                 prev_valence=self._prev_valence,
                 prev_arousal=self._prev_arousal,
             )
+            if try_waking and thought is not None:
+                self._just_woke = False
         if mode != "awake":
             await self.consciousness.maybe_meta(emotion)
             await self.creativity.maybe_create(emotion, relationship_stage)
@@ -90,4 +103,5 @@ class InnerLife:
             "self_narrative": self_summary,
             "dream_hint": dream_hint or "",
             "creation_hint": creation_hint or "",
+            "emotion_residue": emotion_residue_hint(emotion),
         }

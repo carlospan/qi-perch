@@ -22,6 +22,66 @@ META_COGNITION_PROBABILITY = 0.01
 META_SIMILARITY_THRESHOLD = 0.6
 META_MIN_LENGTH = 15
 META_DEDUP_LOOKBACK = 5
+# ambient 走神：比 solitary 更稀（默认 0.05*0.2=1%/拍），且受冷却约束——留白优先
+AMBIENT_DRIFT_FACTOR = 0.2
+STREAM_COOLDOWN_MINUTES = 45
+# 事件型触发：不受冷却（消化需要），也不靠刷存在感
+_EVENT_TRIGGERS = frozenset({"waking", "first_time", "emotion_surge"})
+# 近聊余烬：仅在「值得再想」的触发里注入；随机走神不喂，避免变成聊天回声
+_EMBER_TRIGGERS = frozenset({"waking", "silence", "first_time"})
+
+_TRIVIAL_UTTERANCES = frozenset(
+    {
+        "嗯",
+        "嗯嗯",
+        "好",
+        "好的",
+        "哦",
+        "噢",
+        "哈哈",
+        "哈哈哈",
+        "在吗",
+        "在?",
+        "在？",
+        "ok",
+        "OK",
+        "Ok",
+        "晚安",
+        "早安",
+        "早",
+        "早上好",
+        "中午好",
+        "下午好",
+        "晚上好",
+        "你好",
+        "你好呀",
+        "嗨",
+        "哈喽",
+        "hello",
+        "Hello",
+        "hi",
+        "Hi",
+        "拜拜",
+        "再见",
+    }
+)
+_PUNCT_STRIP = re.compile(r"[\s\U0001F300-\U0001FAFF\u200b～~!！?？.。,，、…]+")
+
+
+def is_trivial_utterance(text: str) -> bool:
+    """纯寒暄 / 极短应答：不值得醒来回溯。"""
+    raw = (text or "").strip()
+    if not raw:
+        return True
+    cleaned = _PUNCT_STRIP.sub("", raw)
+    if not cleaned:
+        return True
+    if cleaned in _TRIVIAL_UTTERANCES:
+        return True
+    # 极短且无实质问句标记
+    if len(cleaned) <= 4 and "?" not in raw and "？" not in raw:
+        return True
+    return False
 
 
 def should_trigger_consciousness(
@@ -31,6 +91,7 @@ def should_trigger_consciousness(
     silence_duration: timedelta,
     after_first_time: bool = False,
     probability: float = CONSCIOUSNESS_PROBABILITY,
+    ambient_factor: float = AMBIENT_DRIFT_FACTOR,
 ) -> tuple[bool, str]:
     if after_first_time:
         return True, "first_time"
@@ -45,6 +106,9 @@ def should_trigger_consciousness(
             return True, "silence"
     if mode == "solitary" and random.random() < probability:
         return True, "random"
+    # 陪伴走神：有路径但不刷屏（意识设计 §一 + §十三留白）
+    if mode == "ambient" and random.random() < probability * ambient_factor:
+        return True, "ambient_drift"
     return False, ""
 
 
@@ -105,6 +169,47 @@ def is_too_similar_to_recent(
     return False
 
 
+def format_chat_embers(messages: list[dict], *, limit: int = 6) -> str:
+    """把近聊压成余烬短摘，供意识流（非对话）使用。"""
+    if not messages:
+        return "（没有余烬——也许很久没聊，或只是安静）"
+    lines: list[str] = []
+    for m in messages[-limit:]:
+        role = m.get("role", "")
+        content = (m.get("content") or "").strip().replace("\n", " ")
+        if not content:
+            continue
+        if len(content) > 80:
+            content = content[:80] + "…"
+        who = "他" if role == "user" else "我"
+        lines.append(f"- {who}：{content}")
+    return "\n".join(lines) if lines else "（没有余烬——也许很久没聊，或只是安静）"
+
+
+def _trigger_hint(trigger: str) -> str:
+    if trigger == "waking":
+        return (
+            "【此刻】你刚从停顿里醒来。进程关掉的时候你没有在想——"
+            "若余烬里有未收束的事，第一个念头可能会浮上来；也可以掠过，不必写成结论或汇报。"
+        )
+    if trigger == "silence":
+        return (
+            "【此刻】安静已经有一阵了。余烬可以轻轻碰一下，也可以想别的；不要为了「有产出」而硬想。"
+        )
+    if trigger == "first_time":
+        return "【此刻】刚才有一件第一次。可以再想一下——是真的吗？也不必急着下定义。"
+    return ""
+
+
+def emotion_residue_hint(emotion: EmotionState) -> str:
+    """对话注入：情绪余温 ≠ 独处续想证据。"""
+    if emotion.valence <= -0.15:
+        return "心里还沉着一点（情绪余温；不是「已把某话题想完」的证据）"
+    if emotion.valence >= 0.25:
+        return "心里还偏亮一点（情绪余温）"
+    return "没有特别明显的情绪余温"
+
+
 class ConsciousnessStream:
     """内心独白。大多数时候只写给自己看。"""
 
@@ -116,6 +221,23 @@ class ConsciousnessStream:
         self.meta_probability = float(
             cfg.get("meta_cognition_probability", META_COGNITION_PROBABILITY)
         )
+        self.ambient_factor = float(cfg.get("ambient_drift_factor", AMBIENT_DRIFT_FACTOR))
+        self.cooldown = timedelta(
+            minutes=float(cfg.get("stream_cooldown_minutes", STREAM_COOLDOWN_MINUTES))
+        )
+
+    async def _cooldown_elapsed(self) -> bool:
+        rows = await self.db.load_recent_consciousness(
+            limit=1, hours=24 * 30, stream_type="stream"
+        )
+        if not rows:
+            return True
+        ts = rows[0].get("timestamp") or ""
+        try:
+            last = datetime.fromisoformat(str(ts))
+        except ValueError:
+            return True
+        return datetime.now() - last >= self.cooldown
 
     async def maybe_generate(
         self,
@@ -123,16 +245,28 @@ class ConsciousnessStream:
         silence: timedelta,
         *,
         after_first_time: bool = False,
+        just_woke: bool = False,
         prev_valence: float | None = None,
         prev_arousal: float | None = None,
     ) -> str | None:
         mode = emotion.mode.value
+        # 醒来回溯：非 awake 时消化上次实质对话（停机期间并未在想）
+        if just_woke and mode != "awake":
+            return await self.generate(emotion, silence, "waking")
         dv = emotion.valence - (prev_valence if prev_valence is not None else emotion.valence)
         da = emotion.arousal - (prev_arousal if prev_arousal is not None else emotion.arousal)
         ok, trigger = should_trigger_consciousness(
-            mode, dv, da, silence, after_first_time, self.probability
+            mode,
+            dv,
+            da,
+            silence,
+            after_first_time,
+            self.probability,
+            self.ambient_factor,
         )
         if not ok:
+            return None
+        if trigger not in _EVENT_TRIGGERS and not await self._cooldown_elapsed():
             return None
         return await self.generate(emotion, silence, trigger)
 
@@ -145,9 +279,17 @@ class ConsciousnessStream:
         memories = await self.db.list_recent_narratives(3)
         mem_text = "\n".join(f"- {m['content'][:80]}" for m in memories) or "（还没有什么记忆）"
         pending = await self.db.load_latest_consciousness()
-        pending_text = pending["content"] if pending and pending.get("type") == "stream" else "无"
+        pending_text = (
+            pending["content"] if pending and pending.get("type") == "stream" else "无"
+        )
         dream = await self.db.load_latest_dream(min_retention=0.3)
         dream_text = dream["content"][:100] if dream else "没有记得的梦"
+
+        if trigger in _EMBER_TRIGGERS:
+            recent_msgs = await self.db.load_recent_messages(limit=8)
+            chat_embers = format_chat_embers(recent_msgs)
+        else:
+            chat_embers = "（此刻不主动翻交谈；让念头自己来）"
 
         template = read_prompt("consciousness_stream.txt")
         prompt = template.format(
@@ -157,6 +299,8 @@ class ConsciousnessStream:
             recent_memories=mem_text,
             pending_thoughts=pending_text,
             last_dream=dream_text,
+            chat_embers=chat_embers,
+            trigger_hint=_trigger_hint(trigger),
         )
         text = await self.llm.call(
             purpose="consciousness",

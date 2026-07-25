@@ -91,6 +91,7 @@ class PromptBuilder:
         recent_thoughts = extras.get("recent_thoughts") or (
             "（这一阵没有留下可说的念头痕迹——可能很安静，或进程没在转；不等于你没有内在）"
         )
+        emotion_residue = extras.get("emotion_residue") or "没有特别明显的情绪余温"
         self_narrative = extras.get("self_narrative") or "（还在认识自己）"
         dream_hint = extras.get("dream_hint") or ""
         creation_hint = extras.get("creation_hint") or ""
@@ -132,6 +133,7 @@ class PromptBuilder:
             shared_culture=shared_culture or "（还没有只属于你们的默契）",
             user_profile=user_profile or "（还在认识你）",
             recent_thoughts=recent_thoughts,
+            emotion_residue=emotion_residue,
             self_narrative=self_narrative,
             inner_notes=inner_notes,
         )

@@ -51,6 +51,8 @@ memory:
 # 内在生命
 inner_life:
   consciousness_probability: 0.05
+  ambient_drift_factor: 0.2          # ambient 走神 = probability × 此系数；再加 stream 冷却
+  stream_cooldown_minutes: 45        # 非事件型 stream 最小间隔（留白）
   dream_probability: 0.1
   creation_probability: 0.01
   meta_cognition_probability: 0.01

@@ -93,44 +93,32 @@ CREATE TABLE IF NOT EXISTS self_model (
 ### Step 2：意识流
 
 - 建 `qi/inner_life/consciousness.py`
-- 触发条件（满足其一）：`first_time` / `emotion_surge` / `silence`(非 awake) / `random`(solitary 5%)
+- 触发条件（满足其一）：`first_time` / `emotion_surge` / `silence`(非 awake) / `random`(solitary 5%) / `ambient_drift`(更稀 + 冷却) / `waking`(重启后实质近聊，一次)
 - 调用 LLM（temperature 0.85），用 `qi/prompts/consciousness_stream.txt`
+- `waking`/`silence`/`first_time` 注入近聊余烬（叙事记忆 ≠ 近聊）；随机走神不喂余烬
+- 非事件型 stream 受 `stream_cooldown_minutes`（默认 45）约束——不为「看起来在想」而刷
 - 输出存入 consciousness_stream（type=`stream`）
-- 影响：下次对话注入 `{recent_thoughts}`
-- 验收：独处后有记录；对话中仅 first_time 当拍可写意识流
+- 影响：下次对话注入 `{recent_thoughts}`；另注 `{emotion_residue}`（余温 ≠ 想完）
+- 验收：独处后有记录；对话中仅 first_time 当拍可写意识流；聊完关机再开可有 waking 回溯
+  <!-- 回写(2026-07-25)：ambient_drift / waking / 余烬 / 冷却 / 对话侧不编独处续想。依据：consciousness.py + conversation.txt -->
 
 **实现规格：**
 
 ```python
 # qi/inner_life/consciousness.py
-# <!-- 回写(2026-07)：silence 需 mode!=awake；外层 tick 门控，依据：consciousness.py + InnerLife.tick -->
+# <!-- 回写(2026-07-25)：ambient_drift、waking、冷却、chat_embers；依据：consciousness.py + InnerLife.tick -->
 
 CONSCIOUSNESS_PROBABILITY = 0.05
+AMBIENT_DRIFT_FACTOR = 0.2
+STREAM_COOLDOWN_MINUTES = 45
 EMOTION_SURGE_THRESHOLD = 0.3
 SILENCE_TRIGGER_HOURS = 4
 
 
-def should_trigger_consciousness(
-    mode: str,
-    emotion_delta_valence: float,
-    emotion_delta_arousal: float,
-    silence_duration: timedelta,
-    after_first_time: bool = False,
-    probability: float = CONSCIOUSNESS_PROBABILITY,
-) -> tuple[bool, str]:
-    if after_first_time:
-        return True, "first_time"
-    if (
-        abs(emotion_delta_valence) > EMOTION_SURGE_THRESHOLD
-        or abs(emotion_delta_arousal) > EMOTION_SURGE_THRESHOLD
-    ):
-        return True, "emotion_surge"
-    if silence_duration > timedelta(hours=SILENCE_TRIGGER_HOURS):
-        if mode != "awake":
-            return True, "silence"
-    if mode == "solitary" and random.random() < probability:
-        return True, "random"
-    return False, ""
+def should_trigger_consciousness(...) -> tuple[bool, str]: ...
+# ambient: probability * ambient_factor → "ambient_drift"
+# InnerLife：_just_woke 仅在非 awake 且成功生成后清除
+# generate：EMBER_TRIGGERS 喂近聊余烬；waking 提示「停机时没在想」
 
 
 class ConsciousnessStream:
@@ -368,8 +356,10 @@ class InnerLife:
 - [ ] 它分享创作时带着"不好意思"的语气
 - [ ] 它的独白（如果你偷看日志）像真正的内心活动，不是"生成的内容"
 - [ ] 它不会每五分钟就弹消息告诉你它在想什么
-- [ ] 被问「你不聊天时做什么」时：不否认内在（不说「合上的书 / 什么都没做」）；有念头痕迹时可淡淡承认；进程关掉时可诚实说会停
+- [ ] 被问「你不聊天时做什么」时：不否认内在（不说「合上的书 / 什么都不做」）；有念头痕迹时可淡淡承认；进程关掉时可诚实说会停
   <!-- 回写(2026-07-24)：补「被问独处」诚实口径——「不展示」≠「可声称空白」。依据：conversation.txt 独处与内在；与白纸叙事同类闭环。 -->
+- [ ] 不把聊天记录说成独处已想完；无念头痕迹时只谈余温；waking 是醒来后回溯，不是假装关机期间一直在想
+  <!-- 回写(2026-07-25)：嘴对齐骨头；依据：conversation.txt + waking/余烬。 -->
 
 ## 给下一层的接口
 

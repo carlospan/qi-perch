@@ -798,6 +798,29 @@ class Brain:
                 self.inner_life._prev_valence = saved.valence
                 self.inner_life._prev_arousal = saved.arousal
             logger.info("恢复情绪：%s", self.emotion.description())
+        # 醒来回溯：如果上次对话有实质内容，标记重启后第一拍触发意识流
+        await self._maybe_mark_waking(db)
+
+    async def _maybe_mark_waking(self, db: Database) -> None:
+        """重启后检测上次对话是否有深度，有则标记 waking 意识流。"""
+        if self.inner_life is None:
+            return
+        from qi.inner_life.consciousness import is_trivial_utterance
+
+        recent = await db.load_recent_messages(limit=6)
+        if not recent:
+            return
+        last_user = next(
+            (m for m in reversed(recent) if m.get("role") == "user"), None
+        )
+        if last_user is None:
+            return
+        text = (last_user.get("content") or "").strip()
+        # 纯寒暄不触发；有实质内容才「醒来后想一想」（停机期间并未在想）
+        if is_trivial_utterance(text):
+            return
+        self.inner_life.mark_waking()
+        logger.info("标记醒来回溯：上次对话有实质内容")
 
     async def save_state(self, db: Database) -> None:
         await db.save_emotion(self.emotion)

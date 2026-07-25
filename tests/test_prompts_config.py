@@ -13,6 +13,8 @@ def test_read_prompt_conversation():
     assert "会像水流走" in text
     assert "独处与内在" in text
     assert "合上的书" in text
+    assert "想完" in text
+    assert "情绪余温" in text
     assert "【陌生期硬约束】" in text
     assert "不要用「嗯」省略寒暄" in text
     assert "不要主动评论对方的作息或状态" in text
