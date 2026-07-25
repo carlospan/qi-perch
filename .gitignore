@@ -5,6 +5,8 @@ data/
 config/settings.yaml
 qi/config/settings.yaml
 
+.qoder
+
 # Python
 __pycache__/
 *.py[cod]
