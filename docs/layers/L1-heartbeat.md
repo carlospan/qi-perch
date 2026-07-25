@@ -283,6 +283,7 @@ _DEFAULT_TEMPERATURES = {
     "narrative": 0.75,
     "reflection": 0.8,
     "creation": 0.95,
+    "fact": 0.3,
 }
 
 
