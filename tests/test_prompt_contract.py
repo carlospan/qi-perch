@@ -39,6 +39,7 @@ EXPECTED: dict[str, set[str]] = {
         "emotion_residue",
         "self_narrative",
         "inner_notes",
+        "body_hint",
     },
     "consciousness_stream": {
         "time",

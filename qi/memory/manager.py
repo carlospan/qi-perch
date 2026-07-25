@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from qi.memory.body_memory import BodyMemory
-from qi.memory.facts import FactNoticer, FactStore
+from qi.memory.facts import FactNoticer, FactStore, stage_at_least
 from qi.memory.narrative import NarrativeMemory
 from qi.memory.vector_store import VectorStore
 from qi.memory.working import WorkingMemory
@@ -118,6 +118,22 @@ class MemoryManager:
             if val is not None:
                 patterns[key] = val
         return patterns
+
+    async def body_rhythm_hint(self, stage: str) -> str:
+        """身体节奏 hint：整段（含标题）进 placeholder；空则整段不出现。"""
+        if not stage_at_least(stage, "acquaintance"):
+            return ""
+        patterns = await self.get_body_patterns()
+        hours = patterns.get("usual_active_hours") or {}
+        if int(hours.get("samples") or 0) < 5:
+            return ""
+        start = int(hours.get("start", 9))
+        end = int(hours.get("end", 23))
+        return (
+            "【他的身体节奏】\n"
+            f"你隐约知道他通常 {start}–{end} 点比较活跃。"
+            "知道就好，不要主动评论他的作息。"
+        )
 
     async def has_unprocessed_events(self) -> bool:
         return (await self.db.count_unprocessed_events()) > 0

@@ -50,7 +50,7 @@ async def run_terminal() -> None:
     await brain.restore_state(db)
 
     brain_task = asyncio.create_task(brain.start())
-    console.print("\n[dim]栖醒了。输入 /state 看状态，/quit 离开。[/dim]\n")
+    console.print("\n[dim]栖醒了。输入 /state 看状态，/why 看心跳痕迹，/quit 离开。[/dim]\n")
 
     async def _drain_proactive() -> None:
         while brain.alive:
@@ -76,6 +76,11 @@ async def run_terminal() -> None:
                 break
             if user_input == "/state":
                 console.print(Panel(_format_state(brain), title="内在状态", border_style="cyan"))
+                continue
+            if user_input == "/why":
+                console.print(
+                    Panel(await brain.format_why(), title="心跳痕迹", border_style="magenta")
+                )
                 continue
 
             response = await brain.receive_user_message(user_input)

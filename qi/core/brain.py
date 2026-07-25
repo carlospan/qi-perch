@@ -59,6 +59,50 @@ class _PendingSpeech:
     proactive: bool
 
 
+@dataclass
+class PromptContext:
+    """组装对话 prompt 的上下文——避免 7 元组位置解包。"""
+
+    recent_messages: list[dict]
+    retrieved_memories: list[dict]
+    extras: dict[str, str]
+    shared_culture: str
+    relationship_hint: str
+    scar_hint: str
+    season_hint: str
+
+
+class BackgroundTasks:
+    """Brain 的 8 个后台协程：统一 start/stop。"""
+
+    def __init__(self, brain: Brain) -> None:
+        self._brain = brain
+        self._tasks: list[asyncio.Task] = []
+
+    def start(self) -> None:
+        b = self._brain
+        self._tasks = [
+            asyncio.create_task(b._background_narrative_weaving()),
+            asyncio.create_task(b._background_memory_decay()),
+            asyncio.create_task(b._background_self_reflection()),
+            asyncio.create_task(b._background_dream_decay()),
+            asyncio.create_task(b._background_culture_detection()),
+            asyncio.create_task(b._background_season_detection()),
+            asyncio.create_task(b._background_scar_healing()),
+            asyncio.create_task(b._background_user_drift()),
+        ]
+
+    async def stop(self) -> None:
+        for task in self._tasks:
+            task.cancel()
+        for task in self._tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        self._tasks = []
+
+
 class Brain:
     """栖的意识核心。心跳 + 记忆 + 情绪 + 内在生命 + 关系。"""
 
@@ -66,7 +110,7 @@ class Brain:
         self.config = config
         self.llm = llm
         self.emotion = EmotionState()
-        self.perception = Perception(config)
+        self.perception = Perception(config, llm=llm)
         self.expression = Expression(config, llm)
         self.memory: MemoryManager | None = None
         self.inner_life: InnerLife | None = None
@@ -86,7 +130,7 @@ class Brain:
         self._heartbeat_lock = asyncio.Lock()
         self._db: Database | None = None
         self._last_response: str | None = None
-        self._bg_tasks: list[asyncio.Task] = []
+        self._background = BackgroundTasks(self)
         self._prev_valence = self.emotion.valence
         self._accumulated_suppressed = 0.0
         self.proactive = ProactiveGate(config)
@@ -94,6 +138,8 @@ class Brain:
         self.action: ActionLayer | None = None
         self._drift_signals: list[str] = []
         self._last_avatar_payload: dict | None = None
+        self._traces: deque[dict] = deque(maxlen=20)
+        self._trace_day: str | None = None
 
     def attach_embodiment(self, server: EmbodimentServer) -> None:
         """接上身体——之后说话会推到前端。"""
@@ -165,16 +211,7 @@ class Brain:
         await self._emit_speech(text)
 
     async def start(self) -> None:
-        self._bg_tasks = [
-            asyncio.create_task(self._background_narrative_weaving()),
-            asyncio.create_task(self._background_memory_decay()),
-            asyncio.create_task(self._background_self_reflection()),
-            asyncio.create_task(self._background_dream_decay()),
-            asyncio.create_task(self._background_culture_detection()),
-            asyncio.create_task(self._background_season_detection()),
-            asyncio.create_task(self._background_scar_healing()),
-            asyncio.create_task(self._background_user_drift()),
-        ]
+        self._background.start()
         try:
             while self.alive:
                 async with self._heartbeat_lock:
@@ -190,13 +227,7 @@ class Brain:
                 interval = next_interval(self.emotion, self.config)
                 await asyncio.sleep(interval)
         finally:
-            for task in self._bg_tasks:
-                task.cancel()
-            for task in self._bg_tasks:
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+            await self._background.stop()
 
     def _apply_anomaly_nudge(self, anomalies: list[str]) -> None:
         if not anomalies:
@@ -225,7 +256,7 @@ class Brain:
         self,
         pending: str | None,
         now: datetime,
-    ) -> tuple[list[dict], list[dict], dict[str, str], str, str, str, str]:
+    ) -> PromptContext:
         recent: list[dict] = []
         memories: list[dict] = []
         extras: dict[str, str] = {}
@@ -249,6 +280,12 @@ class Brain:
             except Exception:
                 logger.exception("组装用户事实 prompt 出错")
                 extras["user_facts"] = "（你还不太了解他）"
+            try:
+                body_hint = await self.memory.body_rhythm_hint(self.relationship_stage)
+                if body_hint:
+                    extras["body_hint"] = body_hint
+            except Exception:
+                logger.exception("组装身体节奏 hint 出错")
         elif self._db is not None:
             recent = await self._db.load_recent_messages(limit=20)
             if (
@@ -297,14 +334,14 @@ class Brain:
             scars = await self._db.list_scars()
             scar_hint = format_scars_for_prompt(scars)
 
-        return (
-            recent,
-            memories,
-            extras,
-            shared_culture,
-            relationship_hint,
-            scar_hint,
-            season_hint,
+        return PromptContext(
+            recent_messages=recent,
+            retrieved_memories=memories,
+            extras=extras,
+            shared_culture=shared_culture,
+            relationship_hint=relationship_hint,
+            scar_hint=scar_hint,
+            season_hint=season_hint,
         )
 
     async def _deliver_qi_message(
@@ -340,6 +377,9 @@ class Brain:
         pending = self._pending_queue.popleft() if self._pending_queue else None
         impact_mult = 1.0
         triggered_first: str | None = None
+        impact: float | None = None
+        kind: str | None = None
+        action_type: str | None = None
         silence_before = self.perception.detect_silence(self.last_interaction, now)
 
         self.emotion.mode = determine_mode(
@@ -370,10 +410,10 @@ class Brain:
                     now,
                 )
 
-            impact = self.perception.assess_impact(
+            impact = await self.perception.assess_impact_async(
                 pending, self.emotion, self.relationship_stage
             )
-            impact *= impact_mult
+            impact = impact * impact_mult
             self.emotion = apply_event_impact(self.emotion, impact)
             self.emotion = self.perception.apply_security_hint(self.emotion, impact)
             self.last_interaction = now
@@ -386,7 +426,12 @@ class Brain:
                 self._apply_anomaly_nudge(anomalies)
 
         decay_mult = float(self.config.get("emotion", {}).get("decay_multiplier", 1.0))
-        self.emotion = step_emotion(self.emotion, now, decay_multiplier=decay_mult)
+        self.emotion = step_emotion(
+            self.emotion,
+            now,
+            decay_multiplier=decay_mult,
+            relationship_stage=self.relationship_stage,
+        )
         if self.relationship is not None:
             self.emotion = apply_season_effect(
                 self.emotion, self.relationship.state.season
@@ -412,15 +457,7 @@ class Brain:
                 logger.exception("内在生命 tick 出错")
 
         if pending is not None:
-            (
-                recent,
-                memories,
-                extras,
-                shared_culture,
-                relationship_hint,
-                scar_hint,
-                season_hint,
-            ) = await self._gather_prompt_context(pending, now)
+            ctx = await self._gather_prompt_context(pending, now)
 
             self.avatar.set_thinking(True)
             await self._sync_avatar(now, force=True)
@@ -429,14 +466,14 @@ class Brain:
                     user_message=pending,
                     emotion=self.emotion,
                     now=now,
-                    recent_messages=recent,
-                    memories=memories,
-                    inner_extras=extras,
+                    recent_messages=ctx.recent_messages,
+                    memories=ctx.retrieved_memories,
+                    inner_extras=ctx.extras,
                     relationship_stage=self.relationship_stage,
-                    shared_culture=shared_culture,
-                    relationship_hint=relationship_hint,
-                    scar_hint=scar_hint,
-                    season=season_hint,
+                    shared_culture=ctx.shared_culture,
+                    relationship_hint=ctx.relationship_hint,
+                    scar_hint=ctx.scar_hint,
+                    season=ctx.season_hint,
                 )
             finally:
                 self.avatar.set_thinking(False)
@@ -489,12 +526,15 @@ class Brain:
                     )
                     if action_result is not None:
                         acted = True
+                        action_type = (
+                            str(action_result.get("type") or action_result.get("kind") or "")
+                            or None
+                        )
                         await self._persist_action_budget()
                         await self._deliver_action_result(action_result, now)
                 except Exception:
                     logger.exception("行动层 tick 出错")
 
-            kind = None
             if not acted:
                 kind = pick_proactive_kind(
                     want_express=want_express,
@@ -508,15 +548,7 @@ class Brain:
                     now=now,
                 )
             if kind is not None:
-                (
-                    recent,
-                    memories,
-                    extras,
-                    shared_culture,
-                    relationship_hint,
-                    scar_hint,
-                    season_hint,
-                ) = await self._gather_prompt_context(None, now)
+                ctx = await self._gather_prompt_context(None, now)
                 cue = self.proactive.cue_for(kind)
                 self.avatar.set_thinking(True)
                 await self._sync_avatar(now, force=True)
@@ -525,14 +557,14 @@ class Brain:
                         user_message=cue,
                         emotion=self.emotion,
                         now=now,
-                        recent_messages=recent,
-                        memories=memories,
-                        inner_extras=extras,
+                        recent_messages=ctx.recent_messages,
+                        memories=ctx.retrieved_memories,
+                        inner_extras=ctx.extras,
                         relationship_stage=self.relationship_stage,
-                        shared_culture=shared_culture,
-                        relationship_hint=relationship_hint,
-                        scar_hint=scar_hint,
-                        season=season_hint,
+                        shared_culture=ctx.shared_culture,
+                        relationship_hint=ctx.relationship_hint,
+                        scar_hint=ctx.scar_hint,
+                        season=ctx.season_hint,
                         proactive_kind=kind,
                     )
                 finally:
@@ -560,11 +592,81 @@ class Brain:
         if triggered_first:
             await self._notify_first_time()
 
+        await self._record_trace(
+            pending=pending,
+            want_express=want_express,
+            kind=kind,
+            action_type=action_type,
+            impact=impact,
+            now=now,
+        )
+
         if self._db is not None:
             await self._maybe_save_emotion(now, force=pending is not None)
 
         self._last_response = response
         return response
+
+    async def _record_trace(
+        self,
+        *,
+        pending: str | None,
+        want_express: bool,
+        kind: str | None,
+        action_type: str | None,
+        impact: float | None,
+        now: datetime,
+    ) -> None:
+        """心跳决策痕迹——给人排障，不进 prompt。"""
+        trace = {
+            "at": now.isoformat(timespec="seconds"),
+            "mode": self.emotion.mode.value,
+            "pending": bool(pending),
+            "want_express": bool(want_express),
+            "proactive_kind": kind,
+            "gate_blocked": kind is None and bool(want_express) and pending is None,
+            "action": action_type,
+            "impact": round(impact, 3) if impact is not None else None,
+        }
+        self._traces.append(trace)
+        if self._db is None:
+            return
+        try:
+            await self._db.set_body_memory("last_heartbeat_trace", trace)
+            day = now.strftime("%Y-%m-%d")
+            if self._trace_day != day:
+                self._trace_day = day
+                await self._db.set_body_memory("day_first_trace", trace)
+        except Exception:
+            logger.debug("写入决策痕迹失败", exc_info=True)
+
+    async def format_why(self, limit: int = 8) -> str:
+        """格式化最近心跳痕迹，供 CLI /why。"""
+        lines: list[str] = []
+        recent = list(self._traces)[-limit:]
+        if recent:
+            lines.append(f"最近 {len(recent)} 拍（内存）：")
+            for t in recent:
+                lines.append(
+                    f"  {t.get('at')} mode={t.get('mode')} "
+                    f"pending={t.get('pending')} want={t.get('want_express')} "
+                    f"kind={t.get('proactive_kind')} gate_blocked={t.get('gate_blocked')} "
+                    f"action={t.get('action')} impact={t.get('impact')}"
+                )
+        else:
+            lines.append("内存里还没有心跳痕迹。")
+
+        if self._db is not None:
+            try:
+                last = await self._db.get_body_memory("last_heartbeat_trace")
+                day_first = await self._db.get_body_memory("day_first_trace")
+                if last:
+                    lines.append(f"落盘 last：{last}")
+                if day_first:
+                    lines.append(f"今日首拍 day_first：{day_first}")
+            except Exception:
+                logger.debug("读取决策痕迹失败", exc_info=True)
+        return "\n".join(lines)
 
     async def _broadcast_journal_entries(self) -> None:
         if self.embodiment is None or self.inner_life is None:

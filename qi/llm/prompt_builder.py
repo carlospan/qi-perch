@@ -136,6 +136,7 @@ class PromptBuilder:
             emotion_residue=emotion_residue,
             self_narrative=self_narrative,
             inner_notes=inner_notes,
+            body_hint=extras.get("body_hint") or "",
         )
         if proactive_kind:
             system += (

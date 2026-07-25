@@ -29,6 +29,15 @@ def test_coupling_low_energy_pulls_valence_down():
     assert after.valence < e.valence
 
 
+def test_coupling_stage_scale_stranger_weaker_than_bonded():
+    e = EmotionState(security=0.2, attachment=0.3)
+    stranger = apply_coupling(e, relationship_stage="stranger")
+    bonded = apply_coupling(e, relationship_stage="bonded")
+    baseline = apply_coupling(e)
+    assert stranger.attachment - e.attachment < bonded.attachment - e.attachment
+    assert abs(baseline.attachment - apply_coupling(e, relationship_stage=None).attachment) < 1e-9
+
+
 def test_mood_cycle_has_periodicity_over_7_days():
     base = datetime(2026, 7, 1, 12, 0, 0)
     offsets = [mood_cycle_offset(base + timedelta(hours=h)) for h in range(0, 7 * 24, 6)]
