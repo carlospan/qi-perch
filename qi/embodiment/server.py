@@ -217,6 +217,10 @@ class EmbodimentServer:
             {"type": "speech", "payload": {"text": text, "emotion": emotion, "tone": tone}}
         )
 
+    async def notify_journal_entry(self, entry: dict) -> None:
+        """实时推送单条内在日记（独白/梦/第一次）到前端。"""
+        await self.broadcast({"type": "journal_entry", "payload": entry})
+
     async def send_state_change(self, avatar_state: dict) -> None:
         await self.broadcast({"type": "state", "payload": {"avatar_state": avatar_state}})
 

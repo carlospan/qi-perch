@@ -19,6 +19,14 @@ if TYPE_CHECKING:
     from qi.storage.database import Database
 
 
+def _journal_entry(kind: str, text: str, now: datetime) -> dict:
+    return {
+        "kind": kind,
+        "text": text.strip(),
+        "at": int(now.timestamp() * 1000),
+    }
+
+
 class InnerLife:
     """独处时的生活。不向外说，但会留下痕迹。"""
 
@@ -33,6 +41,7 @@ class InnerLife:
         self._prev_arousal = 0.4
         self._afterglow_done_for: int | None = None
         self._just_woke = False
+        self.last_journal_entries: list[dict] = []
 
     def mark_waking(self) -> None:
         """重启后标记：下一次非 awake 心跳触发醒来回溯意识流。"""
@@ -50,6 +59,7 @@ class InnerLife:
         内在生命一拍。可能改写情绪（梦的余韵），不向外说话。
         awake 时不做随机意识流/创作，只处理余韵与反思标记。
         """
+        self.last_journal_entries = []
         silence = now - last_interaction
         mode = emotion.mode.value
 
@@ -75,12 +85,22 @@ class InnerLife:
                 prev_valence=self._prev_valence,
                 prev_arousal=self._prev_arousal,
             )
+            if thought:
+                self.last_journal_entries.append(
+                    _journal_entry("独白", thought, now)
+                )
             if try_waking and thought is not None:
                 self._just_woke = False
         if mode != "awake":
-            await self.consciousness.maybe_meta(emotion)
+            meta = await self.consciousness.maybe_meta(emotion)
+            if meta:
+                self.last_journal_entries.append(_journal_entry("独白", meta, now))
             await self.creativity.maybe_create(emotion, relationship_stage)
-            await self.dreams.maybe_dream(emotion)
+            dream_text = await self.dreams.maybe_dream(emotion)
+            if dream_text:
+                self.last_journal_entries.append(
+                    _journal_entry("梦", dream_text, now)
+                )
 
         self._prev_valence = emotion.valence
         self._prev_arousal = emotion.arousal

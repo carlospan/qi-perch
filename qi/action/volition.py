@@ -136,7 +136,7 @@ def action_intentions(
                 ActionIntention(
                     kind=KIND_EXPLORE,
                     priority=pri,
-                    reason="独处时思绪飘向窗外",
+                    reason="独处时思绪飘远",
                 )
             )
 

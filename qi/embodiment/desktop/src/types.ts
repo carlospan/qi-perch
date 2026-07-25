@@ -30,7 +30,8 @@ export type ServerMessage =
   | { type: "ping"; payload: { ts: number } }
   | { type: "audio"; payload: { data: string; mime?: string } }
   | { type: "history"; payload: { messages: TalkMessage[] } }
-  | { type: "journal"; payload: { entries: JournalEntry[] } };
+  | { type: "journal"; payload: { entries: JournalEntry[] } }
+  | { type: "journal_entry"; payload: JournalEntry };
 
 export type ClientMessage =
   | { type: "user_message"; payload: { text: string } }

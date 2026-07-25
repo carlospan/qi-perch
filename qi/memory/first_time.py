@@ -94,6 +94,8 @@ class FirstTimeMemory:
     def __init__(self, db: Database, llm: LLMGateway | None = None):
         self.db = db
         self.llm = llm
+        # 本拍刚落库的「第一次」日记条目；由 brain 取走推前端后清空
+        self.last_recorded: dict | None = None
 
     async def check(
         self,
@@ -139,6 +141,13 @@ class FirstTimeMemory:
             inner_experience=inner,
             emotional_imprint=imprint,
         )
+        text = (inner or content or "").strip()
+        if text:
+            self.last_recorded = {
+                "kind": "第一次",
+                "text": text,
+                "at": int(datetime.now().timestamp() * 1000),
+            }
 
     async def _confirm(self, event_type: str, message: str) -> bool:
         labels = {

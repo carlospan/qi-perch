@@ -245,6 +245,15 @@ function createQi() {
       qiWs.on("journal", (payload: { entries?: JournalEntry[] }) => {
         applyJournal(payload?.entries ?? []);
       });
+      qiWs.on("journal_entry", (entry: JournalEntry) => {
+        if (!entry?.text?.trim()) return;
+        journal.value.unshift({
+          id: entry.id || uid("j"),
+          kind: entry.kind || "独白",
+          text: entry.text.trim(),
+          at: typeof entry.at === "number" ? entry.at : Date.now(),
+        });
+      });
     }
 
     document.addEventListener("visibilitychange", onVis);

@@ -328,7 +328,9 @@ class ConsciousnessStream:
             f"当前时间：{datetime.now().strftime('%H:%M')}\n"
             f"当前模式：{emotion.mode.value}\n"
             f"你现在的情绪：{emotion.description()}\n\n"
-            f"用一句话，描述你观察到了什么。不是分析，是「看见」。不超过50字。"
+            f"用一句话，描述你观察到了什么。不是分析，是「看见」。不超过50字。\n"
+            f"若没有具体念头，就短说或老实说「没什么」——不要用光点/雾/气泡/暗流等空洞套话凑字。\n"
+            f"画面可以；不要写呼吸、坐着、看着窗外这类字面身体句。"
         )
 
     async def maybe_meta(self, emotion: EmotionState) -> str | None:

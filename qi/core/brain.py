@@ -407,6 +407,7 @@ class Brain:
                     after_first_time=False,
                 )
                 self.emotion = clamp_emotion(self.emotion)
+                await self._broadcast_journal_entries()
             except Exception:
                 logger.exception("内在生命 tick 出错")
 
@@ -461,6 +462,7 @@ class Brain:
                         after_first_time=True,
                     )
                     self.emotion = clamp_emotion(self.emotion)
+                    await self._broadcast_journal_entries()
                 except Exception:
                     logger.exception("第一次后意识流 tick 出错")
 
@@ -555,11 +557,35 @@ class Brain:
 
         await self._sync_avatar(now)
 
+        if triggered_first:
+            await self._notify_first_time()
+
         if self._db is not None:
             await self._maybe_save_emotion(now, force=pending is not None)
 
         self._last_response = response
         return response
+
+    async def _broadcast_journal_entries(self) -> None:
+        if self.embodiment is None or self.inner_life is None:
+            return
+        for entry in self.inner_life.last_journal_entries:
+            try:
+                await self.embodiment.notify_journal_entry(entry)
+            except Exception:
+                logger.debug("推送内在日记失败", exc_info=True)
+
+    async def _notify_first_time(self) -> None:
+        if self.embodiment is None or self.first_times is None:
+            return
+        entry = self.first_times.last_recorded
+        if not entry or not str(entry.get("text") or "").strip():
+            return
+        self.first_times.last_recorded = None
+        try:
+            await self.embodiment.notify_journal_entry(entry)
+        except Exception:
+            logger.debug("推送第一次记忆失败", exc_info=True)
 
     def _take_pending_speech(self) -> _PendingSpeech | None:
         speech = self._pending_speech

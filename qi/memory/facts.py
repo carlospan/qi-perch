@@ -119,11 +119,36 @@ OTHER_FACT_SIGNALS = (
     "我搬家",
     "我家在",
     "我在",  # 「我在上海」；抽取时排除「我在想/说…」
+    "我老家",
+    "我家乡",
+    "我籍贯",
+    "我出生",
+    "我从小",
+    "我来自",
     "我喜欢",
     "我讨厌",
     "我不吃",
     "我怕",
     "我过敏",
+)
+
+# 行程口语：命中则不收籍贯（「我想去海南玩」≠出身地）
+_HOMETOWN_TRAVEL_REJECT = ("想去", "要去", "去玩", "旅游", "打算去", "准备去")
+
+# 「我是X人」里常见的非地名尾巴
+_HOMETOWN_PERSON_REJECT = frozenset(
+    {
+        "好",
+        "坏",
+        "男",
+        "女",
+        "怪",
+        "什么",
+        "哪",
+        "谁",
+        "人",
+        "中国",  # 过宽；要具体省/市再说
+    }
 )
 
 # 状态变更口语（设计验收「我换工作了」）；回写注明相对 OTHER_FACT_SIGNALS 的扩展。
@@ -137,6 +162,7 @@ _DEFAULT_STABILITY: dict[str, str] = {
     "life_event": "stable",
     "occupation": "state",
     "location": "state",
+    "hometown": "stable",
     "concern": "state",
     "health": "stable",
     "other": "stable",
@@ -1097,6 +1123,55 @@ class FactNoticer:
                     "source": "他说起好恶时",
                 }
             )
+
+        found.extend(self._extract_hometown(text))
+        return found
+
+    def _extract_hometown(self, text: str) -> list[dict]:
+        """出身地 / 籍贯（stable），与 location（当前所在）分开记。"""
+        if any(s in text for s in _HOMETOWN_TRAVEL_REJECT):
+            return []
+
+        found: list[dict] = []
+
+        def _land(val: str, content: str) -> None:
+            val = val.strip().rstrip("的了啊呀呢吧嘛")
+            if not val or val in _HOMETOWN_PERSON_REJECT:
+                return
+            found.append(
+                {
+                    "fact_type": "hometown",
+                    "content": content,
+                    "confidence": 0.9,
+                    "stability": "stable",
+                    "emotional_weight": 0.65,
+                    "source": "他说起籍贯/老家时",
+                    "force_supersede_type": True,
+                }
+            )
+
+        for pat, tmpl in (
+            (r"我老家(?:在|是)?\s*([^\s，。！？,.!?]{1,20})", "他老家在{val}"),
+            (r"我家乡(?:在|是)?\s*([^\s，。！？,.!?]{1,20})", "他家乡在{val}"),
+            (r"我籍贯(?:在|是)?\s*([^\s，。！？,.!?]{1,20})", "他籍贯是{val}"),
+            (r"我(?:出生于|出生在|生于)\s*([^\s，。！？,.!?]{1,20})", "他出生在{val}"),
+            (r"我从小(?:在|就在)?\s*([^\s，。！？,.!?]{1,20})", "他从小在{val}"),
+            (r"我来自\s*([^\s，。！？,.!?]{1,20})", "他来自{val}"),
+        ):
+            m = re.search(pat, text)
+            if m:
+                val = m.group(1).strip()
+                _land(val, tmpl.format(val=val))
+                return found
+
+        # 「我是海南人」——勿吃「我是做…的」
+        m = re.search(
+            r"我是(?!做)([^\s，。！？,.!?]{1,8}?)人(?:[，。！？\s]|$)",
+            text,
+        )
+        if m:
+            val = m.group(1).strip()
+            _land(val, f"他是{val}人")
 
         return found
 

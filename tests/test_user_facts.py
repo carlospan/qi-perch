@@ -399,3 +399,82 @@ async def test_looks_like_person_name_gate():
     assert not looks_like_person_name("好的")
     assert not looks_like_person_name("谢谢你")
     assert not looks_like_person_name("谢谢")
+
+
+@pytest.mark.asyncio
+async def test_hometown_gated_by_stage(db_store):
+    db, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    now = datetime(2026, 7, 23, 12, 0)
+
+    r0 = await noticer.notice(
+        "我老家在四川", EmotionState(), "stranger", now=now
+    )
+    assert r0 == []
+    assert await store.active_facts("hometown") == []
+
+    r1 = await noticer.notice(
+        "我老家在四川", EmotionState(), "acquaintance", now=now
+    )
+    assert len(r1) == 1
+    facts = await store.active_facts("hometown")
+    assert len(facts) == 1
+    assert facts[0]["stability"] == "stable"
+    assert "四川" in facts[0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_hometown_is_x_ren_and_travel_reject(db_store):
+    db, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    now = datetime(2026, 7, 23, 12, 0)
+
+    assert (
+        await noticer.notice(
+            "我想去海南玩", EmotionState(), "acquaintance", now=now
+        )
+        == []
+    )
+    assert await store.active_facts("hometown") == []
+
+    # 职业句勿误收为籍贯
+    assert (
+        await noticer.notice(
+            "我是做软件的", EmotionState(), "acquaintance", now=now
+        )
+        != []
+    )
+    assert await store.active_facts("hometown") == []
+
+    r = await noticer.notice(
+        "我是海南人", EmotionState(), "acquaintance", now=now
+    )
+    assert len(r) == 1
+    facts = await store.active_facts("hometown")
+    assert len(facts) == 1
+    assert "海南" in facts[0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_hometown_survives_reopen_in_prompt():
+    from qi.memory.facts import format_facts_for_prompt
+
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        path = str(Path(tmp) / "qi.db")
+        db1 = Database(path)
+        await db1.initialize()
+        store1 = FactStore(db1)
+        noticer = FactNoticer(store1, llm=None)
+        now = datetime(2026, 7, 23, 12, 0)
+        await noticer.notice(
+            "我是海南人", EmotionState(), "acquaintance", now=now
+        )
+        await db1.close()
+
+        db2 = Database(path)
+        await db2.initialize()
+        store2 = FactStore(db2)
+        facts = await store2.active_facts("hometown")
+        block = format_facts_for_prompt(facts, "acquaintance")
+        assert "海南" in block
+        await db2.close()

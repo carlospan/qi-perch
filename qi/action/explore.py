@@ -14,13 +14,13 @@ if TYPE_CHECKING:
     from qi.storage.database import Database
 
 # 多数拍不飘出去。curiosity 越高、季节越暖，越容易「看一眼」。
-# 本阶段无搜索/HTTP：飘出去也只留「走神」的痕迹，绝不编造窗外内容。
+# 本阶段无搜索/HTTP：飘出去也只留「走神」的痕迹，绝不编造外面有什么。
 EXPLORE_BASE_PROBABILITY = 0.12
 
 
 class ExploreAction:
     """
-    注意力偶然飘向窗外。
+    注意力偶然飘远。
     红线：无真实获取手段时不产出虚构「看到的内容」；宁可空手（found=None）。
     """
 
@@ -60,7 +60,7 @@ class ExploreAction:
                 return None
 
         # 诚实：没有搜索能力，不编造外面有什么
-        summary = "我走神时往窗外看了一眼。没有去查什么，也没有假装看见了什么。"
+        summary = "我走神了一下，思绪飘远了。没有去查什么，也没有假装看见了什么。"
         emotion_ctx = None
         if emotion is not None and hasattr(emotion, "model_dump_json"):
             emotion_ctx = emotion.model_dump_json()
