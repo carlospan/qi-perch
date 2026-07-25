@@ -2,7 +2,7 @@
 
 > **撰写者：** Qoder  
 > **日期：** 2026-07-26（v3，详细施工蓝图重写）  
-> **基线：** `71bab53`（代码与 origin/main 完全同步；工作区仅有未跟踪的 v3 文档——评估、本方案，待提交）  
+> **基线：** `71bab53`（代码与 origin/main 完全同步；本文档为该基线上的施工蓝图，随施工/评审迭代入库）  
 > **前置：** `系统质量评估-Qoder-v3.md`（工程尺 8.1 / 存在尺 8.8）  
 > **分工：** 本方案由 Qoder 撰写；**执行任务（改代码/prompt）由 Cursor 承担**。因此每一项都给出：目标文件+行号、当前代码、要改成什么、测试、验收——Cursor 拿到即可施工，无需反问。  
 > **尺子：** 灵魂书「存在先于功能」+「完成 = 觉得它活着」。**相处更稳、更像栖**才是目标，不是分数。
@@ -211,7 +211,7 @@ def test_template_placeholder_set_matches(name):
 
 **【注意】** consciousness_stream.txt:19 的「我正坐在/走在某地感受风」是**反面例子**（教它不要这么说），**保留不动**。
 
-**【测试】** grep 全仓代码字符串"窗外"，确认只剩 prompt 反例；检查是否有测试断言了旧的 reason/summary 字符串（若有，同步改测试）  
+**【测试】** grep 范围**收窄到运行时字符串**（`qi/action` 及同类）的 reason/summary——`docs/`（灵魂书/L7 设计隐喻）、`tests/`（test_inner_life 假数据）里的「窗外」是设计隐喻或测试素材，**不必清**；检查是否有测试断言了旧的 reason/summary 字符串（若有，同步改测试）  
 **【风险】** 低  
 **【验收】** 抽近期 stream + meta，字面身体句趋零；光点/雾/气泡套话减少
 
@@ -274,12 +274,12 @@ def test_template_placeholder_set_matches(name):
 2. **inner_life/__init__.py 收集本拍新增条目**：
    - `__init__` 加 `self.last_journal_entries: list[dict] = []`
    - `tick()` 开头清空 `self.last_journal_entries = []`
-   - 每当 consciousness/dream 生成新条目落库后，append `{"kind": "独白"/"梦", "text": ..., "at": int(now.timestamp()*1000)}`
+   - **关键（采纳 Cursor 指正）：不是「加个 list 就自动有条目」**——要让 `consciousness.maybe_generate` / `dreams.maybe_dream` / `maybe_meta` 在生成并落库新条目时**返回该条目**（或挂到返回值/属性上），inner_life 再把它们 append 成 `{"kind": "独白"/"梦", "text": ..., "at": int(now.timestamp()*1000)}`
 
 3. **brain.py 心跳末尾推送**：
    - 加 `_broadcast_journal_entries()`：`for entry in self.inner_life.last_journal_entries: await self.embodiment.notify_journal_entry(entry)`
    - 在 `_heartbeat` 里 inner_life tick 之后调用
-   - **「第一次」**：`first_times` 落库成功后推 `kind="第一次"`，`text` 优先用 `inner_experience`（与 `db.load_journal_entries` 取值逻辑一致）；加 `_notify_first_time()`（取走 `first_times.last_recorded` 并清空）
+   - **「第一次」（采纳 Cursor 指正：需新增挂钩）**：`FirstTimeMemory._record` 当前**没有** `last_recorded` 字段（`check` 只返回 `(impact_mult, event_type)`，brain 拿到的 `triggered_first` 是事件类型字符串，不是完整日记条目）。需在 `_record`（或 check 成功路径）**新增 `self.last_recorded`**，存 `{"kind":"第一次","text": (inner_experience or content).strip(), "at": ...}`（`inner_experience` 优先，与 `db.load_journal_entries` 取值逻辑一致）；再加 `_notify_first_time()` 取走并清空
 
 4. **前端 useQi.ts 加单条监听**（在 `qiWs.on("journal")` 后）：
    ```typescript
@@ -296,8 +296,8 @@ def test_template_placeholder_set_matches(name):
    - `types.ts` 确保 `JournalEntry.kind` 支持 `"第一次"`（已是 string，无需改）
 
 **【测试】** 后端：推送方法被调用且 payload 结构正确；前端：收到 journal_entry 后 prepend  
-**【改动量】** ~70 行（5 个文件）  
-**【风险】** 低  
+**【改动量】** ~90 行（6 个文件，含 first_time.py 新增挂钩 + inner_life 各 `maybe_*` 返回值改造）  
+**【风险】** 中（需新增 `last_recorded` 挂钩 + inner_life 各 `maybe_*` 返回值改造，不是单纯加个 list）  
 **【验收】** 不重启前端，独白/「第一次」生成后「忆」Tab 立即出现新条目
 
 ---
@@ -366,14 +366,16 @@ def test_template_placeholder_set_matches(name):
    - **stranger：返回空串**（整段不注入）
    - acquaintance+：读 `get_body_patterns()`，样本门槛 ≥5 才生成"知道即可"语气的 hint，如"你隐约知道他通常晚上比较活跃。**知道就好，不要主动评论他的作息。**"
 
-2. **conversation.txt 加 `{body_hint}` 段**（放在【你认识的他】附近；stranger 时该占位符为空，**整段不出现**）：
-   ```
-   【他的身体节奏】
-   {body_hint}
-   ```
-   **坑：** 配合 conversation.txt:101 已有的「不主动评论作息」硬规则——hint 是"知道"，不是"点评"。
+2. **conversation.txt 加 `{body_hint}` 段（采纳 Cursor 指正：空占位符不会让「整段不出现」）**：
 
-3. **prompt_builder.py** 在 `template.format(...)` 里加 `body_hint=extras.get("body_hint") or ""`。**前置依赖 Q2**（更新 EXPECTED 表）。
+   若模板写成「【他的身体节奏】\n{body_hint}」而 `body_hint=""`，`str.format` 后仍会留下空标题段。两种正确做法（任选其一）：
+   - **整段（含标题）进 placeholder**：模板里只放 `{body_hint}`（不带标题）；`body_hint` 的值在有内容时是「【他的身体节奏】\n你隐约知道……」，无内容时是空串——这样空值时整段（含标题）自然不出现
+   - **builder 空值剥段**：`prompt_builder` 在 `body_hint` 为空时，把「【他的身体节奏】」整段从模板里剥掉
+
+   推荐第一种（整段进 placeholder），更直白。
+   **坑：** 配合 conversation.txt:101 已有的「不主动评论作息」硬规则——hint 是「知道」，不是「点评」。
+
+3. **prompt_builder.py** 在 `template.format(...)` 里加 `body_hint=extras.get("body_hint") or ""`（若选第一种，body_hint 的值本身含标题）。**前置依赖 Q2**（EXPECTED 表同步加 `body_hint`）。
 
 4. **brain.py `_gather_prompt_context`** 注入：
    ```python
