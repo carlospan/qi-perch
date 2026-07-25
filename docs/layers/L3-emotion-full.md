@@ -41,6 +41,16 @@ qi/core/perception.py      # 冲击评估 + modulate_impact + apply_security_hin
 ```python
 # qi/core/emotion.py — 耦合矩阵与耦合函数
 # <!-- 回写(2026-07)：model_copy 不可变写法，依据：qi/core/emotion.py:apply_coupling -->
+# <!-- 回写(2026-07-25)：补 DECAY_RATES，依据：qi/core/emotion.py -->
+
+DECAY_RATES = {
+    "energy": 0.1,
+    "valence": 0.08,
+    "arousal": 0.15,
+    "security": 0.03,
+    "curiosity": 0.1,
+    "attachment": 0.05,
+}
 
 COUPLING = {
     ("security", "attachment_unmet"): 0.3,
@@ -94,6 +104,7 @@ def apply_coupling(emotion: EmotionState) -> EmotionState:
 ```python
 # qi/core/emotion.py — 内在天气周期
 # <!-- 回写(2026-07)：目标趋近取代累加，依据：qi/core/emotion.py:apply_mood_cycle -->
+# <!-- 回写(2026-07-25)：日噪声改 md5(toordinal)，跨进程稳定；依据：mood_cycle_offset -->
 
 MOOD_CYCLE_PRIMARY_PERIOD_HOURS = 4 * 24
 MOOD_CYCLE_SECONDARY_PERIOD_HOURS = 18 * 24
@@ -113,11 +124,12 @@ def mood_cycle_offset(now: datetime) -> float:
         2 * math.pi * t / MOOD_CYCLE_SECONDARY_PERIOD_HOURS
         + MOOD_CYCLE_SECONDARY_PHASE
     )
-    noise = (
-        MOOD_CYCLE_NOISE_AMPLITUDE
-        * (hash(str(now.date())) % 100 - 50)
-        / 50
-    )
+    # builtin hash 随 PYTHONHASHSEED 变；用 md5 保证跨进程同日同噪声
+    day_digest = hashlib.md5(
+        f"qi-mood-day:{now.date().toordinal()}".encode()
+    ).digest()
+    day_unit = (int.from_bytes(day_digest[:2], "big") % 100 - 50) / 50.0
+    noise = MOOD_CYCLE_NOISE_AMPLITUDE * day_unit
     return primary + secondary + noise
 
 
@@ -173,8 +185,10 @@ def apply_circadian(emotion: EmotionState, hour: int) -> EmotionState:
 # qi/core/emotion.py — 表达阈值与状态调制
 # <!-- 回写(2026-07)：STAGE_IMPACT_WEIGHT / ACCUMULATION_LIMIT / expression_threshold
 #      参数；补 perception 链路，依据：qi/core/emotion.py + qi/core/perception.py -->
+# <!-- 回写(2026-07-25)：Brain._track_expression_threshold 可读
+#      config["emotion"]["expression_threshold"]（默认 0.3），依据：brain.py -->
 
-EXPRESSION_THRESHOLD = 0.3
+EXPRESSION_THRESHOLD = 0.3  # 也可由 settings.yaml emotion.expression_threshold 覆盖
 ACCUMULATION_LIMIT = 1.0
 
 RELATIONSHIP_STAGE_LEVEL = {

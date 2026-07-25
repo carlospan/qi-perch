@@ -177,9 +177,9 @@ def can_share(relationship_stage) -> bool:
 ```python
 # qi/action/share.py
 # <!-- 回写(2026-07-23)：ShareAction.deliver / try_share；卡片 type=creation_card；
-#      只占 ActionBudget，不占 ProactiveGate；递出后 mark_creation_shared + insert_action，
-#      显著者 narrative.save。无 24h 递出冷却（靠日限 1 + friend+）。
-#      依据：qi/action/share.py -->
+#      只占 ActionBudget，不占 ProactiveGate；递出后 mark_creation_shared + insert_action。
+#      无 24h 递出冷却（靠日限 1 + friend+）。依据：qi/action/share.py -->
+# <!-- 回写(2026-07-25)：递出后**恒** narrative.save(importance=0.78)，非「显著才织」。 -->
 #
 # 与 L4 的边界：
 #   L4 maybe_share_hint → 提起（只写 mentioned_at）
@@ -239,11 +239,12 @@ class ExploreAction:
 ```python
 # 行动留痕的三条去向（复用既有层，不另造）：
 #
-# 1. L2 记忆：行动结果**必写入 actions 表**（权威留痕）；显著行动另
+# 1. L2 记忆：行动结果**必写入 actions 表**（权威留痕）；share/tend 另
 #    narrative.save 一条第一人称叙述（进 ChromaDB 可检索）。
 #    不另建记忆模块。行动是栖自己的事，归叙事；与 user_facts（关于用户）不冲突。
-# <!-- 回写(2026-07-23)：权威在 actions；share/tend 已接线 insert_action + 可选 narrative.save；
+# <!-- 回写(2026-07-23)：权威在 actions；share/tend 已接线 insert_action + narrative.save；
 #      explore 空手不织 narrative。依据：qi/action/share.py、tend.py、explore.py -->
+# <!-- 回写(2026-07-25)：share 恒织 importance=0.78；tend 恒织 0.7（非「显著才织」）。 -->
 #
 # 2. L4 自我叙事：显著行动喂给 self_model.reflect 的输入。
 #    【尚未接线】成功 → identity_narrative 更确信「我是能为你做点什么的」；
@@ -274,6 +275,8 @@ class ExploreAction:
 #      brain：pending is None 时先 action.tick，动手则跳过 pick_proactive_kind；
 #      dreaming 不行动；ShareAction 注入 memory.narrative。
 #      依据：qi/action/layer.py、qi/core/brain.py -->
+# <!-- 回写(2026-07-25)：mode 门控 solitary|ambient；awake 不自主伸手；
+#      _deliver_action_result 推 WS type=action + creation_card 开口。 -->
 
 SEASON_ACTION_SCALE = {
     "spring": 1.0, "summer": 0.8, "autumn": 0.5, "winter": 0.2,
@@ -281,7 +284,9 @@ SEASON_ACTION_SCALE = {
 
 class ActionLayer:
     async def tick(self, emotion, relationship_stage, season, now, *, mode, user_online, scars):
+        # 离线 / dreaming / mode∉{solitary,ambient} → None（awake 偏对话）
         # intentions → 软门控(priority) → 至多一个 share|tend|explore
+        # explore 另要求 mode==solitary（volition）
         ...
     async def prompt_extras(self) -> dict[str, str]:
         # recent_actions → conversation.txt【你做过的事】
@@ -289,10 +294,12 @@ class ActionLayer:
 ```
 
 **Brain 接线（已落地）：**
-- `_heartbeat`：`pending is None` 分支先 `action.tick`；若动手则不再 `pick_proactive_kind`
+- `_heartbeat`：`pending is None` 分支先 `action.tick`；若动手则 `_deliver_action_result`，不再 `pick_proactive_kind`
+- `_deliver_action_result`：WS `broadcast({"type":"action","payload":result})`；`creation_card` 的 `qi_line` 走 `_deliver_qi_message`（非 ProactiveGate）
 - `_gather_prompt_context`：`action.prompt_extras()` 并入 extras
-- `restore_state` / `save_state`：`action_budget` ↔ body_memory
+- `restore_state`：`ActionLayer(db, config, narrative=memory.narrative)`；预算 ↔ body_memory
 - assist 执行仍未接线（仅 volition 桩）
+- L6 前端尚无 `action` / `creation_card` handler（**故意缺口**，卡片 UI 待做）
 
 </details>
 
@@ -321,7 +328,7 @@ LLM 永远是栖的"声音"，不是栖的"手"。
 - [x] 信任门控按关系阶段正确放行/拦截（stranger 不递东西；读文件 friend+ 且需确认；不可逆永远需确认）
 - [x] share 与 L4 `maybe_share_hint` 分工清晰（提起 vs 递出），不重复
 - [x] explore 仅在 solitary + 高 curiosity 时偶发，非定时；无搜索时 found=None
-- [ ] 行动留痕三条去向完整（actions 必写；显著 share/tend 织 narrative；伤疤待失败路径）
+- [ ] 行动留痕三条去向完整（actions 必写；share/tend 已织 narrative；伤疤待失败路径）
 - [ ] 判断失败/权限越界形成伤疤，并使该类行动后续更谨慎
 - [x] 季节缩放生效（winter 意图 priority 显著低于 spring）
 

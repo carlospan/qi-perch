@@ -402,7 +402,21 @@ class PromptBuilder:
 # qi/core/brain.py —— 真实主循环骨架（与代码一致；细节见各层）
 # <!-- 回写(2026-07)：对齐 Brain 全栈心跳；删掉「仅 apply_decay」旧流程，
 #      依据：qi/core/brain.py:_heartbeat / start / receive_user_message -->
-# <!-- 回写(2026-07)：restore_state / pending 路径 / start 收尾对齐代码 -->
+# <!-- 回写(2026-07-25)：pending 队列 / _pending_speech / ActionLayer /
+#      first_time 先回复再独白 / 情绪落盘节流 / waking；依据：qi/core/brain.py -->
+
+PENDING_QUEUE_MAX = 8
+EMOTION_SAVE_MIN_INTERVAL = 30.0
+SEASON_EMOTION_HOURS = 24.0
+
+
+@dataclass
+class _PendingSpeech:
+    """生成已完成、待在心跳锁外停顿后再推送的话语。"""
+    text: str
+    now: datetime
+    proactive: bool
+
 
 class Brain:
     """栖的意识核心。心跳 + 记忆 + 情绪 + 内在生命 + 关系。"""
@@ -425,15 +439,20 @@ class Brain:
         self.user_online = True
         self.last_interaction = datetime.now()
         self.heartbeat_count = 0
-        self._pending_message: str | None = None
-        self._last_response: str | None = None
+        self._pending_queue: deque[str] = deque(maxlen=PENDING_QUEUE_MAX)
+        self._pending_speech: _PendingSpeech | None = None
+        self._last_emotion_saved_at: datetime | None = None
         self._heartbeat_lock = asyncio.Lock()
         self._db: Database | None = None
+        self._last_response: str | None = None
         self._bg_tasks: list[asyncio.Task] = []
+        self._prev_valence = self.emotion.valence
+        self._accumulated_suppressed = 0.0
         self.proactive = ProactiveGate(config)
         self.proactive_queue: asyncio.Queue[str] = asyncio.Queue()
-        # _prev_valence / _prev_arousal / _accumulated_suppressed /
-        # _drift_signals / _last_avatar_payload 等
+        self.action: ActionLayer | None = None
+        self._drift_signals: list[str] = []
+        self._last_avatar_payload: dict | None = None
 
     def attach_db(self, db: "Database") -> None:
         """仅设置 self._db。restore_state 不调用此方法，而是直接赋值。"""
@@ -456,6 +475,12 @@ class Brain:
             while self.alive:
                 async with self._heartbeat_lock:
                     await self._heartbeat()
+                    speech = self._take_pending_speech()
+                if speech is not None:
+                    # 主动开口：出锁后推送，不再人工停顿（用户回复才「想了想」）
+                    await self._deliver_qi_message(
+                        speech.text, speech.now, proactive=speech.proactive
+                    )
                 if not self.alive:
                     break
                 interval = next_interval(self.emotion, self.config)
@@ -467,37 +492,60 @@ class Brain:
     async def _heartbeat(self) -> str | None:
         """
         一次心跳（真实顺序）：
-        1. determine_mode(..., interacting=pending is not None)
-        2. 若有 pending：relationship.on_user_message → first_times.check
+        1. popleft pending（若有）；determine_mode(..., interacting=pending is not None)
+        2. 若有 pending：
+           relationship.on_user_message → first_times.check
+           → memory.notice_facts(...)
            → impact *= impact_mult；assess_impact → apply_event_impact
            → apply_security_hint；last_interaction = now
            → save_message("user") → memory.on_user_message
            → _apply_anomaly_nudge(anomalies)
         3. step_emotion(...)；可选 apply_season_effect；clamp_emotion
         4. _track_expression_threshold() → want_express
-        5. 条件满足时 inner_life.tick(..., after_first_time=...)
-        6a. 有 pending：_gather_prompt_context → expression.express → _deliver_qi_message
-        6b. 无 pending：pick_proactive_kind(...) → 主动 express + record
-        7. _sync_avatar；save_emotion
+        5. 无 pending：inner_life.tick(after_first_time=False)
+           （有 pending 时本步不跑，避免同拍独白启动）
+        6a. 有 pending：_gather_prompt_context → expression.express
+            → 写入 _pending_speech（锁外再 deliver）
+            → 若 triggered_first：再 inner_life.tick(after_first_time=True)
+        6b. 无 pending：先 action.tick（动了手则不再主动言语）；
+            否则 pick_proactive_kind → express → _pending_speech(proactive=True)
+            → record / persist gate
+        7. _sync_avatar；_maybe_save_emotion(force=有 pending)
         """
         ...
 
     async def receive_user_message(self, message: str) -> str | None:
-        self._pending_message = message
+        """入队（满则丢最早）；锁内心跳；出锁后 sleep(0.5~1.5) 再 _deliver_qi_message。"""
+        text = (message or "").strip()
+        if not text:
+            return None
         async with self._heartbeat_lock:
-            return await self._heartbeat()
+            if len(self._pending_queue) >= PENDING_QUEUE_MAX:
+                self._pending_queue.popleft()  # 丢最早
+            self._pending_queue.append(text)
+            await self._heartbeat()
+            speech = self._take_pending_speech()
+        if speech is None:
+            return None
+        await asyncio.sleep(random.uniform(0.5, 1.5))
+        await self._deliver_qi_message(
+            speech.text, speech.now, proactive=speech.proactive
+        )
+        return speech.text
 
     async def restore_state(self, db: "Database") -> None:
         """
         self._db = db（不调用 attach_db）；
         挂载 MemoryManager / InnerLife / RelationshipEngine / FirstTimeMemory / ScarManager；
-        memory.restore()、relationship.restore()、恢复 proactive_gate；
-        最后 load_emotion()。
+        memory.restore()、relationship.restore()；
+        ActionLayer(db, narrative=...) + restore_budget()；
+        恢复 proactive_gate；load_emotion()；
+        _maybe_mark_waking(db)（上次 user 非寒暄则 mark_waking）。
         """
         ...
 
     async def save_state(self, db: "Database") -> None:
-        """save_emotion + 关系/主动门控等持久化。"""
+        """save_emotion + proactive_gate + action_budget + relationship.persist。"""
         ...
 ```
 
@@ -559,9 +607,12 @@ class Perception:
 
 ```python
 # qi/core/expression.py
-# <!-- 回写(2026-07)：express 签名扩展，依据：qi/core/expression.py -->
+# <!-- 回写(2026-07-25)：express 内无 sleep；停顿在 brain.receive_user_message 出锁后；
+#      依据：qi/core/expression.py + brain.receive_user_message -->
 
 class Expression:
+    """栖开口的地方。想了想，再说话（停顿由 Brain 在心跳锁外完成）。"""
+
     def __init__(self, config: dict, llm: "LLMGateway"):
         self.config = config
         self.llm = llm
@@ -582,7 +633,7 @@ class Expression:
         season: str = "spring",
         proactive_kind: str | None = None,
     ) -> str:
-        await asyncio.sleep(random.uniform(0.5, 1.5))
+        # 无 asyncio.sleep —— 生成在锁内；用户回复的「想了想」在 receive_user_message 出锁后
         messages = self.prompt_builder.build_conversation_prompt(...)
         return await self.llm.call(purpose="conversation", messages=messages)
 ```
@@ -661,8 +712,8 @@ async def run_terminal() -> None:
 
 # 关键设计：
 # - 后台心跳与用户输入并发（brain.start() 独立 task）
-# - 主动表达经 proactive_queue 推到终端
-# - receive_user_message 走单飞锁
+# - 用户回复：锁内生成 → 出锁 sleep → _deliver_qi_message；主动开口经 _pending_speech 出锁推送，并可经 proactive_queue 到终端
+# - receive_user_message：deque 队列（满丢最早）+ 心跳锁
 ```
 
 ### Step 5：持久化
@@ -740,13 +791,14 @@ class Database:
 ```
 
 **保存时机总结：**
-- `save_emotion`：每次 `_heartbeat()` 末尾（有 `self._db` 时）
+- `save_emotion`：`_heartbeat` 末尾经 `_maybe_save_emotion`（空心跳默认 ≥30s 节流；有 pending 时 force 立即写）
 - `save_message("user", ...)`：心跳内处理 pending 时（有 db）
-- `save_message("qi", ...)`：`_deliver_qi_message` 内（含主动开口）
+- `save_message("qi", ...)`：`_deliver_qi_message` 内（含主动开口；在锁外推送时执行）
 - `load_emotion`：程序启动 `brain.restore_state(db)`
 - `load_recent_messages`：无 MemoryManager 时由 `_gather_prompt_context` 拉取；有记忆层则用工作记忆
 
 <!-- 回写(2026-07)：保存时机对齐 brain._heartbeat / _deliver_qi_message，依据：qi/core/brain.py -->
+<!-- 回写(2026-07-25)：情绪落盘节流 _maybe_save_emotion；依据：brain.py -->
 
 </details>
 
@@ -779,5 +831,6 @@ L2（记忆）需要：
 - [ ] 不用"您"（检查 prompt）
 - [ ] 不说"有什么可以帮您"（检查 prompt）
 - [ ] 回复不超过 3 句（检查 prompt 中的长度约束）
-- [ ] 不秒回（expression.py 中加 0.5~1.5s 随机延迟）
+- [ ] 不秒回（`receive_user_message` 出锁后 `sleep(0.5~1.5)`；`expression.express` 内无 sleep；主动开口出锁后直接推送）
+  <!-- 回写(2026-07-25)：停顿位置对齐 brain.receive_user_message，依据：brain.py / expression.py -->
 - [ ] 情绪用自然语言描述，不报数值（检查 prompt_builder）

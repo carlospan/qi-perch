@@ -1,7 +1,10 @@
 # IDE Agent 同步栖的层文档代码块 · 提示词模板
 
 > 与 `IDE-Agent-执行栖的开发任务.md` 配套。那份是"按层文档写代码"，这份是反过来——"按代码回写层文档里的实现规格代码块"。
-> 背景：栖的代码已经写完并通过审查（67 项测试全过），但 `docs/layers/` 层文档里的"实现规格"代码块大量落后于代码（引用了代码里不存在的方法、签名/公式/常量与现状不符）。代码是现状权威，层文档需要回写到与代码一致。
+> 背景：层文档实现规格须与代码一致。代码是现状权威。测试规模约 **132**（以 `pytest` 为准）。
+> <!-- 回写(2026-07-25)：测试数 67→132；范围扩至 L7 / L2-user-facts；补 2026-07-25 brain 时序。
+>      续：L2 MemoryManager facts；L3 mood md5 + DECAY_RATES + YAML threshold；
+>      L6 history/journal/action 协议；L7 narrative 恒织 + mode 门控 + _deliver_action_result。 -->
 
 ---
 
@@ -33,9 +36,9 @@ gateway 内部用 qi/llm/providers/openai_compat.py 做协议适配。
 ---
 
 【任务范围】
-逐层处理 docs/layers/ 下的 6 个文件：
-  L1-heartbeat.md / L2-memory.md / L3-emotion-full.md
-  L4-inner-life.md / L5-relationship.md / L6-embodiment.md
+逐层处理 docs/layers/ 下文件（默认全做；可「本次只做 Ln」）：
+  L1-heartbeat.md / L2-memory.md / L2-memory-user-facts.md / L3-emotion-full.md
+  L4-inner-life.md / L5-relationship.md / L6-embodiment.md / L7-action.md
 
 每个层文档里都有若干"实现规格"代码块（有的包在 <details><summary>实现规格…</summary>
 里，有的以"**实现规格：**"开头）。这些代码块就是要回写的对象。
@@ -44,10 +47,11 @@ gateway 内部用 qi/llm/providers/openai_compat.py 做协议适配。
   L1 → qi/core/brain.py, qi/core/rhythm.py, qi/core/perception.py, qi/core/emotion.py,
        qi/core/expression.py, qi/llm/gateway.py, qi/llm/prompt_builder.py,
        qi/llm/providers/openai_compat.py, qi/storage/database.py, qi/cli.py,
-       qi/config/settings.example.yaml
+       qi/config/settings.example.yaml, qi/action/（ActionLayer 接线）
   L2 → qi/memory/manager.py, qi/memory/working.py, qi/memory/narrative.py,
        qi/memory/first_time.py, qi/memory/body_memory.py, qi/memory/vector_store.py,
        qi/storage/database.py, qi/llm/prompt_builder.py
+  L2-user-facts → qi/memory/facts.py, qi/memory/manager.py, qi/prompts/fact_noticing.txt
   L3 → qi/core/emotion.py（耦合矩阵 / 内在天气周期 / 日内节律 / 心情周期）、
        qi/core/rhythm.py（模式切换）、qi/core/perception.py
   L4 → qi/inner_life/consciousness.py, qi/inner_life/dream.py, qi/inner_life/creativity.py,
@@ -58,6 +62,7 @@ gateway 内部用 qi/llm/providers/openai_compat.py 做协议适配。
   L6 → qi/embodiment/server.py, qi/embodiment/avatar/controller.py,
        qi/embodiment/avatar/states.py, qi/embodiment/voice/tts.py, qi/cli.py,
        qi/embodiment/desktop/（前端，仅在文档涉及处参考）
+  L7 → qi/action/（layer/budget/permission/share/tend/explore 等）, brain 接线
 
 ---
 
@@ -90,9 +95,23 @@ gateway 内部用 qi/llm/providers/openai_compat.py 做协议适配。
 
 L1 心跳：
 - Brain Loop 真实结构：模式判定(determine_mode) → 处理消息 → step_emotion
-  → inner_life.tick → 表达/主动行为 → 同步 avatar。文档若出现 Volition / Percept 类、
-  _stir / _inner_life_tick / gather 等旧架构名字，按真实 brain.py 改写。
+  →（无 pending）inner_life.tick → 有 pending 则 express →（first_time 则再 tick）
+  → 无 pending 则 action.tick 优先，再主动言语 → 同步 avatar。
+- pending：`_pending_queue`（maxlen=8）；话语：`_pending_speech` 锁外推送。
+- 用户回复停顿在 `receive_user_message` 出锁后 sleep(0.5~1.5)；`expression.express` 无 sleep。
+- restore：ActionLayer + `_maybe_mark_waking`。情绪落盘：`_maybe_save_emotion` 节流。
 - qi/cli.py 并发模型：阻塞调用用 run_in_executor；LLM 失败有兜底。
+
+L4 内在生命：
+- 意识流：InnerLife.tick 外层门控为 `mode != "awake" or after_first_time` 才 maybe_generate。
+  should_trigger：first_time 优先；emotion_surge（|Δ|>0.3）；silence（>4h 且非 awake）；
+  random 5% 仅 solitary；ambient_drift = probability×0.2 + stream 冷却（默认 45min）。
+  waking：重启后实质近聊；EMBER_TRIGGERS 喂近聊余烬；事件触发不受冷却。
+- Brain：first_time 意识流在 **express 之后**（防同拍诗意启动）。
+- 元认知 META_COGNITION_PROBABILITY = **0.01**（非 0.02）；仅非 awake。
+- 创作：基础概率 0.01，高情绪(>0.7)升档 0.03；分享需 friend/bonded 阶段、
+  24h 冷却、且有约 25% 随机门控。
+- 自我反思：约每 7 天一次；self_model 有真实字段写入。
 
 L2 记忆：
 - 叙事记忆衰减：strength *= 0.999（每日），首次记忆 strength 恒为 1.0。
@@ -103,40 +122,43 @@ L2 记忆：
 - 叙事编织：每 6 小时一次，且要有未处理的重要事件才真正触发。
 - 工作记忆上限 max_working_memory = 20。
 
+L2 用户事实：
+- FactNoticer.notice(..., recent_messages=)；名字门控 looks_like_person_name；
+  _NAME_REJECT_TOKENS 含「谢谢你」等；FactStore.retire / _purge_bogus_identity。
+
 L3 情绪：
 - 六维 + DECAY_RATES + COUPLING 矩阵 + 心情周期（目标趋近，速率约 0.05）+ 日内节律。
+  日噪声用 md5(f"qi-mood-day:{toordinal}")，勿写 builtin hash。
+  expression_threshold 默认 0.3，可由 config emotion.expression_threshold 覆盖。
   以 qi/core/emotion.py 真实常量/公式为准，逐个核对数值。
-
-L4 内在生命：
-- 意识流：InnerLife.tick 外层门控为 `mode != "awake" or after_first_time` 才 maybe_generate。
-  should_trigger：first_time 优先；emotion_surge（|Δ|>0.3）本身无模式判断；
-  silence（>4h）仅非 awake；random 5% 仅 solitary。
-- 元认知 / 创作 / 做梦：仅在非 awake。
-- 创作：基础概率 0.01，高情绪(>0.7)升档 0.03；分享需 friend/bonded 阶段、
-  24h 冷却、且有约 25% 随机门控。
-- 自我反思：约每 7 天一次；self_model 有真实字段写入（对照 self_model.py 与
-  tests/test_self_model_fields.py）。
 
 L5 关系：
 - 阶段：stranger → acquaintance → friend → bonded，只升不降。
 - 信任：正向约 +0.02~0.05，损伤约 -0.1~0.3；伤疤阈值约 0.15；漂移阈值约 0.4。
 - 第一次记忆：7 种类型（含 first_compliment、first_shared_silence），
   冲击 ×3，回忆冷却 7 天（RECALL_COOLDOWN）。
+  first_compliment：**不含**光秃「谢谢你」（需「谢谢你昨晚/陪/愿意…」等）。
 - 关系叙事：在阶段升迁时更新（非周期性）。
 - 主动行为门控（qi/core/proactive.py）：每日上限 3（PROACTIVE_DAILY_LIMIT），
   冷却 check_in 4h / reach_out 8h / share_creation 24h / express_feeling 2h，
-  陌生人抑制。文档若把这些写成"无实现"或缺失，按真实代码补上。
+  陌生人抑制。交付主路径 `_pending_speech`；`proactive_queue` 为终端旁路。
 
 L6 具身：
 - WebSocket 127.0.0.1:9527；TTS 用 edge-tts，pitch 单位是 Hz；
   voice_id = zh-CN-XiaoyiNeural。
+- 命令：/state /history /journal；后端另可推 action（前端未处理）。
+- 谈=history；忆=journal（独白/梦/第一次）。
 - ASR（语音识别）未实现——文档若写了 asr.py，标注"未实现/未来方向"，不要伪造代码。
 - 桌面壳是 Tauri 2 + Vue3 + Vite，无 sidecar 进程。
+
+L7 行动：
+- share/tend 恒织 narrative（0.78 / 0.7）；explore 不织。
+- tick 仅 solitary|ambient；awake 不自主伸手；_deliver_action_result 推 WS action。
 
 ---
 
 【工作方式】
-按 L1 → L6 顺序，一次处理一层：
+按 L1 → L7 顺序，一次处理一层：
 1. 读取该层文档全文。
 2. 读取该层对应的所有真实代码文件（见上方对应关系）。
 3. 逐个"实现规格"代码块比对：找出"文档有代码没有"和"代码有文档没有"两类差异。

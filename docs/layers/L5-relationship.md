@@ -274,11 +274,14 @@ def apply_scar_healed_bonus(trust: float) -> float:
 # <!-- 回写(2026-07)：FirstTimeMemory.check / maybe_recall_hint；依据：qi/memory/first_time.py -->
 # <!-- 回写(2026-07-25)：放宽 first_existential_question / first_compliment 初筛
 #      （如「你自己是什么」「你有意识吗」「我很喜欢」「你说话很…」）；仍先 rule 再可选 LLM 确认。 -->
+# <!-- 回写(2026-07-25)：收窄 first_compliment——单独「谢谢你」不触发；
+#      需「谢谢你昨晚/陪/愿意/一直」「太谢谢你了」等；防诗意启动与误记夸奖。 -->
 
 RECALL_COOLDOWN = timedelta(days=7)
 # 7 种：first_goodnight / first_i_miss_you / first_argument / first_vulnerability /
 #       first_existential_question / first_compliment / first_shared_silence
 # first_shared_silence：沉默 300~900s + 放松短句（is_comfortable_silence）；不走 LLM 确认
+# first_compliment：不含光秃「谢谢你」
 
 
 class FirstTimeMemory:
@@ -286,7 +289,8 @@ class FirstTimeMemory:
         self, message, emotion, *, silence_before: float | None = None
     ) -> tuple[float, str | None]:
         # 规则初筛 rule_match → 可选 LLM _confirm(purpose=conversation)
-        # 命中 → db.save_first_time；content 模板「他说：「…」」；inner 用 purpose=consciousness
+        # 命中 → db.save_first_time；content 模板「他说：「…」」；
+        # inner：purpose=consciousness；短、真；勿字面在场/舞台指示
         # 返回 (3.0, event_type) 或 (1.0, None)
         ...
 
@@ -301,9 +305,10 @@ class FirstTimeMemory:
 **Brain 接线：**
 - `silence_before = perception.detect_silence(...)` → `first_times.check(..., silence_before=...)`
 - `impact *= impact_mult`（倍率在 brain，非 emotion.apply_event_impact 内部）
-- `inner_life.tick(..., after_first_time=bool(triggered_first))`
-- `_gather_prompt_context` → `extras["first_time_hint"]`
-
+- **先** `_gather_prompt_context` → `expression.express` → `_pending_speech`
+- **再**若 `triggered_first`：`inner_life.tick(..., after_first_time=True)`（开口后再写意识流）
+- `_gather_prompt_context` → `extras["first_time_hint"]`（回忆 hint，与本拍新独白分轨）
+<!-- 回写(2026-07-25)：first_time 时序对齐 brain；依据：qi/core/brain.py -->
 </details>
 
 ### Step 4：共同文化 + 伤疤
@@ -479,8 +484,9 @@ def pick_proactive_kind(*, want_express, relationship_stage, emotion_security,
     ...
 ```
 
-**Brain：**无消息心跳 → **先** `action.tick`（L7；动手则跳过主动言语）→ 若未动手再 `pick_proactive_kind` → `expression.express(..., proactive_kind=)` → `gate.record` → `proactive_queue`。
+**Brain：**无消息心跳 → **先** `action.tick`（L7；动手则跳过主动言语）→ 若未动手再 `pick_proactive_kind` → `expression.express(..., proactive_kind=)` → `gate.record` → 写入 `_pending_speech(proactive=True)`；`start()` 出锁后 `_deliver_qi_message`（并 `proactive_queue.put` 供终端排水）。用户回复路径同：锁内生成 → 出锁 sleep → deliver。
 <!-- 回写(2026-07-23)：行动与主动言语同拍不叠加；依据：qi/core/brain.py -->
+<!-- 回写(2026-07-25)：主交付为 _pending_speech；proactive_queue 为终端旁路；依据：brain.start / _push_proactive_text -->
 
 </details>
 

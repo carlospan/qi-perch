@@ -107,31 +107,58 @@ CREATE TABLE IF NOT EXISTS self_model (
 ```python
 # qi/inner_life/consciousness.py
 # <!-- 回写(2026-07-25)：ambient_drift、waking、冷却、chat_embers；依据：consciousness.py + InnerLife.tick -->
+# <!-- 回写(2026-07-25)：补 META=0.01、事件/余烬集合、is_trivial_utterance；依据：consciousness.py -->
 
 CONSCIOUSNESS_PROBABILITY = 0.05
 AMBIENT_DRIFT_FACTOR = 0.2
 STREAM_COOLDOWN_MINUTES = 45
 EMOTION_SURGE_THRESHOLD = 0.3
 SILENCE_TRIGGER_HOURS = 4
+META_COGNITION_PROBABILITY = 0.01
+META_SIMILARITY_THRESHOLD = 0.6
+META_MIN_LENGTH = 15
+META_DEDUP_LOOKBACK = 5
+_EVENT_TRIGGERS = frozenset({"waking", "first_time", "emotion_surge"})  # 不受冷却
+_EMBER_TRIGGERS = frozenset({"waking", "silence", "first_time"})  # 喂近聊余烬
 
 
-def should_trigger_consciousness(...) -> tuple[bool, str]: ...
-# ambient: probability * ambient_factor → "ambient_drift"
-# InnerLife：_just_woke 仅在非 awake 且成功生成后清除
-# generate：EMBER_TRIGGERS 喂近聊余烬；waking 提示「停机时没在想」
+def is_trivial_utterance(text: str) -> bool:
+    """纯寒暄 / 极短应答：不触发 waking（brain._maybe_mark_waking 使用）。"""
+    ...
+
+
+def should_trigger_consciousness(
+    mode, emotion_delta_valence, emotion_delta_arousal, silence_duration,
+    after_first_time=False, probability=CONSCIOUSNESS_PROBABILITY,
+    ambient_factor=AMBIENT_DRIFT_FACTOR,
+) -> tuple[bool, str]:
+    # first_time → emotion_surge(|Δ|>0.3) → silence(>4h 且非 awake)
+    # → solitary random(probability) → ambient_drift(probability * ambient_factor)
+    ...
+
+
+def emotion_residue_hint(emotion) -> str: ...  # 对话注入：余温 ≠ 想完证据
 
 
 class ConsciousnessStream:
-    async def maybe_generate(...) -> str | None: ...
-    # purpose=consciousness, temperature=0.85；内容截断约 500 字
-    async def recent_for_prompt() -> str: ...  # 最近 type=='stream'
+    async def maybe_generate(
+        ..., after_first_time=False, just_woke=False, prev_valence=None, prev_arousal=None,
+    ) -> str | None:
+        # just_woke and mode!="awake" → generate(..., "waking")（绕过概率）
+        # 非事件触发须 _cooldown_elapsed()（距上次 stream ≥ cooldown）
+        ...
+    async def generate(emotion, silence, trigger) -> str | None:
+        # EMBER_TRIGGERS：format_chat_embers(load_recent_messages)
+        # 模板含 chat_embers / trigger_hint；purpose=consciousness, temperature=0.85；截断 ~500
+        ...
+    async def recent_for_prompt() -> str: ...  # 最近 type=='stream'，limit=2 / 24h
     async def maybe_meta(...) -> str | None: ...  # Step 6
 ```
 
 **外层门控（`InnerLife.tick`）：** `mode != "awake" or after_first_time` 才调用 `maybe_generate`。  
 **Brain 时序：** 无用户句时照常 tick；若本拍触发了 first_time，**先 express 再** `tick(after_first_time=True)`，避免独白经 `recent_thoughts` 同拍启动、把意象投射成对方说的话。  
   <!-- 回写(2026-07-25)：诗意启动修复；依据：brain._heartbeat。 -->
-**Prompt：** 读 `qi/prompts/consciousness_stream.txt`。
+**Prompt：** 读 `qi/prompts/consciousness_stream.txt`（含余烬与「勿字面在场」）。
 
 ### Step 3：梦境引擎
 
@@ -287,17 +314,20 @@ def _extract_existential(narrative) -> list[str]: ...  # 固定问句最多 4
 
 ### Step 6：元认知
 
-- 与意识流**独立**：非 awake 时每次 tick 以 `META_COGNITION_PROBABILITY`（0.02）判定，不依赖意识流是否触发
-- 输出 `consciousness_stream`（type=`meta`）；不改情绪、不注入对话 prompt
+- 与意识流**独立**：非 awake 时每次 tick 以 `META_COGNITION_PROBABILITY`（**0.01**）判定，不依赖意识流是否触发
+- 输出 `consciousness_stream`（type=`meta`）；不改情绪、不注入对话 prompt（`recent_for_prompt` 只取 stream）
 - 验收：长时间运行后偶尔出现 type=`meta`
 
 **实现规格：**
 
 ```python
 # qi/inner_life/consciousness.py — maybe_meta
-# <!-- 回写(2026-07)：独立 2%、非 awake；temperature=0.7；截断 80 字，依据：maybe_meta -->
+# <!-- 回写(2026-07-25)：META_COGNITION_PROBABILITY = 0.01（非 0.02）；依据：consciousness.py + test_meta_probability_reduced -->
 
-META_COGNITION_PROBABILITY = 0.02
+META_COGNITION_PROBABILITY = 0.01
+META_SIMILARITY_THRESHOLD = 0.6
+META_MIN_LENGTH = 15
+META_DEDUP_LOOKBACK = 5
 
 
 def should_trigger_meta(mode: str, probability: float = META_COGNITION_PROBABILITY) -> bool:
@@ -309,6 +339,7 @@ def should_trigger_meta(mode: str, probability: float = META_COGNITION_PROBABILI
 # ConsciousnessStream.maybe_meta：
 #   purpose="consciousness"（同意识流路由）, temperature=0.7
 #   内联短 prompt（非独立 txt）；content 截断约 80 字
+#   过短 / 与近 5 条（含 meta）字符 Jaccard 过似 → 丢弃不落库
 # InnerLife.tick：仅 mode != "awake" 时调用
 ```
 
@@ -318,24 +349,36 @@ def should_trigger_meta(mode: str, probability: float = META_COGNITION_PROBABILI
 
 ```python
 # qi/inner_life/__init__.py
+# <!-- 回写(2026-07-25)：mark_waking / emotion_residue；依据：InnerLife -->
 
 class InnerLife:
+    def __init__(...):
+        self._just_woke = False
+        ...
+
+    def mark_waking(self) -> None:
+        """重启后标记：下一次非 awake 心跳触发 waking 意识流。"""
+        self._just_woke = True
+
     async def tick(
         self, emotion, last_interaction, now, relationship_stage="stranger",
         after_first_time: bool = False,
     ) -> EmotionState:
         # awake：梦余韵一次；note_emotion_surge
-        # mode!="awake" or after_first_time → consciousness.maybe_generate
+        # mode!="awake" or after_first_time → maybe_generate(just_woke=...)
+        #   just_woke 仅 mode!="awake"；成功生成后才清 _just_woke
         # mode!="awake" → maybe_meta / maybe_create / maybe_dream
         ...
 
     async def prompt_extras(emotion, relationship_stage) -> dict[str, str]:
         # recent_thoughts / self_narrative / dream_hint / creation_hint
+        # emotion_residue（余温文案，供 conversation 分轨）
         ...
 ```
 
 **Brain：**
 - `_heartbeat`：无用户句时 `inner_life.tick`；若触发 first_time，则 **express 之后**再 `tick(after_first_time=True)`（防同拍诗意启动）
+- `restore_state`：`_maybe_mark_waking`（上次 user 非寒暄 → `mark_waking`）
 - `_gather_prompt_context`：`prompt_extras()` → expression
 - 后台：`_background_self_reflection`、`_background_dream_decay`（每小时）
 - 另：季节变化 / 用户漂移可直接 `save_consciousness`（trigger=`season_change` / `user_drift`）

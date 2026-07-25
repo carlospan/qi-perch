@@ -33,6 +33,8 @@ qi/memory/facts.py         # 用户事实记忆（FactStore / FactNoticer / form
 qi/storage/database.py     # narrative_memories、body_memory、raw_events、user_facts 等表
 ```
 
+> `first_time.py` 实现规格与叙事归 **L5**（`FirstTimeMemory` 由 Brain 直接持有，不经 `MemoryManager`）。本层只列文件归属。
+
 ## 实现步骤
 
 ### Step 1：数据库扩展
@@ -386,6 +388,8 @@ _RELATIONSHIP = (...)
 _PROMISE = ("下次", "以后", "改天", "回头", "等我", "明天给你", "周末")
 
 
+# <!-- 回写(2026-07-25)：补 FactStore / FactNoticer / notice_facts / active_facts，
+#      依据：qi/memory/manager.py -->
 class MemoryManager:
     def __init__(self, db: "Database", config: dict, llm: "LLMGateway | None" = None):
         mem_cfg = config.get("memory", {})
@@ -395,11 +399,24 @@ class MemoryManager:
         self.vector_store = VectorStore(persist_dir=chroma_dir)
         self.narrative = NarrativeMemory(db, self.vector_store, llm=llm)
         self.body = BodyMemory(db)
+        self.facts = FactStore(db)
+        self.fact_noticer = FactNoticer(self.facts, llm=llm)
         self.llm = llm
 
     async def restore(self) -> None:
+        """醒来时装回工作记忆；事实按需从 DB 读，不必预装。"""
         recent = await self.db.load_recent_messages(limit=self.working.max_size)
         self.working.load_from_db(recent)
+
+    async def notice_facts(
+        self, message: str, emotion: "EmotionState",
+        relationship_stage: str, now: datetime | None = None,
+    ) -> list[dict]:
+        """用既有工作记忆作多拍上下文；细节见 L2-memory-user-facts.md。"""
+        ...
+
+    async def active_facts(self, fact_type: str | None = None) -> list[dict]:
+        return await self.facts.active_facts(fact_type)
 
     async def save(self, content: str, importance: float,
                    emotional_intensity: float = 0.5,

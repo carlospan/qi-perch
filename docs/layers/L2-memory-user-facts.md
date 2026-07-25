@@ -164,10 +164,17 @@ class FactNoticer:
         self.llm = llm
 
     async def notice(
-        self, message: str, emotion, relationship_stage: str, now: datetime
+        self,
+        message: str,
+        emotion,
+        relationship_stage: str,
+        now: datetime | None = None,
+        recent_messages: list[dict] | None = None,
     ) -> list[dict]:
         """
         在收到一条用户消息的当下，留意其中关于用户的事实。
+        recent_messages：当前句尚未入工作记忆前的近期对话（含 user/qi），
+        用于邀名与多拍「光给名字」上下文。
         返回本拍新记下 / 确认 / 取代的事实（用于留痕与日志）。
         """
         # 1. 便宜初筛：
@@ -183,7 +190,15 @@ class FactNoticer:
         #    - state 事实与已有 active 冲突 → supersede（旧事实留痕，指向新事实）
         #    - 全新 → add
         #    - confidence < CONFIDENCE_FLOOR 的推断 → 不存（留给 user_model/drift）
+        # 4. 收尾：_purge_bogus_identity（非法人名形态的 identity → retire / supersede）
         ...
+
+
+# 辅助（模块级，已落地）：
+# looks_like_person_name / is_name_memory_question / is_name_disclosure_intent /
+# is_bare_name_utterance / identity_name_fragment / format_facts_for_prompt
+# _NAME_REJECT_TOKENS 含「谢谢」「谢谢你」等，防误记「他叫谢谢你」
+# <!-- 回写(2026-07-25)：notice(recent_messages=…)；名字拒绝表扩「谢谢你」；依据：facts.py -->
 ```
 
 **Brain 接线（已落地，见 Step 6）：** `brain._heartbeat` 处理 pending 时，与 `first_times.check` 并列调用：
@@ -232,6 +247,10 @@ class FactStore:
         """旧事实被新事实取代：old.superseded_by = new_id。旧事实保留留痕。"""
         ...
 
+    async def retire(self, fact_id: int) -> None:
+        """作废非法/脏 identity（如「他叫谢谢你」）：superseded_by 指向自身等。"""
+        ...
+
     async def find_similar(self, fact_type: str, content: str) -> dict | None:
         """在 active 事实里找语义相近的一条（去重/确认/判断是否冲突用）。
         简单实现：同 type 下做字符串/关键词相似度；不依赖向量库。"""
@@ -239,6 +258,8 @@ class FactStore:
 ```
 
 > 去重不依赖 ChromaDB：事实是少量、稳定的，用同 type 下的轻量相似度判断即可，不必进向量库。这与叙事记忆（大量、需语义检索）不同。
+
+<!-- 回写(2026-07-25)：补 FactStore.retire；依据：qi/memory/facts.py -->
 
 </details>
 
@@ -337,7 +358,8 @@ def format_facts_for_prompt(facts: list[dict], relationship_stage: str) -> str:
 #   self.fact_noticer = FactNoticer(self.facts, llm=llm)
 # 暴露：
 #   async def notice_facts(self, message, emotion, relationship_stage, now):
-#       return await self.fact_noticer.notice(...)
+#       recent = working 上下文（当前句若已是末条 user 则剥掉）
+#       return await self.fact_noticer.notice(..., recent_messages=recent)
 #   async def active_facts(self, fact_type=None):
 #       return await self.facts.active_facts(fact_type)
 
@@ -347,6 +369,7 @@ def format_facts_for_prompt(facts: list[dict], relationship_stage: str) -> str:
 #   extras["user_facts"] = format_facts_for_prompt(await self.memory.active_facts(), stage)
 # <!-- 回写(2026-07-23)：依据 qi/core/brain.py；gateway purpose=fact 默认温度 0.3；
 #      settings.example.yaml model_routing.fact -->
+# <!-- 回写(2026-07-25)：notice_facts 传入 recent_messages；依据：manager.py -->
 ```
 
 </details>

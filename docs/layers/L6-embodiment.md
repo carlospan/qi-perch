@@ -67,8 +67,8 @@ qi/cli.py                             # qi-desktop：Brain + EmbodimentServer
 
 - 建 `qi/embodiment/server.py`：Python 端开 WebSocket（`127.0.0.1:9527`）
 - 消息协议：
-  - 后端→前端：`speech` / `state`（含 `avatar_state`+`season`+`mode`）/ `typing` / `ping` / `audio`
-  - 前端→后端：`user_message` / `presence` / `pong`（可选 `command` `/state`）
+  - 后端→前端：`speech` / `state`（含 `avatar_state`+`season`+`mode`）/ `typing` / `ping` / `audio` / `history` / `journal` / `emotion_update`；另有 `action`（L7 推送，**前端尚未处理**）
+  - 前端→后端：`user_message` / `presence` / `pong`；`command`：`/state` / `/history` / `/journal`
 - 修改 `qi/core/brain.py`：`attach_embodiment` + `_emit_speech` / `_sync_avatar` 推送
 - 验收：Python 后端发消息，前端能收到
 
@@ -104,7 +104,10 @@ class EmbodimentServer:
         # presence → brain.user_online + perception.set_user_presence
         # pong → pass
         # command "/state" → emotion_update（含 stage）
+        # command "/history" → history{messages}（谈：SQLite 全量）
+        # command "/journal" → journal{entries}（忆：独白/梦/第一次）
         # 前端 useQi 连接时 + 每 ~8s 发 command /state 拉情绪快照（Brain 心跳未主动 push emotion_update）
+        # 连接后 useQi 另发 /history、/journal
         ...
 
     async def broadcast(self, message: dict) -> None: ...
@@ -115,10 +118,14 @@ class EmbodimentServer:
     async def send_typing(self) -> None: ...
     async def send_emotion_update(self, snapshot: dict) -> None: ...  # 接口在；心跳未调，靠前端 /state 轮询
     async def send_audio(self, audio_b64: str, mime: str = "audio/mpeg") -> None: ...
+    # _send_history / _send_journal：按请求方 websocket 回包（非全员 broadcast）
 
+# <!-- 回写(2026-07-25)：补 history/journal/action；依据：server.py、brain._deliver_action_result -->
 # 协议：
-# 后端→前端：speech | state{avatar_state,season?,mode?} | typing | emotion_update | ping | audio{data,mime}
-# 前端→后端：user_message | presence | pong | command
+# 后端→前端：speech | state{avatar_state,season?,mode?} | typing | emotion_update
+#            | ping | audio{data,mime} | history{messages} | journal{entries}
+#            | action{payload}（L7 推送；前端尚无 handler，creation_card UI 待做）
+# 前端→后端：user_message | presence | pong | command{/state|/history|/journal}
 #
 # 前端重连（ws.ts）：指数退避 1s→…→30s；onopen 发 presence online
 # 启动：qi-desktop（Brain∥WS）+ npm run tauri:dev（或 npm run dev）
@@ -222,7 +229,7 @@ class AvatarController:
 
 - 窗口：**420×680**，透明无边框；header `data-tauri-drag-region`
 - 主界面按 `docs/dev/主界面设计-黄昏的枝.md`：
-  - 静 / 谈 / 忆（`ViewTabs`）；谈=本次会话内存历史；忆=诚实空占位（第二期再接后端）
+  - 静 / 谈 / 忆（`ViewTabs`）；谈=连接后 `/history` 灌入 SQLite 全量，本轮继续 append；忆=连接后 `/journal` 拉独白/梦/第一次（库空则诚实空）
   - `SceneView` 氛围 + `useEmotion` §五公式；`WhisperView` 低语（等待态文案符合人设）
   - Live2D 形象见 `docs/dev/主界面-Live2D接入.md`（`Live2DView` / `useLive2D`）
 - 依赖：`pixi.js@6.5.10` + `pixi-live2d-display@0.4.0`；Cubism Core **不入库**，须本地放入 `public/live2dcubismcore.min.js`
