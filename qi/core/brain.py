@@ -395,14 +395,16 @@ class Brain:
 
         want_express = self._track_expression_threshold()
 
-        if self.inner_life is not None and (pending is None or triggered_first):
+        # 无用户句时照常跑内在生命；有 first_time 时把意识流放到回复之后，
+        # 避免同拍独白经 recent_thoughts 启动效应，把意象投射成「对方说的」。
+        if self.inner_life is not None and pending is None:
             try:
                 self.emotion = await self.inner_life.tick(
                     self.emotion,
                     self.last_interaction,
                     now,
                     self.relationship_stage,
-                    after_first_time=bool(triggered_first),
+                    after_first_time=False,
                 )
                 self.emotion = clamp_emotion(self.emotion)
             except Exception:
@@ -447,6 +449,20 @@ class Brain:
                 logger.warning(
                     "对话表达返回空串，本轮不说话（检查 API 密钥/网络/provider）"
                 )
+
+            # 第一次之后再想一次：在开口之后写意识流，供「忆」与下一轮，不污染本轮回复
+            if self.inner_life is not None and triggered_first:
+                try:
+                    self.emotion = await self.inner_life.tick(
+                        self.emotion,
+                        self.last_interaction,
+                        now,
+                        self.relationship_stage,
+                        after_first_time=True,
+                    )
+                    self.emotion = clamp_emotion(self.emotion)
+                except Exception:
+                    logger.exception("第一次后意识流 tick 出错")
 
         elif pending is None:
             silence_seconds = self.perception.detect_silence(self.last_interaction, now)

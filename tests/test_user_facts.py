@@ -397,3 +397,5 @@ async def test_looks_like_person_name_gate():
     assert not looks_like_person_name("吗")
     assert not looks_like_person_name("什么")
     assert not looks_like_person_name("好的")
+    assert not looks_like_person_name("谢谢你")
+    assert not looks_like_person_name("谢谢")

@@ -18,6 +18,7 @@ def test_read_prompt_conversation():
     assert "意象与存在" in text
     assert "未加框的在场宣称" in text or "字面在场" in text
     assert "文学" in text or "比喻" in text
+    assert "不要替对方补比喻" in text or "对方实际说过" in text
     assert "【陌生期硬约束】" in text
     assert "不要用「嗯」省略寒暄" in text
     assert "不要主动评论对方的作息或状态" in text

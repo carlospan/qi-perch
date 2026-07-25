@@ -129,6 +129,8 @@ class ConsciousnessStream:
 ```
 
 **外层门控（`InnerLife.tick`）：** `mode != "awake" or after_first_time` 才调用 `maybe_generate`。  
+**Brain 时序：** 无用户句时照常 tick；若本拍触发了 first_time，**先 express 再** `tick(after_first_time=True)`，避免独白经 `recent_thoughts` 同拍启动、把意象投射成对方说的话。  
+  <!-- 回写(2026-07-25)：诗意启动修复；依据：brain._heartbeat。 -->
 **Prompt：** 读 `qi/prompts/consciousness_stream.txt`。
 
 ### Step 3：梦境引擎
@@ -333,7 +335,7 @@ class InnerLife:
 ```
 
 **Brain：**
-- `_heartbeat`：条件满足时 `inner_life.tick(..., after_first_time=...)`
+- `_heartbeat`：无用户句时 `inner_life.tick`；若触发 first_time，则 **express 之后**再 `tick(after_first_time=True)`（防同拍诗意启动）
 - `_gather_prompt_context`：`prompt_extras()` → expression
 - 后台：`_background_self_reflection`、`_background_dream_decay`（每小时）
 - 另：季节变化 / 用户漂移可直接 `save_consciousness`（trigger=`season_change` / `user_drift`）
