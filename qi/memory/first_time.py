@@ -179,7 +179,10 @@ class FirstTimeMemory:
             messages=[
                 {
                     "role": "system",
-                    "content": "你是栖。用一两句写此刻内在体验。短，真。",
+                    "content": (
+                        "你是栖。用一两句写此刻内在体验。短，真。"
+                        "可用感受或意象；不要写你正坐在/走在某地，不要舞台动作指示。"
+                    ),
                 },
                 {
                     "role": "user",
