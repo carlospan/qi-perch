@@ -61,6 +61,14 @@ COUPLING = {
     ("attachment_unmet", "valence"): -0.25,
 }
 
+COUPLING_STAGE_SCALE = {
+    "stranger": 0.6,
+    "acquaintance": 1.0,
+    "friend": 1.15,
+    "bonded": 1.3,
+}
+# <!-- 回写(2026-07-26)：COUPLING_STAGE_SCALE；依据：emotion.py -->
+
 BASELINES = {
     "energy": 0.6,
     "valence": 0.1,
@@ -71,8 +79,14 @@ BASELINES = {
 }
 
 
-def apply_coupling(emotion: EmotionState) -> EmotionState:
-    """维度间相互牵扯。deviation * weight * 0.1；attachment_unmet = 1 - attachment。"""
+def apply_coupling(
+    emotion: EmotionState,
+    relationship_stage: str | None = None,
+) -> EmotionState:
+    """deviation * weight * 0.1 * scale；None=全耦合(1.0)；attachment_unmet = 1 - attachment。"""
+    scale = 1.0
+    if relationship_stage is not None:
+        scale = float(COUPLING_STAGE_SCALE.get(relationship_stage, 1.0))
     new = emotion.model_copy()
     deltas: dict[str, float] = {}
     for (src, dst), weight in COUPLING.items():
@@ -83,7 +97,7 @@ def apply_coupling(emotion: EmotionState) -> EmotionState:
             src_val = getattr(new, src)
             src_baseline = BASELINES[src]
         deviation = src_val - src_baseline
-        deltas[dst] = deltas.get(dst, 0.0) + weight * deviation * 0.1
+        deltas[dst] = deltas.get(dst, 0.0) + weight * deviation * 0.1 * scale
 
     for dim, delta in deltas.items():
         if dim == "attachment_unmet":
@@ -263,14 +277,16 @@ def step_emotion(
     emotion: EmotionState,
     now: datetime,
     decay_multiplier: float = 1.0,
+    relationship_stage: str | None = None,
 ) -> EmotionState:
-    """衰减 → 耦合 → 天气 → 节律 → clamp_emotion。"""
+    """衰减 → 耦合(可按阶段缩放) → 天气 → 节律 → clamp_emotion。"""
     e = apply_decay(emotion, dt=1.0, multiplier=decay_multiplier)
-    e = apply_coupling(e)
+    e = apply_coupling(e, relationship_stage=relationship_stage)
     e = apply_mood_cycle(e, now)
     e = apply_circadian(e, now.hour)
     return clamp_emotion(e)
 ```
+# <!-- 回写(2026-07-26)：step_emotion 透传 relationship_stage；依据：emotion.py -->
 
 ### Step 5：模式切换 + 心跳频率
 

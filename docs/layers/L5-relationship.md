@@ -276,8 +276,11 @@ def apply_scar_healed_bonus(trust: float) -> float:
 #      （如「你自己是什么」「你有意识吗」「我很喜欢」「你说话很…」）；仍先 rule 再可选 LLM 确认。 -->
 # <!-- 回写(2026-07-25)：收窄 first_compliment——单独「谢谢你」不触发；
 #      需「谢谢你昨晚/陪/愿意/一直」「太谢谢你了」等；防诗意启动与误记夸奖。 -->
+# <!-- 回写(2026-07-26)：RECALL_MIN_AGE / _too_fresh（F1 同拍回声）；
+#      last_recorded 推「忆」；_inner_experience 禁呼吸/心跳（N3b）。依据：first_time.py -->
 
 RECALL_COOLDOWN = timedelta(days=7)
+RECALL_MIN_AGE = timedelta(minutes=30)  # 刚落库的第一次不作 recall 注入
 # 7 种：first_goodnight / first_i_miss_you / first_argument / first_vulnerability /
 #       first_existential_question / first_compliment / first_shared_silence
 # first_shared_silence：沉默 300~900s + 放松短句（is_comfortable_silence）；不走 LLM 确认
@@ -285,30 +288,40 @@ RECALL_COOLDOWN = timedelta(days=7)
 
 
 class FirstTimeMemory:
+    def __init__(self, db, llm=None):
+        self.last_recorded: dict | None = None  # brain 取走后 notify_journal_entry
+
     async def check(
         self, message, emotion, *, silence_before: float | None = None
     ) -> tuple[float, str | None]:
+        # silence_before is None → 跳过共同沉默检测（冷启动守卫，见 Brain）
         # 规则初筛 rule_match → 可选 LLM _confirm(purpose=conversation)
-        # 命中 → db.save_first_time；content 模板「他说：「…」」；
-        # inner：purpose=consciousness；短、真；勿字面在场/舞台指示
+        # 命中 → _record → db.save_first_time；content 模板「他说：「…」」；
+        # inner：purpose=consciousness；短、真；勿字面在场/舞台指示；
+        #        勿呼吸/心跳/体温字面身体（你没有身体）
+        # _record 成功后设 last_recorded = {kind:"第一次", text, at}
         # 返回 (3.0, event_type) 或 (1.0, None)
         ...
 
     async def maybe_recall_hint(self, message: str, now: datetime | None = None) -> str:
         # 7 天内任一 first 已 recalled → 跳过
+        # _too_fresh：timestamp 距今 < RECALL_MIN_AGE → 跳过该条（防同拍/近时回声）
         # 关键词命中对应 event → 固定温柔 hint（非 LLM 生成回忆）
-        # 深夜 22~04 且 recall_count<3 → 可对 earliest 触发
+        # 深夜 22~04 且 recall_count<3 → 可对非 fresh 的 earliest 触发
         # 无 semantic_match / narrative_update
         ...
 ```
 
 **Brain 接线：**
-- `silence_before = perception.detect_silence(...)` → `first_times.check(..., silence_before=...)`
+- `silence_before = perception.detect_silence(...)` → `first_times.check(..., silence_before=silence_before if self._interacted_this_session else None)`（本会话尚未真实交谈则不测共同沉默；F2）
+- pending 处理后：`_interacted_this_session = True`
 - `impact *= impact_mult`（倍率在 brain，非 emotion.apply_event_impact 内部）
 - **先** `_gather_prompt_context` → `expression.express` → `_pending_speech`
 - **再**若 `triggered_first`：`inner_life.tick(..., after_first_time=True)`（开口后再写意识流）
 - `_gather_prompt_context` → `extras["first_time_hint"]`（回忆 hint，与本拍新独白分轨）
+- 心跳末：`_notify_first_time()` 取走 `last_recorded` → `embodiment.notify_journal_entry`
 <!-- 回写(2026-07-25)：first_time 时序对齐 brain；依据：qi/core/brain.py -->
+<!-- 回写(2026-07-26)：F2 `_interacted_this_session`；F1 RECALL_MIN_AGE；N3b；last_recorded。依据：brain.py / first_time.py -->
 </details>
 
 ### Step 4：共同文化 + 伤疤

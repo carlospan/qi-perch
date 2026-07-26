@@ -433,6 +433,12 @@ class MemoryManager:
 
     async def get_body_patterns(self) -> dict: ...
 
+    async def body_rhythm_hint(self, stage: str) -> str:
+        """acquaintance+ 且 usual_active_hours.samples≥5 → 整段【他的身体节奏】hint；
+        stranger / 样本不足 → ""（空则 prompt 整段不出现）。"""
+        ...
+    # <!-- 回写(2026-07-26)：body_rhythm_hint；依据：manager.py -->
+
     async def has_unprocessed_events(self) -> bool:
         return (await self.db.count_unprocessed_events()) > 0
 

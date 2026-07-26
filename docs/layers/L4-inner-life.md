@@ -350,10 +350,12 @@ def should_trigger_meta(mode: str, probability: float = META_COGNITION_PROBABILI
 ```python
 # qi/inner_life/__init__.py
 # <!-- 回写(2026-07-25)：mark_waking / emotion_residue；依据：InnerLife -->
+# <!-- 回写(2026-07-26)：last_journal_entries；tick 收集独白/梦供推送。依据：InnerLife -->
 
 class InnerLife:
     def __init__(...):
         self._just_woke = False
+        self.last_journal_entries: list[dict] = []  # 本拍新增；brain 推完不清由下一 tick 开头清空
         ...
 
     def mark_waking(self) -> None:
@@ -364,10 +366,13 @@ class InnerLife:
         self, emotion, last_interaction, now, relationship_stage="stranger",
         after_first_time: bool = False,
     ) -> EmotionState:
+        # 开头：last_journal_entries = []
         # awake：梦余韵一次；note_emotion_surge
         # mode!="awake" or after_first_time → maybe_generate(just_woke=...)
         #   just_woke 仅 mode!="awake"；成功生成后才清 _just_woke
+        #   新 stream/meta → append last_journal_entries（kind 独白）
         # mode!="awake" → maybe_meta / maybe_create / maybe_dream
+        #   新梦 → append（kind 梦）
         ...
 
     async def prompt_extras(emotion, relationship_stage) -> dict[str, str]:
@@ -377,11 +382,11 @@ class InnerLife:
 ```
 
 **Brain：**
-- `_heartbeat`：无用户句时 `inner_life.tick`；若触发 first_time，则 **express 之后**再 `tick(after_first_time=True)`（防同拍诗意启动）
+- `_heartbeat`：无用户句时 `inner_life.tick` → `_broadcast_journal_entries()`；若触发 first_time，则 **express 之后**再 `tick(after_first_time=True)` 再推送（防同拍诗意启动）
 - `restore_state`：`_maybe_mark_waking`（上次 user 非寒暄 → `mark_waking`）
 - `_gather_prompt_context`：`prompt_extras()` → expression
 - 后台：`_background_self_reflection`、`_background_dream_decay`（每小时）
-- 另：季节变化 / 用户漂移可直接 `save_consciousness`（trigger=`season_change` / `user_drift`）
+- 另：季节变化 / 用户漂移可直接 `save_consciousness`（trigger=`season_change` / `user_drift`）并 `_notify_journal`
 
 ## 验收标准
 

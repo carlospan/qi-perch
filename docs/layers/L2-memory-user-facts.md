@@ -82,7 +82,7 @@ qi/prompts/fact_noticing.txt # 必要时用 LLM 抽取事实的模板（清晰�
 -- 用户事实：栖对用户的稳定认识。区别于 narrative_memories（会褪色的故事）与 messages（对话流水）。
 CREATE TABLE IF NOT EXISTS user_facts (
     id INTEGER PRIMARY KEY,
-    fact_type TEXT NOT NULL,            -- identity/family/occupation/location/preference/health/important_date/life_event/concern/other
+    fact_type TEXT NOT NULL,            -- identity/family/occupation/location/hometown/preference/health/important_date/life_event/concern/other
     content TEXT NOT NULL,              -- 事实内容（栖的话或用户原话，如"他叫小明"）
     confidence REAL NOT NULL DEFAULT 1.0,   -- 确信度 0~1：用户明说≈0.95；隐含≈0.7；栖推断≈0.4
     stability TEXT NOT NULL DEFAULT 'stable',  -- stable（不褪色）/ state（可被取代）
@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS user_facts (
 | `life_event` | stable | 生命里重要的事 |
 | `occupation` | state | 工作（会变） |
 | `location` | state | 城市/住处（会变） |
+| `hometown` | stable | 籍贯/老家（与 location 分开记，搬家不冲掉） |
 | `concern` | state | 当前在愁什么（会变） |
 | `health` | stable | 默认 stable；"当前生病"类可标 state |
 | `other` | stable | 兜底 |
@@ -138,6 +139,8 @@ CREATE TABLE IF NOT EXISTS user_facts (
 #      「我的名字」正则要求「是|叫」。 -->
 # <!-- 回写(2026-07-23 夜)：栖反问「你叫什么名字」亦武装 awaiting；
 #      清理会强化白纸叙事的干扰对话后，【你认识的他】有名时禁止「会流走」话术。 -->
+# <!-- 回写(2026-07-26)：hometown（stable）与 location 分记；OTHER 补籍贯信号；
+#      _extract_hometown 拒行程口语。依据：facts.py -->
 
 CONFIDENCE_FLOOR = 0.6   # 低于此不存（把"栖的模糊推断"挡在事实之外，留给 user_model/drift）
 
@@ -147,15 +150,18 @@ IDENTITY_SIGNALS = (
     "我大名", "我小名", "我英文名", "我姓",
 )
 # 「我是X」歧义大（"我是觉得…"），不用作身份信号，避免误记。
+# 「我是海南人」走 _extract_hometown，不走 identity。
 
 # 其他事实信号：关系 ≥ acquaintance 才留意。复用/扩展 manager 的自我披露关键词。
 OTHER_FACT_SIGNALS = (
     "我妈", "我爸", "我老婆", "我老公", "我女朋友", "我男朋友",
     "我孩子", "我儿子", "我女儿", "我家人",
     "我工作", "我上班", "我同事", "我老板", "我是做", "我干",
-    "我住", "我搬家", "我家在", "我在",  # "我在上海"
+    "我住", "我搬家", "我家在", "我在",  # "我在上海"（当前所在 → location/state）
+    "我老家", "我家乡", "我籍贯", "我出生", "我从小", "我来自",  # 籍贯 → hometown/stable
     "我喜欢", "我讨厌", "我不吃", "我怕", "我过敏",
 )
+# _HOMETOWN_TRAVEL_REJECT：含「想去/要去/去玩/旅游…」则不收籍贯
 
 
 class FactNoticer:
@@ -183,11 +189,12 @@ class FactNoticer:
         #    - 都没命中 → return []（绝大多数消息到此为止，零 LLM 成本）
         # 2. 抽取：
         #    - 身份事实：规则/正则直接抽出（"我叫小明" → content="他叫小明"），confidence≈0.95
-        #    - 其他事实：清晰可规则抽取的就规则抽；含糊的、一句话多个事实的，
-        #      才调 LLM（purpose="fact", temperature≈0.3，模板 fact_noticing.txt）
+        #    - 其他事实：清晰可规则抽取的就规则抽（含 _extract_hometown：「我老家…」「我是X人」）；
+        #      含糊的、一句话多个事实的，才调 LLM（purpose="fact", temperature≈0.3，模板 fact_noticing.txt）
         # 3. 落地（交给 FactStore）：
         #    - 与已有 active 事实比对：相同 → confirm（刷新 last_confirmed，不新建）
         #    - state 事实与已有 active 冲突 → supersede（旧事实留痕，指向新事实）
+        #    - hometown 与 location 互不取代（同 type 才 supersede）
         #    - 全新 → add
         #    - confidence < CONFIDENCE_FLOOR 的推断 → 不存（留给 user_model/drift）
         # 4. 收尾：_purge_bogus_identity（非法人名形态的 identity → retire / supersede）
@@ -197,8 +204,10 @@ class FactNoticer:
 # 辅助（模块级，已落地）：
 # looks_like_person_name / is_name_memory_question / is_name_disclosure_intent /
 # is_bare_name_utterance / identity_name_fragment / format_facts_for_prompt
+# FactNoticer._extract_hometown（stable 籍贯；拒行程口语）
 # _NAME_REJECT_TOKENS 含「谢谢」「谢谢你」等，防误记「他叫谢谢你」
 # <!-- 回写(2026-07-25)：notice(recent_messages=…)；名字拒绝表扩「谢谢你」；依据：facts.py -->
+# <!-- 回写(2026-07-26)：hometown 抽取与信号；依据：facts.py -->
 ```
 
 **Brain 接线（已落地，见 Step 6）：** `brain._heartbeat` 处理 pending 时，与 `first_times.check` 并列调用：

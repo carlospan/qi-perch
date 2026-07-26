@@ -393,8 +393,8 @@ class PromptBuilder:
 - 建 `qi/core/brain.py`：asyncio 循环，每次心跳做：感知→情绪更新→（如果有用户消息）表达
 - 建 `qi/core/perception.py`：接收用户输入、计算沉默时长
 - 建 `qi/core/expression.py`：调 prompt_builder + gateway，输出回复
-- 建 `qi/cli.py`：rich 终端界面，支持 `/state`、`/quit`
-- 验收：`qi`（或 `python -m qi`）启动，能聊天，`/state` 显示情绪
+- 建 `qi/cli.py`：rich 终端界面，支持 `/state`、`/why`、`/quit`
+- 验收：`qi`（或 `python -m qi`）启动，能聊天，`/state` 显示情绪，`/why` 显示心跳痕迹
 
 <details>
 <summary>实现规格（Cursor 编码用）</summary>
@@ -405,6 +405,8 @@ class PromptBuilder:
 #      依据：qi/core/brain.py:_heartbeat / start / receive_user_message -->
 # <!-- 回写(2026-07-25)：pending 队列 / _pending_speech / ActionLayer /
 #      first_time 先回复再独白 / 情绪落盘节流 / waking；依据：qi/core/brain.py -->
+# <!-- 回写(2026-07-26)：PromptContext / BackgroundTasks；混合冲击；body_hint；
+#      _interacted_this_session；/why 痕迹；忆推送。依据：brain.py -->
 
 PENDING_QUEUE_MAX = 8
 EMOTION_SAVE_MIN_INTERVAL = 30.0
@@ -419,6 +421,25 @@ class _PendingSpeech:
     proactive: bool
 
 
+@dataclass
+class PromptContext:
+    """组装对话 prompt 的上下文——避免 7 元组位置解包。"""
+    recent_messages: list[dict]
+    retrieved_memories: list[dict]
+    extras: dict[str, str]
+    shared_culture: str
+    relationship_hint: str
+    scar_hint: str
+    season_hint: str
+
+
+class BackgroundTasks:
+    """Brain 的 8 个后台协程：统一 start/stop。"""
+    def __init__(self, brain: "Brain") -> None: ...
+    def start(self) -> None: ...   # 创建 8 个 create_task
+    async def stop(self) -> None: ...
+
+
 class Brain:
     """栖的意识核心。心跳 + 记忆 + 情绪 + 内在生命 + 关系。"""
 
@@ -426,7 +447,7 @@ class Brain:
         self.config = config
         self.llm = llm
         self.emotion = EmotionState()
-        self.perception = Perception(config)
+        self.perception = Perception(config, llm=llm)  # llm 供混合冲击旁路
         self.expression = Expression(config, llm)
         self.memory: MemoryManager | None = None
         self.inner_life: InnerLife | None = None
@@ -439,6 +460,7 @@ class Brain:
         self.alive = True
         self.user_online = True
         self.last_interaction = datetime.now()
+        self._interacted_this_session = False  # F2：冷启动不测共同沉默
         self.heartbeat_count = 0
         self._pending_queue: deque[str] = deque(maxlen=PENDING_QUEUE_MAX)
         self._pending_speech: _PendingSpeech | None = None
@@ -446,7 +468,7 @@ class Brain:
         self._heartbeat_lock = asyncio.Lock()
         self._db: Database | None = None
         self._last_response: str | None = None
-        self._bg_tasks: list[asyncio.Task] = []
+        self._background = BackgroundTasks(self)
         self._prev_valence = self.emotion.valence
         self._accumulated_suppressed = 0.0
         self.proactive = ProactiveGate(config)
@@ -454,6 +476,8 @@ class Brain:
         self.action: ActionLayer | None = None
         self._drift_signals: list[str] = []
         self._last_avatar_payload: dict | None = None
+        self._traces: deque[dict] = deque(maxlen=20)  # /why
+        self._trace_day: str | None = None
 
     def attach_db(self, db: "Database") -> None:
         """仅设置 self._db。restore_state 不调用此方法，而是直接赋值。"""
@@ -461,24 +485,14 @@ class Brain:
     def attach_embodiment(self, server: "EmbodimentServer") -> None: ...
 
     async def start(self) -> None:
-        """启动 8 个后台任务 + 心跳循环；间隔用 next_interval(emotion, config)。"""
-        self._bg_tasks = [
-            asyncio.create_task(self._background_narrative_weaving()),
-            asyncio.create_task(self._background_memory_decay()),
-            asyncio.create_task(self._background_self_reflection()),
-            asyncio.create_task(self._background_dream_decay()),
-            asyncio.create_task(self._background_culture_detection()),
-            asyncio.create_task(self._background_season_detection()),
-            asyncio.create_task(self._background_scar_healing()),
-            asyncio.create_task(self._background_user_drift()),
-        ]
+        """_background.start() + 心跳循环；间隔用 next_interval(emotion, config)。"""
+        self._background.start()
         try:
             while self.alive:
                 async with self._heartbeat_lock:
                     await self._heartbeat()
                     speech = self._take_pending_speech()
                 if speech is not None:
-                    # 主动开口：出锁后推送，不再人工停顿（用户回复才「想了想」）
                     await self._deliver_qi_message(
                         speech.text, speech.now, proactive=speech.proactive
                     )
@@ -487,32 +501,48 @@ class Brain:
                 interval = next_interval(self.emotion, self.config)
                 await asyncio.sleep(interval)
         finally:
-            # cancel + await 所有 _bg_tasks
-            ...
+            await self._background.stop()
+
+    async def _gather_prompt_context(self, pending, now) -> PromptContext:
+        # extras：user_facts / body_hint（acquaintance+ 且样本≥5，整段含标题）/
+        #         inner_life.prompt_extras / action.prompt_extras /
+        #         first_time_hint / drift_hint
+        # 返回 PromptContext（非 7 元组）
+        ...
 
     async def _heartbeat(self) -> str | None:
         """
         一次心跳（真实顺序）：
         1. popleft pending（若有）；determine_mode(..., interacting=pending is not None)
         2. 若有 pending：
-           relationship.on_user_message → first_times.check
+           relationship.on_user_message → first_times.check(
+               silence_before=silence_before if _interacted_this_session else None)
            → memory.notice_facts(...)
-           → impact *= impact_mult；assess_impact → apply_event_impact
-           → apply_security_hint；last_interaction = now
+           → impact *= impact_mult；await assess_impact_async → apply_event_impact
+           → apply_security_hint；last_interaction = now；_interacted_this_session = True
            → save_message("user") → memory.on_user_message
            → _apply_anomaly_nudge(anomalies)
-        3. step_emotion(...)；可选 apply_season_effect；clamp_emotion
+        3. step_emotion(..., relationship_stage=...)；可选 apply_season_effect；clamp_emotion
         4. _track_expression_threshold() → want_express
-        5. 无 pending：inner_life.tick(after_first_time=False)
+        5. 无 pending：inner_life.tick(after_first_time=False)；_broadcast_journal_entries()
            （有 pending 时本步不跑，避免同拍独白启动）
         6a. 有 pending：_gather_prompt_context → expression.express
             → 写入 _pending_speech（锁外再 deliver）
-            → 若 triggered_first：再 inner_life.tick(after_first_time=True)
+            → 若 triggered_first：再 inner_life.tick(after_first_time=True)；推送 journal
         6b. 无 pending：先 action.tick（动了手则不再主动言语）；
             否则 pick_proactive_kind → express → _pending_speech(proactive=True)
             → record / persist gate
-        7. _sync_avatar；_maybe_save_emotion(force=有 pending)
+        7. _sync_avatar；若 triggered_first：_notify_first_time()；
+           _record_trace(...)；_maybe_save_emotion(force=有 pending)
         """
+        ...
+
+    async def _record_trace(...) -> None:
+        # 内存 deque + body_memory last_heartbeat_trace / day_first_trace；不进 prompt
+        ...
+
+    async def format_why(self, limit: int = 8) -> str:
+        """CLI /why：最近痕迹 + 落盘 last / day_first。"""
         ...
 
     async def receive_user_message(self, message: str) -> str | None:
@@ -578,10 +608,13 @@ def next_interval(emotion: EmotionState, config: dict | None = None) -> float:
 # qi/core/perception.py
 # <!-- 回写(2026-07)：assess_impact 含 relationship_stage + modulate_impact；
 #      依据：qi/core/perception.py -->
+# <!-- 回写(2026-07-26)：Perception(config, llm=)；assess_impact_async 混合冲击
+#      （触发才问 LLM，timeout 2s，失败回退关键词）。依据：perception.py -->
 
 class Perception:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, llm: "LLMGateway | None" = None):
         self.config = config
+        self.llm = llm
         self.relationship_stage: str = "stranger"
         self.user_present: bool = True
 
@@ -597,6 +630,15 @@ class Perception:
         relationship_stage: str | None = None,
     ) -> float:
         """关键词粗判 base → modulate_impact(base, emotion, stage) → clamp ±1。"""
+        ...
+
+    async def assess_impact_async(
+        self,
+        message: str,
+        emotion: "EmotionState",
+        relationship_stage: str | None = None,
+    ) -> float:
+        """关键词为主；_needs_llm_impact 才旁路 LLM（purpose=fact, ≤2s）；失败回退。"""
         ...
 
     def apply_security_hint(
@@ -683,6 +725,10 @@ async def run_terminal() -> None:
             if user_input == "/state":
                 console.print(Panel(_format_state(brain), title="内在状态", border_style="cyan"))
                 continue
+            if user_input == "/why":
+                console.print(Panel(await brain.format_why(), title="心跳痕迹", border_style="dim"))
+                continue
+            # <!-- 回写(2026-07-26)：/why → format_why；依据：qi/cli.py -->
 
             response = await brain.receive_user_message(user_input)
             if response:
