@@ -6,6 +6,7 @@ config/settings.yaml
 qi/config/settings.yaml
 
 .qoder
+.cursor
 
 # Python
 __pycache__/
