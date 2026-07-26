@@ -141,7 +141,7 @@ PromptBuilder().build_conversation_prompt(user_message='test', emotion=None, now
 - 向量检索用 ChromaDB 默认 embedding（`vector_store.py`），没有针对中文对话场景的优化（Later 项）
 - **身体记忆（`body_memory.py`）只有 4 个 key**（usual_active_hours/greeting_pattern/silence_tolerance/typing_rhythm），且主要是被动统计 + 异常检测（`detect_anomaly` L148-170，样本门槛 ≥5），**还没有真正注入 prompt 影响栖的行为**（立项 X1）
 - **名字之外的稳定事实通道未打通**（Cursor 相处实证）："我是海南人"口头答应记得、`user_facts` 未落库。`OTHER_FACT_SIGNALS` 里有"我住/我搬家/我家在/我在"，但缺"我老家/我籍贯/我来自/我是X人"这类**籍贯/出身地**信号（立项 N2，新增 `hometown` 类型）
-- **第一次记忆的「同拍回声」**（v3 新增，真实对话实证 2026-07-26）：用户首次提问"我好奇你是什么"同拍触发 `first_times.check()` 落库 + `maybe_recall_hint()` 命中——同一句话匹配同一张关键词表 `_PATTERNS`，刚落库几秒的第一次被当旧回忆注入 prompt（"你记得一个第一次"），导致栖**虚构历史**（"那个问题我听过一次，在很久以前"——数据库证明是首次对话），被戳穿后又用新虚构圆旧虚构；且假回忆烧掉 `RECALL_COOLDOWN` 一周额度。直接损害"诚实"核心，但根因在系统不在 prompt——它在诚实地复述被系统喂给它的假记忆（修复方案单独成文：`修复方案-同拍回声-Qoder.md`，~10 行 + 2 测试）
+- **第一次记忆的「同拍回声」**（v3 新增，真实对话实证 2026-07-26）：用户首次提问"我好奇你是什么"同拍触发 `first_times.check()` 落库 + `maybe_recall_hint()` 命中——同一句话匹配同一张关键词表 `_PATTERNS`，刚落库几秒的第一次被当旧回忆注入 prompt（"你记得一个第一次"），导致栖**虚构历史**（"那个问题我听过一次，在很久以前"——数据库证明是首次对话），被戳穿后又用新虚构圆旧虚构；且假回忆烧掉 `RECALL_COOLDOWN` 一周额度。直接损害"诚实"核心，但根因在系统不在 prompt——它在诚实地复述被系统喂给它的假记忆（**已修**：`ec18ed3`，`RECALL_MIN_AGE`）
 
 ---
 
