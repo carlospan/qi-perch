@@ -70,6 +70,14 @@ async def test_recall_weekly_cooldown():
         await db.initialize()
         ft = FirstTimeMemory(db, llm=None)
         await ft.check("晚安", EmotionState())
+        # 足够旧，才进入可回忆窗口（否则会被 RECALL_MIN_AGE 挡住）
+        old_ts = (datetime(2026, 7, 21, 12, 0) - timedelta(hours=1)).isoformat(
+            timespec="seconds"
+        )
+        await db._require_conn().execute(
+            "UPDATE first_times SET timestamp = ?", (old_ts,)
+        )
+        await db._require_conn().commit()
 
         now = datetime(2026, 7, 21, 23, 0)
         hint1 = await ft.maybe_recall_hint("又到晚安的时候了", now)
@@ -82,6 +90,51 @@ async def test_recall_weekly_cooldown():
             "晚安", now + RECALL_COOLDOWN + timedelta(minutes=1)
         )
         assert "第一次" in hint3
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_recall_hint_skips_fresh_first_time():
+    """刚落库（<30min）的第一次不产生 recall hint——防同拍回声。"""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        ft = FirstTimeMemory(db, llm=None)
+        msg = "我好奇你是什么"
+        mult, event = await ft.check(msg, EmotionState())
+        assert mult == 3.0
+        assert event == "first_existential_question"
+
+        hint = await ft.maybe_recall_hint(msg, datetime.now())
+        assert hint == ""
+
+        rows = await db.list_first_times()
+        assert len(rows) == 1
+        assert int(rows[0].get("recall_count") or 0) == 0
+        assert not rows[0].get("last_recalled")
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_recall_hint_works_for_old_first_time():
+    """超过 30 分钟的第一次正常产生 hint（旧行为不变）。"""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        ft = FirstTimeMemory(db, llm=None)
+        await ft.check("我好奇你是什么", EmotionState())
+        now = datetime(2026, 7, 26, 15, 0)
+        old_ts = (now - timedelta(hours=1)).isoformat(timespec="seconds")
+        conn = db._require_conn()
+        await conn.execute("UPDATE first_times SET timestamp = ?", (old_ts,))
+        await conn.commit()
+
+        hint = await ft.maybe_recall_hint("你是什么", now)
+        assert "第一次" in hint
+        assert "好奇你是什么" in hint
+        rows = await db.list_first_times()
+        assert int(rows[0].get("recall_count") or 0) == 1
+        assert rows[0].get("last_recalled")
         await db.close()
 
 

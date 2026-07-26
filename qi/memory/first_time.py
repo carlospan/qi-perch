@@ -61,6 +61,8 @@ _TENSE_MARKERS = ("烦", "滚", "生气", "为什么不理", "你怎么", "不�
 
 # 契约：第一次记忆主动提起 ≤ 每周一次
 RECALL_COOLDOWN = timedelta(days=7)
+# 刚发生的第一次不是回忆，是现场——同拍/近时不作 recall 注入（防同拍回声虚构历史）
+RECALL_MIN_AGE = timedelta(minutes=30)
 
 
 def rule_match(event_type: str, message: str) -> bool:
@@ -220,6 +222,15 @@ class FirstTimeMemory:
                 return True
         return False
 
+    def _too_fresh(self, ft: dict, now: datetime) -> bool:
+        """刚落库不久的第一次不算可回忆的记忆。"""
+        raw = ft.get("timestamp")
+        try:
+            ts = datetime.fromisoformat(str(raw))
+        except (TypeError, ValueError):
+            return False  # 解析不出宁可放行，维持旧行为
+        return now - ts < RECALL_MIN_AGE
+
     async def maybe_recall_hint(self, message: str, now: datetime | None = None) -> str:
         """相关话题时注入回忆提示。每周最多一次。"""
         now = now or datetime.now()
@@ -231,6 +242,8 @@ class FirstTimeMemory:
 
         text = message.strip()
         for ft in firsts:
+            if self._too_fresh(ft, now):
+                continue
             et = ft.get("event_type")
             keys = _PATTERNS.get(et, ())
             if keys and any(k in text for k in keys):
@@ -242,11 +255,13 @@ class FirstTimeMemory:
                 )
         # 深夜安静回忆（同样受周冷却约束）
         if now.hour >= 22 or now.hour < 4:
-            ft = firsts[0]
-            if int(ft.get("recall_count") or 0) < 3:
-                await self.db.recall_first_time(int(ft["id"]), now=now)
-                return (
-                    f"深夜你突然想起第一次：{ft.get('content')}。"
-                    "可以很轻地提，也可以只放在心里。"
-                )
+            candidates = [ft for ft in firsts if not self._too_fresh(ft, now)]
+            if candidates:
+                ft = candidates[0]
+                if int(ft.get("recall_count") or 0) < 3:
+                    await self.db.recall_first_time(int(ft["id"]), now=now)
+                    return (
+                        f"深夜你突然想起第一次：{ft.get('content')}。"
+                        "可以很轻地提，也可以只放在心里。"
+                    )
         return ""
