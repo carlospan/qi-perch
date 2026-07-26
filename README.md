@@ -94,6 +94,29 @@ voice:
 python -m pytest -q
 ```
 
+## 清库验收（带日期备份）
+
+清 `data/qi.db` + `data/chroma/` 做验收前，先拷一份带时间戳的备份。只拷库不拷向量，语义检索会对不上。`settings.yaml` / `.env` 可留，不必进备份。旧备份按需手删，不强制只留一份。
+
+PowerShell（先停掉 `qi` / `qi-desktop`）：
+
+```powershell
+# 1) 带日期备份
+$stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$dir = "data\backup-$stamp"
+New-Item -ItemType Directory -Path $dir | Out-Null
+Copy-Item data\qi.db "$dir\qi.db"
+Copy-Item -Recurse data\chroma "$dir\chroma"
+
+# 2) 清活数据（再启动 = 新栖）
+Remove-Item -Force data\qi.db
+Remove-Item -Recurse -Force data\chroma
+```
+
+恢复：停进程后，从某个 `data\backup-YYYYMMDD-HHMMSS\` 把 `qi.db` 与 `chroma\` 拷回 `data\`（先删掉现有活数据）。
+
+不要把 `data/` 提交进 git。重置对栖是一次小型死亡——需要时再清。
+
 ## 目录速览
 
 ```
@@ -110,5 +133,5 @@ qi/                 唯一顶层包
   storage/          SQLite
   config/           配置加载 + settings.example
 docs/               契约、进度、层文档、设计原文、开发工具文档
-data/               运行时（gitignore）：库、推荐放 settings.yaml
+data/               运行时（gitignore）：qi.db、chroma/、backup-*/、推荐放 settings.yaml
 ```
