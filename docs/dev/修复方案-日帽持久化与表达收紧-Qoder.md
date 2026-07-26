@@ -1,5 +1,10 @@
 # 修复方案：日帽持久化 + 表达收紧（F3 + N5）
 
+> **状态：F3 + N5 已落地（Cursor 施工）。**  
+> - **F3** depth 日帽 `depth_day_gate`（`qi/relationship/engine.py`）  
+> - **N5a/N5b** `conversation.txt` / `consciousness_stream.txt`  
+> - **未做（按约定）：** `_trace_day`、curiosity/temperature 软上限、创造者 IDENTITY  
+>  
 > **撰写者：** Qoder  
 > **日期：** 2026-07-26  
 > **来源：** `对话分析-20260726-Qoder.md`（7 小时长对话实证）  

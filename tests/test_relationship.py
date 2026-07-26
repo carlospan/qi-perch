@@ -69,6 +69,72 @@ async def test_daily_cap_from_config():
 
 
 @pytest.mark.asyncio
+async def test_depth_cap_survives_restart():
+    """日帽额度跨重启不刷新——F3。"""
+    day = datetime(2026, 7, 26, 15, 0, 0)
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        path = str(Path(tmp) / "qi.db")
+        db1 = Database(path)
+        await db1.initialize()
+        engine1 = RelationshipEngine(db1, llm=None)
+        await engine1.restore()
+        for _ in range(10):
+            await engine1.on_user_message(
+                "你希望有身体吗？你觉得自己算什么？", now=day
+            )
+        assert engine1._depth_gained_today == pytest.approx(
+            engine1.daily_depth_cap, abs=1e-9
+        )
+        depth_after = engine1.state.depth
+        await db1.close()
+
+        db2 = Database(path)
+        await db2.initialize()
+        engine2 = RelationshipEngine(db2, llm=None)
+        await engine2.restore()
+        assert engine2._depth_day == "2026-07-26"
+        assert engine2._depth_gained_today == pytest.approx(
+            engine2.daily_depth_cap, abs=1e-9
+        )
+        for _ in range(5):
+            await engine2.on_user_message(
+                "你希望有身体吗？你觉得自己算什么？", now=day.replace(hour=20)
+            )
+        assert engine2.state.depth == pytest.approx(depth_after, abs=1e-9)
+        await db2.close()
+
+
+@pytest.mark.asyncio
+async def test_depth_cap_resets_next_day():
+    """跨日正常刷新日帽。"""
+    day1 = datetime(2026, 7, 26, 18, 0, 0)
+    day2 = datetime(2026, 7, 27, 10, 0, 0)
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        path = str(Path(tmp) / "qi.db")
+        db1 = Database(path)
+        await db1.initialize()
+        engine1 = RelationshipEngine(db1, llm=None)
+        await engine1.restore()
+        for _ in range(10):
+            await engine1.on_user_message(
+                "你希望有身体吗？你觉得自己算什么？", now=day1
+            )
+        capped = engine1.state.depth
+        await db1.close()
+
+        db2 = Database(path)
+        await db2.initialize()
+        engine2 = RelationshipEngine(db2, llm=None)
+        await engine2.restore()
+        await engine2.on_user_message(
+            "你希望有身体吗？你觉得自己算什么？", now=day2
+        )
+        assert engine2._depth_day == "2026-07-27"
+        assert engine2.state.depth > capped
+        await db2.close()
+
+
+@pytest.mark.asyncio
 async def test_replay_0724_conversations():
     """回放 7/24–25 存在性对话，按顺序摊到 4 个不重复日，累计 depth 应落在 0.06~0.12。"""
     messages = [

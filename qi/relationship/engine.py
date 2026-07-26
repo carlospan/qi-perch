@@ -236,6 +236,14 @@ class RelationshipEngine:
                 narrative=row.get("narrative") or "",
                 shared_culture=culture if isinstance(culture, list) else [],
             )
+        # 日帽跨重启恢复——重启不能刷新「关系不能速成」的每日额度（与 proactive gate 同构）
+        gate = await self.db.get_body_memory("depth_day_gate")
+        if isinstance(gate, dict):
+            self._depth_day = gate.get("day") or None
+            try:
+                self._depth_gained_today = float(gate.get("gained") or 0.0)
+            except (TypeError, ValueError):
+                self._depth_gained_today = 0.0
         return self.state
 
     async def persist(self) -> None:
@@ -275,6 +283,10 @@ class RelationshipEngine:
         )
         self.state.depth = min(1.0, self.state.depth + d_inc)
         self._depth_gained_today += d_inc
+        await self.db.set_body_memory(
+            "depth_day_gate",
+            {"day": self._depth_day, "gained": self._depth_gained_today},
+        )
 
         # 温度
         if signals.is_positive:
