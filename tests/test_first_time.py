@@ -64,6 +64,39 @@ async def test_shared_silence_first_time():
 
 
 @pytest.mark.asyncio
+async def test_no_shared_silence_on_cold_start():
+    """冷启动后第一句话（silence_before=None）不触发 first_shared_silence。"""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        ft = FirstTimeMemory(db, llm=None)
+
+        mult, event = await ft.check(
+            "你好", EmotionState(), silence_before=None
+        )
+        assert mult == 1.0
+        assert event is None
+        assert not await db.has_first_time("first_shared_silence")
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_shared_silence_after_real_exchange():
+    """已交谈过后，5-15 分钟舒适沉默正常触发（旧行为不变）。"""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        ft = FirstTimeMemory(db, llm=None)
+
+        mult, event = await ft.check(
+            "嗯", EmotionState(), silence_before=600
+        )
+        assert mult == 3.0
+        assert event == "first_shared_silence"
+        await db.close()
+
+
+@pytest.mark.asyncio
 async def test_recall_weekly_cooldown():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         db = Database(str(Path(tmp) / "qi.db"))

@@ -123,6 +123,8 @@ class Brain:
         self.alive = True
         self.user_online = True
         self.last_interaction = datetime.now()
+        # 本进程会话内是否已有过真实交谈——冷启动后的第一句话不构成「共同沉默」
+        self._interacted_this_session = False
         self.heartbeat_count = 0
         self._pending_queue: deque[str] = deque(maxlen=PENDING_QUEUE_MAX)
         self._pending_speech: _PendingSpeech | None = None
@@ -399,7 +401,9 @@ class Brain:
                 impact_mult, triggered_first = await self.first_times.check(
                     pending,
                     self.emotion,
-                    silence_before=silence_before,
+                    silence_before=silence_before
+                    if self._interacted_this_session
+                    else None,
                 )
 
             if self.memory is not None:
@@ -417,6 +421,7 @@ class Brain:
             self.emotion = apply_event_impact(self.emotion, impact)
             self.emotion = self.perception.apply_security_hint(self.emotion, impact)
             self.last_interaction = now
+            self._interacted_this_session = True
 
             if self._db is not None:
                 await self._db.save_message("user", pending)
