@@ -19,6 +19,18 @@ logger = logging.getLogger("qi.memory.narrative")
 RECALL_MIN_STRENGTH = 0.2
 FORGET_STRENGTH = 0.1
 
+# 一次编织的事件上限——全量塞进 80~200 字故事会空返回或冲淡重点
+WEAVE_BATCH_SIZE = 10
+
+
+def _event_priority(event: dict) -> tuple:
+    """优先织：有 impact 的正式记得 > 高权重 > 更早的 id。"""
+    impact = event.get("emotional_impact")
+    has_impact = 0 if impact is None else 1
+    impact_abs = abs(float(impact or 0))
+    weight = float(event.get("attention_weight") or 0)
+    return (-has_impact, -impact_abs, -weight, int(event["id"]))
+
 
 class NarrativeMemory:
     """长期记忆的核心——不是日志，是故事。"""
@@ -102,10 +114,24 @@ class NarrativeMemory:
     async def recall(self, memory_id: int) -> None:
         await self.db.recall_narrative_memory(memory_id)
 
+    def select_weave_batch(
+        self,
+        events: list[dict],
+        *,
+        batch_size: int = WEAVE_BATCH_SIZE,
+    ) -> list[dict]:
+        """从积压里挑一批：先按重要性，再按时间排好供讲故事。"""
+        if not events:
+            return []
+        picked = sorted(events, key=_event_priority)[: max(1, batch_size)]
+        return sorted(picked, key=lambda e: (e["timestamp"], int(e["id"])))
+
     async def weave_narrative(
         self,
         emotion: EmotionState,
         relationship_stage: str = "stranger",
+        *,
+        batch_size: int | None = None,
     ) -> int | None:
         events = await self.db.load_unprocessed_events()
         if not events:
@@ -114,9 +140,14 @@ class NarrativeMemory:
             logger.warning("叙事编织需要 LLM，当前未注入，跳过")
             return None
 
+        size = WEAVE_BATCH_SIZE if batch_size is None else batch_size
+        batch = self.select_weave_batch(events, batch_size=size)
+        if not batch:
+            return None
+
         template = read_prompt("story_weaving.txt")
         raw_text = "\n".join(
-            f"- [{e['timestamp']}] ({e['type']}) {e['content']}" for e in events
+            f"- [{e['timestamp']}] ({e['type']}) {e['content']}" for e in batch
         )
         emotion_text = emotion.description()
         prompt = template.format(
@@ -130,16 +161,20 @@ class NarrativeMemory:
         ]
         woven = await self.llm.call(purpose="narrative", messages=messages, temperature=0.75)
         if not woven or not woven.strip():
-            logger.warning("叙事编织返回空，本次不标记事件")
+            logger.warning(
+                "叙事编织返回空，本次不标记事件（batch=%s / pending=%s）",
+                len(batch),
+                len(events),
+            )
             return None
 
-        event_ids = [int(e["id"]) for e in events]
-        impacts = [abs(float(e["emotional_impact"] or 0)) for e in events]
-        weights = [float(e["attention_weight"] or 1.0) for e in events]
+        event_ids = [int(e["id"]) for e in batch]
+        impacts = [abs(float(e["emotional_impact"] or 0)) for e in batch]
+        weights = [float(e["attention_weight"] or 1.0) for e in batch]
         importance = min(1.0, max(0.3, sum(weights) / max(len(weights), 1) / 2.5))
         intensity = min(1.0, sum(impacts) / max(len(impacts), 1))
-        period_start = events[0]["timestamp"]
-        period_end = events[-1]["timestamp"]
+        period_start = batch[0]["timestamp"]
+        period_end = batch[-1]["timestamp"]
 
         memory_id = await self.save(
             content=woven.strip(),
@@ -150,5 +185,11 @@ class NarrativeMemory:
             period_end=period_end,
         )
         await self.db.mark_events_processed(event_ids)
-        logger.info("编织完成 memory_id=%s events=%s", memory_id, len(event_ids))
+        remaining = len(events) - len(batch)
+        logger.info(
+            "编织完成 memory_id=%s events=%s remaining=%s",
+            memory_id,
+            len(event_ids),
+            remaining,
+        )
         return memory_id

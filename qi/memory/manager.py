@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -34,6 +35,27 @@ _RELATIONSHIP = (
 )
 
 _PROMISE = ("下次", "以后", "改天", "回头", "等我", "明天给你", "周末")
+
+# 求助 / 健康困扰：用户开口求助是有分量的交换——日后会问「你上次说的那个方法」。
+_HELP_HEALTH = (
+    "怎么办", "睡不着", "失眠", "睡不好", "熬夜", "头疼", "头痛",
+    "焦虑", "压力大", "累死", "撑不住", "怎么才能", "有没有办法",
+    "教我", "帮我想", "给点建议", "怎么解决",
+)
+
+# 显式追问记忆：叙事空时允许回翻 messages（不当日常检索）
+_RECALL_PROBE = (
+    "还记得", "记得吗", "记不记得", "上次", "那次", "那件事",
+    "你教过", "你教了", "你说过", "你跟我说过", "你告诉过", "跟你说",
+)
+
+_RECALL_STOP = (
+    "我", "你", "他", "她", "的", "了", "吗", "呢", "啊", "吧", "在", "有",
+    "和", "与", "就", "都", "也", "很", "会", "能", "一个", "一下", "时候",
+    "有时候", "然后", "说过", "教了", "告诉", "方法", "事情", "这件事",
+)
+
+_FORGET_ACK = ("不记得", "够不到", "空白", "没印象", "记不清", "没有留下痕迹")
 
 
 class MemoryManager:
@@ -98,12 +120,117 @@ class MemoryManager:
     async def retrieve(self, query: str, top_k: int = 3) -> list[dict]:
         return await self.narrative.search(query, top_k)
 
+    async def retrieve_for_prompt(self, query: str, top_k: int = 3) -> list[dict]:
+        """对话用召回：先叙事；显式追问且叙事未命中主题时，回翻 messages。"""
+        memories = await self.retrieve(query, top_k=top_k)
+        if not self.is_recall_probe(query):
+            return memories
+        keys = self.recall_keywords(query)
+        if memories and keys:
+            blob = "\n".join(m.get("content") or "" for m in memories)
+            if any(k in blob for k in keys):
+                return memories
+        fallback = await self.recall_from_messages(query, top_k=top_k)
+        return fallback if fallback else memories
+
+    @staticmethod
+    def is_recall_probe(text: str) -> bool:
+        return any(k in text for k in _RECALL_PROBE)
+
+    @staticmethod
+    def recall_keywords(text: str) -> list[str]:
+        """从追问句抽出检索词：优先求助/健康锚点，再取剩余中文块。"""
+        keys: list[str] = []
+        for k in _HELP_HEALTH + ("入睡", "助眠", "方法"):
+            if k in text and k not in keys:
+                keys.append(k)
+        cleaned = text
+        for p in _RECALL_PROBE + _RECALL_STOP:
+            cleaned = cleaned.replace(p, " ")
+        for part in re.findall(r"[\u4e00-\u9fff]{2,}", cleaned):
+            if part not in keys and part not in _RECALL_STOP:
+                keys.append(part)
+        return keys
+
+    async def recall_from_messages(self, query: str, top_k: int = 3) -> list[dict]:
+        """显式「还记得吗」时扫聊天流水，拼成可注入的回忆片段。"""
+        keywords = self.recall_keywords(query)
+        if not keywords:
+            return []
+        msgs = await self.db.load_messages(limit=300)
+        if not msgs:
+            return []
+        # 当前追问句本身不参与命中
+        if msgs and msgs[-1].get("role") == "user" and msgs[-1].get("content") == query:
+            msgs = msgs[:-1]
+
+        scored: list[tuple[int, int, dict]] = []
+        for i, m in enumerate(msgs):
+            content = m.get("content") or ""
+            # 追问句本身不是回忆内容
+            if m.get("role") == "user" and self.is_recall_probe(content):
+                continue
+            # 否认记忆的回复也会带主题词，不能当回忆
+            if m.get("role") == "qi" and any(k in content for k in _FORGET_ACK):
+                continue
+            hits = sum(1 for k in keywords if k in content)
+            if hits:
+                scored.append((hits, i, m))
+        if not scored:
+            return []
+        # 命中多者优先；同命中取更早（「上次」）
+        scored.sort(key=lambda x: (-x[0], x[1]))
+
+        results: list[dict] = []
+        used_ids: set[int] = set()
+        for _hits, i, m in scored:
+            mid = int(m["id"])
+            if mid in used_ids:
+                continue
+            if m["role"] == "user":
+                qi_bit = ""
+                if i + 1 < len(msgs) and msgs[i + 1].get("role") == "qi":
+                    qi_msg = msgs[i + 1]
+                    qi_text = qi_msg.get("content") or ""
+                    if not any(k in qi_text for k in _FORGET_ACK):
+                        used_ids.add(int(qi_msg["id"]))
+                        qi_bit = f"\n你当时回过：{qi_text[:160]}"
+                snippet = f"他曾说：{(m.get('content') or '')[:100]}{qi_bit}"
+            else:
+                snippet = f"你曾说过：{(m.get('content') or '')[:180]}"
+            used_ids.add(mid)
+            results.append(
+                {
+                    "id": mid,
+                    "content": snippet,
+                    "strength": 0.85,
+                    "importance": 0.7,
+                    "source": "messages_recall",
+                }
+            )
+            if len(results) >= top_k:
+                break
+        return results
+
     async def weave_narrative(
         self,
         emotion: EmotionState,
         relationship_stage: str = "stranger",
     ) -> int | None:
-        return await self.narrative.weave_narrative(emotion, relationship_stage)
+        mem_cfg = self.config.get("memory", {})
+        batch = mem_cfg.get("narrative_weave_batch_size")
+        batch_size = int(batch) if batch is not None else None
+        return await self.narrative.weave_narrative(
+            emotion,
+            relationship_stage,
+            batch_size=batch_size,
+        )
+
+    async def unprocessed_event_count(self) -> int:
+        return await self.db.count_unprocessed_events()
+
+    async def has_unprocessed_events(self) -> bool:
+        return (await self.unprocessed_event_count()) > 0
 
     async def get_body_patterns(self) -> dict:
         keys = [
@@ -134,9 +261,6 @@ class MemoryManager:
             f"你隐约知道他通常 {start}–{end} 点比较活跃。"
             "知道就好，不要主动评论他的作息。"
         )
-
-    async def has_unprocessed_events(self) -> bool:
-        return (await self.db.count_unprocessed_events()) > 0
 
     async def on_user_message(
         self,
@@ -197,9 +321,9 @@ class MemoryManager:
             if not any(k in text for k in _RELATIONSHIP + _STRONG_EMOTION):
                 return False, 0.0
 
-        # 明显闲聊主题且无自我披露
+        # 明显闲聊主题且无自我披露 / 求助
         if any(k in text for k in ("天气", "几点了")) and not any(
-            k in text for k in _SELF_DISCLOSURE
+            k in text for k in _SELF_DISCLOSURE + _HELP_HEALTH
         ):
             return False, 0.0
 
@@ -212,6 +336,8 @@ class MemoryManager:
             importance = max(importance, 0.75)
         if any(k in text for k in _PROMISE):
             importance = max(importance, 0.55)
+        if any(k in text for k in _HELP_HEALTH):
+            importance = max(importance, 0.6)
         if any(k in text for k in ("分手", "换工作", "生病", "去世", "毕业")):
             importance = max(importance, 0.9)
 
@@ -232,6 +358,9 @@ class MemoryManager:
 
         disclosure = 1.0 if any(k in text for k in _SELF_DISCLOSURE) else 0.0
         weight += disclosure * 0.4
+
+        help_ask = 1.0 if any(k in text for k in _HELP_HEALTH) else 0.0
+        weight += help_ask * 0.35
 
         relation = 1.0 if any(k in text for k in _RELATIONSHIP) else 0.0
         weight += relation * 0.6

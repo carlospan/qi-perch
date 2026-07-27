@@ -50,6 +50,132 @@ async def test_should_remember_filters_chitchat():
         assert ok is True
         assert imp >= 0.6
 
+        ok, _ = mm.should_remember("今天天气不错", emotion)
+        assert ok is False
+
+        mm.vector_store.close()
+        await db.close()
+        gc.collect()
+
+
+@pytest.mark.asyncio
+async def test_help_message_is_remembered():
+    """求助类对话应被记住——记忆断层实证（2026-07-27 助眠建议漏记）。"""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        mm = MemoryManager(
+            db,
+            {
+                "memory": {
+                    "max_working_memory": 20,
+                    "chroma_path": str(Path(tmp) / "chroma"),
+                }
+            },
+        )
+        emotion = EmotionState()
+        ok, imp = mm.should_remember(
+            "晚上睡不着怎么办，经常半夜两三点睡，8点就要起床上班",
+            emotion,
+        )
+        assert ok is True
+        assert imp >= 0.6
+        weight = mm.compute_attention_weight(
+            "晚上睡不着怎么办，经常半夜两三点睡，8点就要起床上班",
+            emotion,
+        )
+        assert weight > 1.0
+        mm.vector_store.close()
+        await db.close()
+        gc.collect()
+
+
+def test_weave_batch_prefers_impact_and_caps_size():
+    from qi.memory.narrative import NarrativeMemory
+
+    events = [
+        {
+            "id": 1,
+            "timestamp": "2026-07-26T10:00:00",
+            "type": "user_message",
+            "content": "溢出闲话",
+            "emotional_impact": None,
+            "attention_weight": 0.5,
+        },
+        {
+            "id": 2,
+            "timestamp": "2026-07-26T18:10:48",
+            "type": "user_message",
+            "content": "晚上睡不着怎么办",
+            "emotional_impact": 0.4,
+            "attention_weight": 1.35,
+        },
+        {
+            "id": 3,
+            "timestamp": "2026-07-26T11:00:00",
+            "type": "user_message",
+            "content": "另一条溢出",
+            "emotional_impact": None,
+            "attention_weight": 0.5,
+        },
+        {
+            "id": 4,
+            "timestamp": "2026-07-26T12:00:00",
+            "type": "user_message",
+            "content": "我最近在学吉他",
+            "emotional_impact": 0.3,
+            "attention_weight": 1.4,
+        },
+    ]
+    # 无 db/llm：只测挑选
+    nm = NarrativeMemory(db=None, vector_store=None)  # type: ignore[arg-type]
+    batch = nm.select_weave_batch(events, batch_size=2)
+    assert len(batch) == 2
+    assert {e["id"] for e in batch} == {2, 4}
+    # 时间序
+    assert batch[0]["id"] == 4
+    assert batch[1]["id"] == 2
+
+
+@pytest.mark.asyncio
+async def test_recall_probe_falls_back_to_messages():
+    """显式追问且叙事空时，应从 messages 捞回助眠交换。"""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        mm = MemoryManager(
+            db,
+            {
+                "memory": {
+                    "max_working_memory": 20,
+                    "chroma_path": str(Path(tmp) / "chroma"),
+                }
+            },
+        )
+        await db.save_message("user", "晚上睡不着怎么办，经常半夜两三点睡")
+        await db.save_message(
+            "qi",
+            "睡不着的时候，不要强迫自己睡，而是允许自己躺着。",
+        )
+        await db.save_message("user", "我今天晚上试一下")
+        # 无关叙事不应挡住追问兜底
+        await mm.narrative.save(
+            content="秋意沉下来。我把一些东西收进心里。",
+            importance=0.7,
+            emotional_intensity=0.5,
+            tags=["action", "tend"],
+        )
+        probe = "我上次说过我有时候晚上会睡不着，然后你教了我一个方法，还记得那件事吗？"
+        assert MemoryManager.is_recall_probe(probe)
+        assert "睡不着" in MemoryManager.recall_keywords(probe)
+
+        found = await mm.retrieve_for_prompt(probe, top_k=3)
+        assert found
+        blob = "\n".join(m["content"] for m in found)
+        assert "睡不着" in blob
+        assert "躺着" in blob or "你当时回过" in blob
+        assert any(m.get("source") == "messages_recall" for m in found)
+
         mm.vector_store.close()
         await db.close()
         gc.collect()

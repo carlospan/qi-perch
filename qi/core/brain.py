@@ -273,7 +273,7 @@ class Brain:
             ):
                 recent = recent[:-1]
             query = pending or "此刻的心情"
-            memories = await self.memory.retrieve(query, top_k=3)
+            memories = await self.memory.retrieve_for_prompt(query, top_k=3)
             try:
                 facts = await self.memory.active_facts()
                 extras["user_facts"] = format_facts_for_prompt(
@@ -741,11 +741,23 @@ class Brain:
         return speech.text
 
     async def _background_narrative_weaving(self) -> None:
-        interval = float(
-            self.config.get("memory", {}).get("narrative_weave_interval", 21600)
-        )
+        mem_cfg = self.config.get("memory", {})
+        interval = float(mem_cfg.get("narrative_weave_interval", 21600))
+        backlog_threshold = int(mem_cfg.get("narrative_weave_backlog_threshold", 8))
+        backlog_interval = float(mem_cfg.get("narrative_weave_backlog_interval", 900))
         while self.alive:
-            await asyncio.sleep(interval)
+            pending = 0
+            if self.memory is not None:
+                try:
+                    pending = await self.memory.unprocessed_event_count()
+                except Exception:
+                    logger.exception("统计未编织事件失败")
+            wait = (
+                backlog_interval
+                if pending >= backlog_threshold
+                else interval
+            )
+            await asyncio.sleep(wait)
             if not self.alive or self.memory is None:
                 continue
             try:
