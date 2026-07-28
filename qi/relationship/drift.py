@@ -9,6 +9,9 @@ from datetime import datetime
 from typing import Any
 
 DRIFT_THRESHOLD = 0.4
+# 基线门槛：样本不足时不谈「他变了」——小样本比对会虚构出从未发生过的历史（实证：「不再聊书了」）
+DRIFT_MIN_USER_MESSAGES = 30
+DRIFT_MIN_BASELINE_TOPICS = 2
 
 _TOPIC_WORDS = (
     "工作", "代码", "项目", "吉他", "音乐", "电影", "书", "猫", "狗",
@@ -26,7 +29,8 @@ def extract_topics(messages: list[dict]) -> list[str]:
             if w in text:
                 found.append(w)
     counts = Counter(found)
-    return [t for t, _ in counts.most_common(8)]
+    # 偶然提一次不算话题：单次命中进基线会在下个窗口变成假的「不再聊X了」
+    return [t for t, c in counts.most_common(8) if c >= 2]
 
 
 def compute_emotional_baseline(messages: list[dict]) -> float:
@@ -140,6 +144,11 @@ def detect_user_drift(user_model: dict[str, Any], recent_messages: list[dict]) -
     signals: list[str] = []
     deviations: dict[str, float] = {}
 
+    # 样本门槛：近期用户消息太少时，任何「变化」都不可信
+    user_count = sum(1 for m in recent_messages if m.get("role") == "user")
+    if user_count < DRIFT_MIN_USER_MESSAGES:
+        return []
+
     old_topics = set(user_model.get("topics") or [])
     if isinstance(user_model.get("topics"), str):
         try:
@@ -147,11 +156,12 @@ def detect_user_drift(user_model: dict[str, Any], recent_messages: list[dict]) -
         except json.JSONDecodeError:
             old_topics = set()
     new_topics = set(extract_topics(recent_messages))
-    if old_topics:
+    if len(old_topics) >= DRIFT_MIN_BASELINE_TOPICS:
         union = old_topics | new_topics
         inter = old_topics & new_topics
         topic_distance = 1 - (len(inter) / len(union) if union else 0)
     else:
+        # 基线话题太少，话题漂移不可信
         topic_distance = 0.0
     deviations["topics"] = topic_distance
     if topic_distance > 0.5 and old_topics - new_topics:

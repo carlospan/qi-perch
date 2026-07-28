@@ -7,6 +7,7 @@ from qi.relationship.drift import (
     compute_rhythm,
     compute_rhythm_distance,
     detect_user_drift,
+    extract_topics,
 )
 
 
@@ -52,13 +53,36 @@ def test_detect_drift_includes_rhythm_signal():
     old_msgs = [_msg("user", "工作代码项目", day + timedelta(hours=i)) for i in range(4)]
     model = build_updated_user_model(old_msgs, [])
     new_base = datetime(2026, 7, 20, 23, 0)
+    # 样本量需过门槛（>=30 条）才能谈变化
     new_msgs = [
-        _msg("user", "电影音乐旅行", new_base + timedelta(hours=i * 2))
-        for i in range(4)
+        _msg("user", "电影音乐旅行", new_base + timedelta(minutes=i * 30))
+        for i in range(30)
     ]
     signals = detect_user_drift(model, new_msgs)
     # 话题或节奏至少有一个信号（综合可能过阈值）
     assert isinstance(signals, list)
+
+
+def test_drift_needs_min_samples():
+    """用户消息不足门槛时不产生任何漂移信号——防小样本虚构（实证：「不再聊书了」）。"""
+    day = datetime(2026, 7, 1, 9, 0)
+    old_msgs = [_msg("user", "工作代码项目", day + timedelta(hours=i)) for i in range(4)]
+    model = build_updated_user_model(old_msgs, [])
+    new_msgs = [
+        _msg("user", "电影音乐旅行", datetime(2026, 7, 20, 23, 0) + timedelta(hours=i))
+        for i in range(5)
+    ]
+    assert detect_user_drift(model, new_msgs) == []
+
+
+def test_extract_topics_ignores_single_mention():
+    """只提过一次的词不算话题，避免偶然词汇进基线后变成假的「不再聊X了」。"""
+    day = datetime(2026, 7, 1, 9, 0)
+    msgs = [_msg("user", "今天看了本书", day)]
+    msgs += [_msg("user", "在写代码", day + timedelta(hours=i)) for i in range(1, 3)]
+    topics = extract_topics(msgs)
+    assert "书" not in topics
+    assert "代码" in topics
 
 
 def test_forget_constant_used_in_purge_api():

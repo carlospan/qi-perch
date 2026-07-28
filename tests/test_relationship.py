@@ -216,6 +216,34 @@ def test_culture_detects_ritual():
     assert "早" in format_culture_for_prompt(rituals)
 
 
+def test_common_phrases_not_inside_joke():
+    """「谢谢你」这类通用礼貌语不入梗表——实证误报修复。"""
+    msgs = []
+    for i in range(3):
+        msgs.append({"role": "user", "content": "谢谢你", "timestamp": f"2026-07-2{i+1}T10:00:00"})
+        msgs.append({"role": "qi", "content": "谢谢你", "timestamp": f"2026-07-2{i+1}T10:01:00"})
+    culture = detect_shared_culture(msgs, [])
+    jokes = [c for c in culture if c["type"] == "inside_joke"]
+    assert jokes == []
+
+
+def test_inside_joke_requires_both_sides():
+    """单方复用的短句不算梗；双方都用过才是共同文化。"""
+    solo = [
+        {"role": "user", "content": "那我不退了", "timestamp": f"2026-07-2{i+1}T10:00:00"}
+        for i in range(3)
+    ]
+    culture = detect_shared_culture(solo, [])
+    assert [c for c in culture if c["type"] == "inside_joke"] == []
+
+    both = list(solo)
+    both.append({"role": "qi", "content": "那我不退了", "timestamp": "2026-07-24T10:00:00"})
+    culture = detect_shared_culture(both, [])
+    jokes = [c for c in culture if c["type"] == "inside_joke"]
+    assert len(jokes) == 1
+    assert jokes[0]["pattern"] == "那我不退了"
+
+
 def test_season_from_emotions():
     springish = [
         {"energy": 0.8, "valence": 0.2, "curiosity": 0.85} for _ in range(10)

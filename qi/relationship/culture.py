@@ -13,6 +13,13 @@ CULTURE_DETECTION_THRESHOLDS = {
 
 _GREETING_STARTS = ("早", "早安", "早呀", "你好", "嗨", "嘿", "晚安", "午安")
 
+# 通用礼貌/应答语——谁都天天说，不是「只有你们懂的东西」（实证：「谢谢你」被判成梗）
+_COMMON_PHRASES = frozenset({
+    "谢谢", "谢谢你", "多谢", "不客气", "没事", "没关系",
+    "好", "好的", "好啊", "嗯", "嗯嗯", "哦", "知道了", "收到",
+    "哈哈", "哈哈哈", "再见", "拜拜", "对", "是的", "可以",
+})
+
 
 def _is_greeting(text: str) -> bool:
     t = text.strip()
@@ -74,27 +81,34 @@ def detect_shared_culture(
             entry["broken"] = False
             by_pattern[pattern] = entry
 
-    # 短句复用 → 梗
-    shorts = [
-        m["content"].strip()
-        for m in messages
-        if m.get("role") in ("user", "qi")
-        and 2 <= len(m.get("content", "").strip()) <= 12
-        and not _is_greeting(m.get("content", ""))
-    ]
+    # 短句复用 → 梗：停用表挡掉礼貌语；双方都用过才算——单方口头禅不是共同文化
+    shorts_by_role: dict[str, set[str]] = {"user": set(), "qi": set()}
+    shorts: list[str] = []
+    for m in messages:
+        text = (m.get("content") or "").strip()
+        role = m.get("role")
+        if role not in ("user", "qi") or not (2 <= len(text) <= 12):
+            continue
+        if _is_greeting(text) or text in _COMMON_PHRASES:
+            continue
+        shorts.append(text)
+        shorts_by_role[role].add(text)
     for pattern, count in Counter(shorts).items():
-        if count >= CULTURE_DETECTION_THRESHOLDS["inside_joke"]:
-            entry = by_pattern.get(pattern) or {
-                "pattern": pattern,
-                "type": "inside_joke",
-                "first_seen": now.date().isoformat(),
-                "use_count": 0,
-                "last_used": now.date().isoformat(),
-                "broken": False,
-            }
-            entry["use_count"] = count
-            entry["last_used"] = now.date().isoformat()
-            by_pattern[pattern] = entry
+        if count < CULTURE_DETECTION_THRESHOLDS["inside_joke"]:
+            continue
+        if not (pattern in shorts_by_role["user"] and pattern in shorts_by_role["qi"]):
+            continue
+        entry = by_pattern.get(pattern) or {
+            "pattern": pattern,
+            "type": "inside_joke",
+            "first_seen": now.date().isoformat(),
+            "use_count": 0,
+            "last_used": now.date().isoformat(),
+            "broken": False,
+        }
+        entry["use_count"] = count
+        entry["last_used"] = now.date().isoformat()
+        by_pattern[pattern] = entry
 
     # 「记得」类共同引用
     refs = [

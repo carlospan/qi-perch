@@ -810,11 +810,46 @@ class Brain:
             except Exception:
                 logger.exception("梦境衰减后台出错")
 
+    async def _resume_interval_wait(
+        self, key: str, interval: float, default_first: float
+    ) -> float:
+        """检测类后台任务的首次等待：距上次检测不足周期则补足。
+
+        重启不重置检测节奏——频繁重启时短首跑延迟会把「每天/每三天一轮」
+        变成「每次重启一轮」，小样本误报被反复制造（实证：漂移/文化误报）。
+        与 proactive gate、depth 日帽同构，落 body_memory。
+        """
+        if self._db is None:
+            return min(default_first, interval)
+        try:
+            last = await self._db.get_body_memory(key)
+            if last:
+                elapsed = (
+                    datetime.now() - datetime.fromisoformat(str(last))
+                ).total_seconds()
+                if elapsed >= 0:
+                    return max(60.0, interval - elapsed)
+        except (TypeError, ValueError):
+            pass
+        except Exception:
+            logger.exception("读取检测节奏 %s 失败，用默认首跑延迟", key)
+        return min(default_first, interval)
+
+    async def _mark_interval_done(self, key: str) -> None:
+        if self._db is None:
+            return
+        try:
+            await self._db.set_body_memory(key, datetime.now().isoformat())
+        except Exception:
+            logger.exception("写入检测节奏 %s 失败", key)
+
     async def _background_culture_detection(self) -> None:
         interval = float(
             self.config.get("relationship", {}).get("culture_detection_interval", 86400)
         )
-        await asyncio.sleep(min(120.0, interval))
+        await asyncio.sleep(
+            await self._resume_interval_wait("last_culture_check", interval, 120.0)
+        )
         while self.alive:
             if self.relationship is not None and self._db is not None:
                 try:
@@ -824,6 +859,7 @@ class Brain:
                     )
                     self.relationship.state.shared_culture = culture
                     await self.relationship.persist()
+                    await self._mark_interval_done("last_culture_check")
                 except Exception:
                     logger.exception("共同文化检测出错")
             await asyncio.sleep(interval)
@@ -878,7 +914,9 @@ class Brain:
         interval = float(
             self.config.get("relationship", {}).get("drift_detection_interval", 259200)
         )
-        await asyncio.sleep(min(300.0, interval))
+        await asyncio.sleep(
+            await self._resume_interval_wait("last_drift_check", interval, 300.0)
+        )
         while self.alive:
             if self._db is not None:
                 try:
@@ -887,6 +925,7 @@ class Brain:
                     signals = detect_user_drift(model, msgs)
                     updated = build_updated_user_model(msgs, signals)
                     await self._db.save_user_model(**updated)
+                    await self._mark_interval_done("last_drift_check")
                     if signals:
                         self._drift_signals = signals
                         await self._db.save_consciousness(
