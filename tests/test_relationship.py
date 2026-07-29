@@ -244,6 +244,18 @@ def test_inside_joke_requires_both_sides():
     assert jokes[0]["pattern"] == "那我不退了"
 
 
+def test_common_phrase_purged_from_existing():
+    """存量 shared_culture 里的礼貌语残留会被自愈清除——防内存态写回已清理条目。"""
+    existing = [
+        {"pattern": "谢谢你", "type": "inside_joke", "use_count": 3},
+        {"pattern": "那我不退了", "type": "inside_joke", "use_count": 3},
+    ]
+    culture = detect_shared_culture([], existing)
+    patterns = [c["pattern"] for c in culture]
+    assert "谢谢你" not in patterns
+    assert "那我不退了" in patterns
+
+
 def test_season_from_emotions():
     springish = [
         {"energy": 0.8, "valence": 0.2, "curiosity": 0.85} for _ in range(10)

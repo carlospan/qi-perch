@@ -58,7 +58,12 @@ def detect_shared_culture(
     """
     now = now or datetime.now()
     existing = list(existing or [])
-    by_pattern = {e.get("pattern"): dict(e) for e in existing if e.get("pattern")}
+    # 自愈：存量里的礼貌语残留也过滤掉——运行中的内存态会把已清理的 DB 条目写回（实证：「谢谢你」清后复活）
+    by_pattern = {
+        e.get("pattern"): dict(e)
+        for e in existing
+        if e.get("pattern") and e.get("pattern") not in _COMMON_PHRASES
+    }
 
     greetings = [
         m["content"].strip()[:20]
