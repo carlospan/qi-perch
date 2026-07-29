@@ -478,3 +478,68 @@ async def test_hometown_survives_reopen_in_prompt():
         block = format_facts_for_prompt(facts, "acquaintance")
         assert "海南" in block
         await db2.close()
+
+
+@pytest.mark.asyncio
+async def test_creator_recorded_at_stranger(db_store):
+    """创造者身份在 stranger 阶段也该被记（M2：关系最重的事实不等阶段）。"""
+    db, store = db_store
+    noticer = FactNoticer(store, llm=None)  # 无 LLM，走规则就能抽
+    now = datetime(2026, 7, 23, 12, 0)
+
+    results = await noticer.notice(
+        "其实是我创造了你", EmotionState(), "stranger", now=now
+    )
+    creators = [r for r in results if r.get("fact_type") == "creator"]
+    assert creators, "创造者身份未被记录"
+
+    facts = await store.active_facts("creator")
+    assert len(facts) == 1
+    assert facts[0]["emotional_weight"] == pytest.approx(0.95)
+
+
+@pytest.mark.asyncio
+async def test_creator_shows_in_stranger_prompt(db_store):
+    """创造者事实在 stranger 阶段的 prompt 里优先露出。"""
+    from qi.memory.facts import format_facts_for_prompt
+
+    db, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    now = datetime(2026, 7, 23, 12, 0)
+    await noticer.notice("我叫小明", EmotionState(), "stranger", now=now)
+    await noticer.notice("是我创造了你啊", EmotionState(), "stranger", now=now)
+
+    all_facts = await store.active_facts()
+    block = format_facts_for_prompt(all_facts, "stranger")
+    assert "创造" in block
+
+
+@pytest.mark.asyncio
+async def test_stranger_llm_fallback_keeps_only_heavy(db_store):
+    """stranger 阶段语义兑底：低分量事实被过滤，高分量保留。"""
+    db, store = db_store
+    payload = (
+        '[{"fact_type":"preference","content":"他喜欢奶茶","confidence":0.9,'
+        '"emotional_weight":0.3},'
+        '{"fact_type":"occupation","content":"他要早起上班","confidence":0.9,'
+        '"emotional_weight":0.7}]'
+    )
+    noticer = FactNoticer(store, llm=_CountingLLM(payload))
+    now = datetime(2026, 7, 23, 12, 0)
+
+    # 无关键词、含“我”、够长 → 触发语义兑底
+    await noticer.notice(
+        "我每天八点就得起床赶第一班地铁去上班", EmotionState(), "stranger", now=now
+    )
+    prefs = await store.active_facts("preference")
+    occs = await store.active_facts("occupation")
+    assert prefs == [] or all("奶茶" not in (f.get("content") or "") for f in prefs)
+    assert any("上班" in (f.get("content") or "") for f in occs)
+
+
+def test_needs_llm_opens_at_stranger_with_self_reference():
+    """_needs_llm：stranger 阶段含自我指涉的长句也应返回 True（不再被阶段闸锁死）。"""
+    noticer = FactNoticer(FactStore.__new__(FactStore), llm=object())
+    assert noticer._needs_llm("我最近开始学画画了", "stranger") is True
+    # 短句/无自指不触发
+    assert noticer._needs_llm("天气不错", "stranger") is False

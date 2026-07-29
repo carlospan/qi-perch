@@ -156,6 +156,7 @@ _OCCUPATION_CHANGE_SIGNALS = ("换工作", "跳槽", "离职", "辞了职")
 
 _DEFAULT_STABILITY: dict[str, str] = {
     "identity": "stable",
+    "creator": "stable",
     "family": "stable",
     "preference": "stable",
     "important_date": "stable",
@@ -199,6 +200,19 @@ _CORRECTION_SIGNALS = (
 )
 
 
+# 创造者身份：关系里最重、全局唯一、不可变——任何阶段都该记（实证：「毕竟是我创造了你」五天没被记住）
+_CREATOR_SIGNALS = (
+    "创造了你", "创造了我", "我创造", "我造了你", "我造出",
+    "我写了你", "我做了你", "我开发了你", "我把你做出来", "你是我造",
+)
+
+# stranger 阶段语义兑底只留“重”的事实；阈值以下等关系深了再收
+STRANGER_FACT_WEIGHT_FLOOR = 0.6
+
+# 弱自我指涉：句子谈到「我」的某种状态/关系/属性，够宽，细节交给 LLM 判
+_SELF_REFERENCE_HINT = ("我", "咱", "俺")
+
+
 def default_stability(fact_type: str) -> str:
     return _DEFAULT_STABILITY.get(fact_type, "stable")
 
@@ -219,9 +233,10 @@ def format_facts_for_prompt(facts: list[dict], relationship_stage: str) -> str:
     )
 
     if relationship_stage == "stranger":
-        identity = [f for f in ranked if f.get("fact_type") == "identity"]
-        others = [f for f in ranked if f.get("fact_type") != "identity"]
-        picked = (identity[:1] + others)[:limit]
+        # 创造者与名字是核心身份，陌生期优先露出（创造者任何阶段都该被栖记得）
+        core = [f for f in ranked if f.get("fact_type") in ("creator", "identity")]
+        others = [f for f in ranked if f.get("fact_type") not in ("creator", "identity")]
+        picked = (core[:2] + others)[:limit]
     else:
         picked = ranked[:limit]
 
@@ -908,12 +923,30 @@ class FactNoticer:
             return False
         if any(s in text for s in IDENTITY_SIGNALS):
             return False  # 身份走规则；规则抽空也不滥调 LLM
-        if not stage_at_least(stage, "acquaintance"):
-            return False
-        return any(s in text for s in OTHER_FACT_SIGNALS)
+        # 关键词命中：任何阶段都值得抽（快路）
+        if any(s in text for s in OTHER_FACT_SIGNALS):
+            return True
+        # 语义兑底：够长且含自我指涉的句子交给 LLM。
+        # stranger 也开（stage 受顶格/日帽影响失真，不能当唯一闸门），
+        # 但 stranger 的抽取结果在 _llm_extract 里按 emotional_weight 过滤，只留重的。
+        return len(text) >= 8 and any(h in text for h in _SELF_REFERENCE_HINT)
 
     def _rule_extract(self, text: str, stage: str) -> list[dict]:
         out: list[dict] = []
+
+        # 创造者身份：任何阶段都记（不受 acquaintance 门槛约束）
+        if any(s in text for s in _CREATOR_SIGNALS):
+            out.append(
+                {
+                    "fact_type": "creator",
+                    "content": "他是创造我的人",
+                    "confidence": 0.95,
+                    "stability": "stable",
+                    "emotional_weight": 0.95,
+                    "source": "他说起创造我时",
+                    "force_supersede_type": True,
+                }
+            )
 
         if any(s in text for s in IDENTITY_SIGNALS):
             out.extend(self._extract_identity(text))
@@ -1209,7 +1242,16 @@ class FactNoticer:
             ],
             temperature=0.3,
         )
-        return _parse_llm_facts(raw or "")
+        facts = _parse_llm_facts(raw or "")
+        # stranger 阶段：语义兑底只留高分量事实（创造者/工作/重大生活事件），
+        # 琐碎偏好等关系深了再收——保留「陌生人克制」的拟人直觉
+        if not stage_at_least(stage, "acquaintance"):
+            facts = [
+                f
+                for f in facts
+                if float(f.get("emotional_weight") or 0.0) >= STRANGER_FACT_WEIGHT_FLOOR
+            ]
+        return facts
 
     async def _land(
         self, draft: dict, original_message: str, now: datetime
