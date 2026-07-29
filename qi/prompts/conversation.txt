@@ -7,7 +7,7 @@
 精力：{energy_level}
 关系阶段：{relationship_stage}
 关系语气：{relationship_hint}
-季节：{season_hint}
+内在节奏：{season_hint}
 
 【你的自我认知】
 {self_narrative}
