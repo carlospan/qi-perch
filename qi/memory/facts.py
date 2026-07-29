@@ -281,12 +281,22 @@ def looks_like_person_name(name: str) -> bool:
         )
     ):
         return False
+    # 句式否定：真人名是纯名词，不含动词/存在/疑问/指示结构。
+    # 黑名单穷举不完（实证：“程序有问题”“那今天几月几号”被当名字覆盖真名）。
+    if any(
+        x in name
+        for x in (
+            "问题", "有", "是", "不", "几号", "几点", "几月", "今天", "明天",
+            "怎么", "为什", "可以", "这个", "那个", "什么时", "吧", "吗",
+        )
+    ):
+        return False
     if name.endswith(("吗", "呢", "么", "吧", "啊", "呀", "嘛", "？", "?")):
         return False
     if len(name) > 12:
         return False
-    # 汉字名（可含 ·）；或较短拉丁名
-    if re.fullmatch(r"[\u4e00-\u9fff·]{1,8}", name):
+    # 汉字名（可含 ·）；人名一般 1-4 字，超过 6 字的“名字”大多是短语误判
+    if re.fullmatch(r"[\u4e00-\u9fff·]{1,6}", name):
         return True
     if re.fullmatch(r"[A-Za-z][A-Za-z\-'. ]{0,30}", name) and len(name) <= 32:
         return True

@@ -399,6 +399,11 @@ async def test_looks_like_person_name_gate():
     assert not looks_like_person_name("好的")
     assert not looks_like_person_name("谢谢你")
     assert not looks_like_person_name("谢谢")
+    # 实证回归（2026-07-30）：非名短语曾被当名字覆盖真名（superseded 链污染）
+    assert not looks_like_person_name("程序有问题")
+    assert not looks_like_person_name("那今天几月几号")
+    assert not looks_like_person_name("其实是程序有问题")
+    assert not looks_like_person_name("我来修这个问题")
 
 
 @pytest.mark.asyncio
