@@ -195,7 +195,11 @@ class MemoryManager:
                     if not any(k in qi_text for k in _FORGET_ACK):
                         used_ids.add(int(qi_msg["id"]))
                         qi_bit = f"\n你当时回过：{qi_text[:160]}"
-                snippet = f"他曾说：{(m.get('content') or '')[:100]}{qi_bit}"
+                # 用户原话里的“你/我”是他的视角（你=栖、我=他），加锤点防栖读反
+                snippet = (
+                    f"他曾说（他口中的「你」是你、「我」是他）："
+                    f"{(m.get('content') or '')[:100]}{qi_bit}"
+                )
             else:
                 snippet = f"你曾说过：{(m.get('content') or '')[:180]}"
             used_ids.add(mid)

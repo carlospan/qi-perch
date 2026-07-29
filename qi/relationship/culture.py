@@ -44,7 +44,12 @@ def format_culture_for_prompt(shared_culture: list[dict]) -> str:
         elif kind == "inside_joke":
             lines.append(f"- 你们的梗：{pattern}")
         elif kind == "shared_reference":
-            lines.append(f"- 共同记忆：{pattern}")
+            # pattern 是他的原话（含“你/我”的第二人称）。直接注入会让栖把“你教了我”
+            # 读反（实证：栖把自己教用户的方法说成用户教栖）。加视角锤点：这是他反复提起的话，
+            # 里面的“你”指栖自己、“我”指他。
+            lines.append(
+                f"- 他反复提起过（他口中的「你」是你、「我」是他）：“{pattern}”"
+            )
     return "\n".join(lines) if lines else "（还没有只属于你们的默契）"
 
 

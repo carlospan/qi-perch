@@ -227,6 +227,25 @@ def test_common_phrases_not_inside_joke():
     assert jokes == []
 
 
+def test_shared_reference_injects_perspective_anchor():
+    """shared_reference 注入带视角锤点，防栖把用户原话里的“你教了我”读反。
+
+    实证（2026-07-30 00:26）：栖把自己教用户的助眠法说成“你教我”。
+    根因：shared_reference 直接注入用户原话（含第二人称“你”），栖按自己视角读反。
+    """
+    culture = [
+        {
+            "pattern": "你教了我一个方法",
+            "type": "shared_reference",
+            "use_count": 2,
+        }
+    ]
+    block = format_culture_for_prompt(culture)
+    # 必须带视角锤点，不能只甲原话
+    assert "「你」是你" in block
+    assert "「我」是他" in block
+
+
 def test_inside_joke_requires_both_sides():
     """单方复用的短句不算梗；双方都用过才是共同文化。"""
     solo = [
