@@ -303,6 +303,24 @@ def looks_like_person_name(name: str) -> bool:
     return False
 
 
+# 疑问/假设句不是用户在陈述自己——不该抽成事实（实证：「有了女朋友怎么办」被当 location）
+_QUESTION_MARKERS = ("？", "?")
+_QUESTION_TAILS = ("吗", "呢", "怎么办", "如何")
+_HYPOTHETICAL = ("如果", "假如", "要是", "假设", "万一")
+
+
+def is_question_or_hypothetical(text: str) -> bool:
+    """疑问句或假设句——不应从中抽取用户事实（仅拦 other/LLM，不拦 identity 更正/邀名）。"""
+    t = (text or "").strip()
+    if not t:
+        return False
+    if any(m in t for m in _QUESTION_MARKERS):
+        return True
+    if t.endswith(_QUESTION_TAILS):
+        return True
+    return any(h in t[:6] for h in _HYPOTHETICAL)
+
+
 def is_name_memory_question(text: str) -> bool:
     """在问「记不记得 / 叫什么」——绝不当介绍自己。"""
     t = (text or "").strip()
@@ -933,6 +951,8 @@ class FactNoticer:
             return False
         if any(s in text for s in IDENTITY_SIGNALS):
             return False  # 身份走规则；规则抽空也不滥调 LLM
+        if is_question_or_hypothetical(text):
+            return False  # 疑问/假设句不抽事实
         # 关键词命中：任何阶段都值得抽（快路）
         if any(s in text for s in OTHER_FACT_SIGNALS):
             return True
@@ -961,7 +981,10 @@ class FactNoticer:
         if any(s in text for s in IDENTITY_SIGNALS):
             out.extend(self._extract_identity(text))
 
-        if stage_at_least(stage, "acquaintance"):
+        # 疑问/假设句不抽 other 事实（identity 上方已处理，不受影响）
+        if stage_at_least(stage, "acquaintance") and not is_question_or_hypothetical(
+            text
+        ):
             out.extend(self._extract_other_rules(text))
 
         return out

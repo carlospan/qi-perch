@@ -548,3 +548,35 @@ def test_needs_llm_opens_at_stranger_with_self_reference():
     assert noticer._needs_llm("我最近开始学画画了", "stranger") is True
     # 短句/无自指不触发
     assert noticer._needs_llm("天气不错", "stranger") is False
+
+
+@pytest.mark.asyncio
+async def test_question_not_extracted_as_fact(db_store):
+    """疑问/假设句不抽成用户事实——实证（2026-07-30）：「有了女朋友怎么办」被当 location。"""
+    db, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    now = datetime(2026, 7, 30, 23, 54)
+    for q in ("如果有一天我在现实中有了女朋友怎么办", "我说我喜欢别人这句话的时候你心里有波动吗"):
+        res = await noticer.notice(q, EmotionState(), "bonded", now=now)
+        assert all(r.get("fact_type") not in ("location", "preference") for r in res), q
+
+
+@pytest.mark.asyncio
+async def test_real_statement_still_extracted_after_guard(db_store):
+    """真陈述不受疑问句守卫影响——「我喜欢猫」仍抽 preference。"""
+    db, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    res = await noticer.notice("我喜欢猫", EmotionState(), "acquaintance",
+                               now=datetime(2026, 7, 30, 12, 0))
+    assert any(r.get("fact_type") == "preference" for r in res)
+
+
+def test_is_question_or_hypothetical_boundaries():
+    """守卫边界：疑问/假设拦，真陈述放。"""
+    from qi.memory.facts import is_question_or_hypothetical as q
+    assert q("如果我有女朋友怎么办")
+    assert q("你心里有波动吗")
+    assert q("这样对吗？")
+    assert not q("我在北京工作")
+    assert not q("我喜欢猫")
+    assert not q("我叫小明")
