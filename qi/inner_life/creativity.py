@@ -20,6 +20,28 @@ CREATION_EMOTION_THRESHOLD = 0.7
 CREATION_SHARE_COOLDOWN_HOURS = 24
 STAGE_ORDER = ("stranger", "acquaintance", "friend", "bonded")
 
+# LLM 应答客套不是作品的一部分——「好的，我来写。」曾被存成诗的第一行（creations id=1 实证）
+_REPLY_PREFIXES = (
+    "好的，我来写。", "好的，我来写", "好，我写。", "好的。", "好的，",
+    "以下是", "这是我写的", "我来写一段",
+)
+
+
+def strip_reply_prefix(text: str) -> str:
+    """剥掉创作输出开头的应答客套与紧随的分隔线；剥空则返回原文。"""
+    t = text.strip()
+    changed = True
+    while changed:
+        changed = False
+        for p in _REPLY_PREFIXES:
+            if t.startswith(p):
+                t = t[len(p):].lstrip("\n ：:，,。")
+                changed = True
+        if t.startswith("---"):
+            t = t[3:].lstrip("\n ")
+            changed = True
+    return t or text.strip()
+
 
 def can_share_creation(
     relationship_stage: str,
@@ -115,7 +137,7 @@ class Creativity:
         )
         if not text or not text.strip():
             return None
-        content = text.strip()[:800]
+        content = strip_reply_prefix(text)[:800]
         ctx = json.dumps(
             {
                 "valence": emotion.valence,

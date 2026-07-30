@@ -142,3 +142,36 @@ async def test_user_reply_think_pause_outside_lock():
     with patch("qi.core.brain.asyncio.sleep", side_effect=pause):
         assert await brain.receive_user_message("想了想") == "想了想"
     assert lock_held_during_pause is False
+
+
+@pytest.mark.asyncio
+async def test_creation_card_delivers_content_with_qi_line():
+    """W2：share 递出时作品正文必须随 qi_line 进对话流——否则栖递了什么谁都看不见，
+    被问起只能现场虚构（实证：递《凌晨五点》却念了首现编的）。"""
+    brain = Brain({}, MagicMock())
+    delivered: list[str] = []
+
+    async def fake_deliver(text, now, proactive=False):
+        delivered.append(text)
+
+    brain._deliver_qi_message = fake_deliver  # type: ignore[method-assign]
+
+    from datetime import datetime
+
+    card = {
+        "type": "creation_card",
+        "qi_line": "我今天写了个东西……给你。",
+        "content": "**凌晨五点**\n\n天还没亮。",
+    }
+    await brain._deliver_action_result(card, datetime(2026, 7, 31, 12, 0))
+    assert len(delivered) == 1
+    assert "我今天写了个东西" in delivered[0]
+    assert "凌晨五点" in delivered[0]
+
+    # 无正文时退回只发 qi_line
+    delivered.clear()
+    await brain._deliver_action_result(
+        {"type": "creation_card", "qi_line": "写了一点。", "content": ""},
+        datetime(2026, 7, 31, 12, 1),
+    )
+    assert delivered == ["写了一点。"]

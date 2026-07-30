@@ -965,7 +965,15 @@ class Brain:
         # share 递出时说一句脆弱的话；tend/explore 默认向内不说
         if result.get("type") == "creation_card":
             line = (result.get("qi_line") or "").strip()
-            if line:
+            content = str(result.get("content") or "").strip()
+            # 作品正文必须跟着 qi_line 进对话流——前端无 creation_card handler，
+            # 只发 qi_line 会让栖递了东西却谁都看不见，被问起只能现场虚构
+            #（实证：22:52 递《凌晨五点》，23:16 被问时念了首现编的还说「放了好几天」）
+            if line and content:
+                await self._deliver_qi_message(
+                    f"{line}\n\n{content}", now, proactive=True
+                )
+            elif line:
                 await self._deliver_qi_message(line, now, proactive=True)
         elif result.get("speak") and result.get("qi_line"):
             await self._deliver_qi_message(

@@ -332,3 +332,14 @@ async def test_l4_tables_and_crud():
         assert sm and "栖" in sm["identity_narrative"]
 
         await db.close()
+
+def test_strip_reply_prefix_removes_llm_courtesy():
+    """W1：创作输出剥应答客套——「好的，我来写。」曾被存成诗的第一行（creations id=1）。"""
+    from qi.inner_life.creativity import strip_reply_prefix
+
+    dirty = "好的，我来写。\n\n---\n\n**凌晨五点**\n\n天还没亮。"
+    assert strip_reply_prefix(dirty).startswith("**凌晨五点**")
+    # 无前缀不动
+    assert strip_reply_prefix("就到这里。") == "就到这里。"
+    # 剥空保护：整段只有客套时返回原文
+    assert strip_reply_prefix("好的。") == "好的。"
