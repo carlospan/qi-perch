@@ -1,6 +1,6 @@
-# LLM 配置（OpenAI 兼容协议，deepseek / agnes-ai / 自定义端点可互换）
+# LLM 配置（OpenAI 兼容协议，deepseek / agnes-ai / sensenova / 自定义端点可互换）
 llm:
-  default_provider: "deepseek"
+  default_provider: "sensenova"
   providers:
     deepseek:
       base_url: "https://api.deepseek.com"
@@ -14,15 +14,21 @@ llm:
       models:
         fast: "agnes-2.0-flash"
         strong: "agnes-2.0-flash"
+    sensenova:
+      base_url: "https://token.sensenova.cn/v1"
+      api_key: "${SENSENOVA_API_KEY}"
+      models:
+        fast: "sensenova-6.7-flash-lite"
+        strong: "sensenova-6.7-flash-lite"
   custom_providers: {}
   model_routing:
-    conversation: "deepseek:fast"
-    narrative: "deepseek:strong"
-    consciousness: "deepseek:fast"
-    dream: "deepseek:fast"
-    creation: "deepseek:fast"
-    reflection: "deepseek:strong"
-    fact: "deepseek:fast"
+    conversation: "sensenova:fast"
+    narrative: "sensenova:strong"
+    consciousness: "sensenova:fast"
+    dream: "sensenova:fast"
+    creation: "sensenova:fast"
+    reflection: "sensenova:strong"
+    fact: "sensenova:fast"
 
 # 心跳配置
 rhythm:
