@@ -580,3 +580,6 @@ def test_is_question_or_hypothetical_boundaries():
     assert not q("我在北京工作")
     assert not q("我喜欢猫")
     assert not q("我叫小明")
+    # 「呢」结尾的软陈述不该被拦（Cursor 指正的误伤）
+    assert not q("我在写代码呢")
+    assert not q("我住在上海呢")

@@ -305,7 +305,8 @@ def looks_like_person_name(name: str) -> bool:
 
 # 疑问/假设句不是用户在陈述自己——不该抽成事实（实证：「有了女朋友怎么办」被当 location）
 _QUESTION_MARKERS = ("？", "?")
-_QUESTION_TAILS = ("吗", "呢", "怎么办", "如何")
+# 尾缀不含「呢」：它多为软陈述语气助词（「我在写代码呢」）而非疑问，会误拦（Cursor 指正）
+_QUESTION_TAILS = ("吗", "怎么办", "如何")
 _HYPOTHETICAL = ("如果", "假如", "要是", "假设", "万一")
 
 
