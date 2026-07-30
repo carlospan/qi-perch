@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
+from qi.core.perception import count_hits_negation_aware
 from qi.relationship.stages import check_stage_upgrade
 from qi.relationship.trust import (
     apply_daily_decay,
@@ -134,7 +135,13 @@ def assess_interaction(message: str) -> InteractionSignals:
     ):
         vulnerability = min(1.0, vulnerability + 0.3)
 
-    negative = any(k in text for k in ("烦", "闭嘴", "删掉", "滚", "讨厌", "不想理", "你烦"))
+    # 否定感知：「不讨厌」≠「讨厌」（实证：接纳句被判负面，trust 无辜受损留假疤）
+    negative = (
+        count_hits_negation_aware(
+            text, ("烦", "闭嘴", "删掉", "滚", "讨厌", "不想理", "你烦")
+        )
+        > 0
+    )
     positive = any(k in text for k in ("谢谢", "喜欢", "真好", "有你在", "晚安", "早"))
     deep = len(text) > 40 and (disclosure > 0.5 or vulnerability > 0.5 or creator > 0.5)
 

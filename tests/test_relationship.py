@@ -227,6 +227,16 @@ def test_common_phrases_not_inside_joke():
     assert jokes == []
 
 
+def test_negation_aware_interaction_assessment():
+    """「不讨厌」≠负面——实证（2026-07-30）：接纳句被判负面，trust 1.0→0.82 并留假疤。"""
+    s = assess_interaction("不讨厌")
+    assert not s.is_negative
+    assert s.severity == 0.0
+    # 真骂仍识别
+    s2 = assess_interaction("讨厌你，闭嘴")
+    assert s2.is_negative
+
+
 def test_shared_reference_injects_perspective_anchor():
     """shared_reference 注入带视角锤点，防栖把用户原话里的“你教了我”读反。
 

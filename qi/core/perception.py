@@ -31,6 +31,24 @@ _NEGATIVE = (
 _EXCLAIM = ("！", "!", "…", "...", "？", "?")
 _IMPACT_LLM_TIMEOUT = 2.0
 
+# 否定前缀：「不讨厌」≠「讨厌」——实证：用户说「不讨厌」被判负面留下假疤
+_NEG_PREFIX_CHARS = "不没"
+
+
+def count_hits_negation_aware(text: str, words: tuple[str, ...]) -> int:
+    """统计命中次数，跳过被否定修饰的词（前一字为「不/没」）。"""
+    hits = 0
+    for w in words:
+        start = 0
+        while True:
+            i = text.find(w, start)
+            if i == -1:
+                break
+            if not (i > 0 and text[i - 1] in _NEG_PREFIX_CHARS):
+                hits += 1
+            start = i + 1
+    return hits
+
 
 class Perception:
     """感知层。L3：冲击会经状态调制；低置信时可选 LLM 旁路。"""
@@ -49,8 +67,8 @@ class Perception:
         return (now - last_interaction).total_seconds()
 
     def _keyword_base(self, text: str) -> tuple[float, int, int]:
-        pos_hits = sum(1 for w in _POSITIVE if w in text)
-        neg_hits = sum(1 for w in _NEGATIVE if w in text)
+        pos_hits = count_hits_negation_aware(text, _POSITIVE)
+        neg_hits = count_hits_negation_aware(text, _NEGATIVE)
 
         if len(text) <= 2 and pos_hits == 0 and neg_hits == 0:
             base = -0.08
