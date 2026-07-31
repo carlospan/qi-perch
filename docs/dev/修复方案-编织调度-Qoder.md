@@ -4,7 +4,8 @@
 > **日期：** 2026-08-01
 > **代码基线：** `75d1b6e`
 > **来源：** 07-31 夜实证 + 维护者"6 小时太长"的体感
-> **分工：** 施工方未定（Qoder / Cursor 均可）；**本文供多 agent 交叉检验**——请 Cursor 重点审 §三的调度改法与 §四的可测试性
+> **分工：** 施工方未定（Qoder / Cursor 均可）；**本文供多 agent 交叉检验**
+> **审查记录（2026-08-01，Cursor）：** 根因/方向/§六均认同；**指出§三示例代码硬伤**——长睡分支结束后又有 `if wait>0: sleep(wait)`，安静时会变成约 12h 一织（与「平时 6h」承诺相反）。已按 Cursor 修正版重写§三（睡眠只发生在分支内部，织前不再二次 sleep）；§四测试改为 mock sleep 跑真实循环（不抽纯函数）；§五验收期望已对齐（本方案只治「积压≥8 却还在长睡」）。
 > **规模：** ~20 行（brain.py）+ 配置 1 项 + 测试；**不改编织逻辑本身**
 
 ---
@@ -34,9 +35,9 @@ while self.alive:
 
 **实证**：07-31 23:33–23:39 维护者聊了重要的"恐惧化解"对话，但编织睡下去时定了 6h，期间积压涨上来也没提前醒——重要对话要等满 6 小时才被织进叙事。
 
-## 三、改法（`qi/core/brain.py`）
+## 三、改法（`qi/core/brain.py`）——Cursor 修正版
 
-**思路：把长睡眠拆成小段轮询——每段睡醒都复查积压，够了就提前织；不够就接着睡满 6h。** 短周期路径（积压≥8 走 900s）**完全不动**。
+**思路：把长睡眠拆成小段轮询。睡眠只发生在分支内部；织之前不再二次 sleep**（原示例的硬伤已除）。短周期路径（积压≥8 走 900s）逻辑不变。
 
 ```python
 async def _background_narrative_weaving(self) -> None:
@@ -44,28 +45,22 @@ async def _background_narrative_weaving(self) -> None:
     interval = float(mem_cfg.get("narrative_weave_interval", 21600))
     backlog_threshold = int(mem_cfg.get("narrative_weave_backlog_threshold", 8))
     backlog_interval = float(mem_cfg.get("narrative_weave_backlog_interval", 900))
-    check_period = float(mem_cfg.get("narrative_weave_check_period", 3600))  # 长睡眠的复查粒度
+    check_period = float(mem_cfg.get("narrative_weave_check_period", 3600))  # 长睡眠复查粒度
     while self.alive:
         pending = await self._pending_event_count()
         if pending >= backlog_threshold:
-            wait = backlog_interval          # 积压够：短周期，原样
+            await asyncio.sleep(backlog_interval)      # 积压够：短周期
         else:
-            # 积压不够：本应长睡 interval，但拆成 check_period 小段，
-            # 每段醒来看积压是否涨上来——涨够了就提前去织，不再干等满 6h
+            # 积压不够：长睡 interval，但拆成 check_period 小段；
+            # 每段醒来复查，积压涨够就提前跳出，不再干等满 6h
             waited = 0.0
-            wait = interval
             while self.alive and waited < interval:
                 chunk = min(check_period, interval - waited)
                 await asyncio.sleep(chunk)
                 waited += chunk
                 if await self._pending_event_count() >= backlog_threshold:
-                    wait = 0.0               # 标记：提前触发
                     break
-            # 走到这里：要么睡满了 interval，要么积压涨够提前退出
-            if not self.alive:
-                continue
-        if wait > 0:
-            await asyncio.sleep(wait)
+        # 睡眠已在分支内完成，这里直接织——不再二次 sleep
         if not self.alive or self.memory is None:
             continue
         try:
@@ -87,35 +82,33 @@ async def _pending_event_count(self) -> int:
 ```
 
 **要点：**
-- 抽 `_pending_event_count()` helper，消除原代码里 pending 统计的重复（原 L749-754 与 L764 各算一次）
-- 新增配置 `narrative_weave_check_period`（默认 3600=1h）：长睡眠的复查粒度
-- **效果**：重要对话最多等 `check_period`（1h）就被织；平时没事仍 6h 一织（保住叙事质量）；不增加无谓 LLM 调用（只是醒来看一眼，没事接着睡）
+- **睡眠只在分支内**：积压够→睡 `backlog_interval`；不够→分段睡满 `interval` 或提前跳出。织前绝不再 sleep（防 12h 硬伤）。
+- 抽 `_pending_event_count()` helper，消除原代码 pending 统计重复（原 L749-754 与 L764）。
+- 新增配置 `narrative_weave_check_period`（默认 3600=1h）：长睡眠复查粒度。`settings.example.yaml` 的 `memory:` 节补一行：
+  ```yaml
+  narrative_weave_check_period: 3600        # 长睡眠中途复查积压的粒度（秒）
+  ```
+- **竞态/漏织（Cursor 核实）**：单后台任务读 DB 计数，无实质竞态；提前醒后下一轮若仍 ≥8 会走短周期，不会漏织。
+- **效果**：积压一旦 ≥8，最多等 `check_period`（1h）就被织；平时没事仍约 6h 一织（保住叙事质量）；不增加无谓 LLM 调用。
 
-## 四、测试（请 Cursor 重点看可测试性）
+## 四、测试（采纳 Cursor 意见：mock sleep 跑真实循环，不抽纯函数）
 
-后台循环直接测较笨重。**建议把"该睡多久/是否提前触发"的决策抽成纯函数**再测，例如：
+~~原拟抽 `_plan_weave_wait` 纯函数~~ —— Cursor 指出它几乎只是 `if pending>=threshold`，**测不出「提前醒」**。采纳其建议：按 `test_pending_queue.py` 那套，**mock `asyncio.sleep` + 很小的 interval/check_period + 跑真实循环**。
 
-```python
-def _plan_weave_wait(pending: int, threshold: int, interval: float,
-                     backlog_interval: float) -> tuple[float, bool]:
-    """返回 (本次睡眠时长, 是否需要分段复查)。pending>=threshold → 短周期不分段。"""
-    if pending >= threshold:
-        return backlog_interval, False
-    return interval, True   # 长睡眠，需分段复查
-```
+重点断言：
+1. **提前醒（核心）**：长睡中途 pending 涨过 threshold → `weave_narrative` 在**总等待 < interval** 时就被调用。
+2. **安静时仍约 6h**：pending 始终 < threshold → 总等待 ≈ interval（不是 12h！防回归硬伤）后织一次。
+3. **积压够走短周期**：pending ≥ threshold → 睡 `backlog_interval` 后织。
 
-测试用例：
-1. `pending >= threshold` → 返回 `(backlog_interval, False)`（短周期，不分段）
-2. `pending < threshold` → 返回 `(interval, True)`（长睡眠，分段）
-3. （集成向）mock memory：长睡眠中途 pending 涨过 threshold → 提前触发 weave（可用很小的 interval/check_period + 假 sleep 验证循环逻辑）
+> mock 提示：用累加器记录 sleep 总时长；`unprocessed_event_count` 用 side_effect 模拟「中途涨过阈值」。参考 `test_pending_queue.py` 的 `patch("qi.core.brain.asyncio.sleep")` 写法。
 
-> **给 Cursor 的问题**：你觉得抽纯函数测，还是直接用小参数跑循环测，哪个更贴合本项目现有测试风格？（现有 test_proactive.py / test_pending_queue.py 多用 mock + 小参数跑真实逻辑，可参考。）
-
-## 五、验收
+## 五、验收（期望已按 Cursor 意见对齐）
 
 1. 新测试 + 全量绿 + ruff 零违规
-2. **实测**：聊一场密集对话（让积压快速 ≥8）后，**1 小时内**（而非 6 小时）就能看到新叙事生成
-3. **反向**：长时间无对话时，仍约 6h 一织（不为空转频繁调用 LLM）
+2. **实测（本方案真正解决的）**：让积压快速 ≥8（一场密集对话）后，**1 小时内**（而非等满 6h）就看到新叙事生成
+3. **反向**：长时间无对话、积压始终 <8 时，仍约 6h 一织（不为空转频繁调 LLM，也不是 12h）
+
+> **期望边界（Cursor 提醒，务必别写错）**：本方案**只治「积压 ≥8 却还在长睡」**。若那场「重要对话」事件数 **<8**，修完后**仍要等满约 6h**。若维护者体感主要来自「重要但条数少」，需另开「重要性/会话结束唤醒」——**不要**把验收写成「重要对话必 1h 内织」。
 
 ## 六、明确不做（与 §一 症状 B 对应）
 
@@ -128,4 +121,4 @@ def _plan_weave_wait(pending: int, threshold: int, interval: float,
 
 ---
 
-*请 Cursor 审：§三调度改法的正确性（分段轮询有无竞态/漏织）、§四可测试性选型、§六"不缩短 6h"的判断是否认同。*
+*审查闭环：Cursor 已审（2026-08-01），根因/方向/§六认同；§三二次-sleep 硬伤、§四测试选型、§五期望边界均按其意见修正。施工方由维护者定。*
