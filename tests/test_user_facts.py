@@ -583,3 +583,23 @@ def test_is_question_or_hypothetical_boundaries():
     # 「呢」结尾的软陈述不该被拦（Cursor 指正的误伤）
     assert not q("我在写代码呢")
     assert not q("我住在上海呢")
+
+
+@pytest.mark.asyncio
+async def test_correction_signal_requires_name_context(db_store):
+    """「其实是X」无名字语境不改名——实证：「记忆其实是存在我本地」顶掉真名（第二次覆盖）。"""
+    db, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    now = datetime(2026, 7, 31, 22, 11)
+    await noticer.notice("我叫潘纪振", EmotionState(), "bonded", now=now)
+
+    # 非名字语境的「其实是」不触发改名
+    await noticer.notice("你的记忆其实是存在我本地", EmotionState(), "bonded", now=now)
+    facts = await store.active_facts("identity")
+    assert len(facts) == 1
+    assert "潘纪振" in facts[0]["content"]
+
+    # 真改名（带「叫」语境）仍工作
+    await noticer.notice("我不叫潘纪振，其实我叫小明", EmotionState(), "bonded", now=now)
+    facts = await store.active_facts("identity")
+    assert any("小明" in (f.get("content") or "") for f in facts)

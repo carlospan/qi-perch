@@ -729,7 +729,12 @@ class FactNoticer:
         )
         if m:
             new_name = m.group(1).strip("的了啊呀呢吧")
-            if new_name and looks_like_person_name(new_name):
+            # 「其实是X」只在名字语境下才算改名——否则「你的记忆其实是存在我本地」
+            # 会把「存在我本地」当新名字顶掉真名（实证：真名第二次被覆盖）
+            has_name_context = (
+                "叫" in text or "名字" in text or self._awaiting_name_active(now)
+            )
+            if new_name and has_name_context and looks_like_person_name(new_name):
                 applied = await self._correct_identity(
                     f"他叫{new_name}", text, now
                 )
