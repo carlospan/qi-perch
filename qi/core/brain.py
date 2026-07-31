@@ -745,19 +745,23 @@ class Brain:
         interval = float(mem_cfg.get("narrative_weave_interval", 21600))
         backlog_threshold = int(mem_cfg.get("narrative_weave_backlog_threshold", 8))
         backlog_interval = float(mem_cfg.get("narrative_weave_backlog_interval", 900))
+        check_period = float(mem_cfg.get("narrative_weave_check_period", 3600))
         while self.alive:
-            pending = 0
-            if self.memory is not None:
-                try:
-                    pending = await self.memory.unprocessed_event_count()
-                except Exception:
-                    logger.exception("统计未编织事件失败")
-            wait = (
-                backlog_interval
-                if pending >= backlog_threshold
-                else interval
-            )
-            await asyncio.sleep(wait)
+            pending = await self._pending_event_count()
+            if pending >= backlog_threshold:
+                # 积压够：短周期
+                await asyncio.sleep(backlog_interval)
+            else:
+                # 积压不够：长睡 interval，但拆成 check_period 小段复查；
+                # 积压中途涨够就提前跳出，不再干等满 interval（W4）
+                waited = 0.0
+                while self.alive and waited < interval:
+                    chunk = min(check_period, interval - waited)
+                    await asyncio.sleep(chunk)
+                    waited += chunk
+                    if await self._pending_event_count() >= backlog_threshold:
+                        break
+            # 睡眠已在分支内完成，这里直接织——不再二次 sleep
             if not self.alive or self.memory is None:
                 continue
             try:
@@ -767,6 +771,15 @@ class Brain:
                     )
             except Exception:
                 logger.exception("叙事编织后台出错")
+
+    async def _pending_event_count(self) -> int:
+        if self.memory is None:
+            return 0
+        try:
+            return await self.memory.unprocessed_event_count()
+        except Exception:
+            logger.exception("统计未编织事件失败")
+            return 0
 
     async def _background_memory_decay(self) -> None:
         interval = float(self.config.get("memory", {}).get("decay_interval", 86400))

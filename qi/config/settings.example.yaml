@@ -52,6 +52,7 @@ memory:
   narrative_weave_interval: 21600          # 无积压时编织周期（秒）
   narrative_weave_backlog_threshold: 8     # 未编织 ≥ 此数则改用短周期
   narrative_weave_backlog_interval: 900    # 积压时编织周期（秒）
+  narrative_weave_check_period: 3600        # 长睡眠中途复查积压的粒度（秒）
   narrative_weave_batch_size: 10           # 每次最多织多少条 raw_events
   decay_interval: 86400
   chroma_path: "data/chroma"
