@@ -5,6 +5,7 @@
 > **代码基线：** `fe44b4d`（数据已急救，本方案治本）
 > **来源：** 08-01 凌晨实证——「他是男性」被「他快忘记了某本书的内容」顶替、「恋人关系确认」被「他那边很安静」顶替
 > **分工：** 施工方未定；**本文供多 agent 交叉检验**——请 Cursor 重点审 §三 Fix A 是否会误伤正常的 state 更新
+> **审查闭环（2026-08-01，Cursor）：** 根因成立、Fix A 方向对；**建议按 type 分流（Fix A′）替代全局相似度闸**——occupation/location 维持槽位覆盖（only_state），other/concern 的 state 不走 type 级顶替（只 confirm 或 add）；Fix B 补正反例。均已采纳并落地（Qoder 施工，190 测试全绿）。
 > **规模：** Fix A ~6 行（facts.py）+ Fix B prompt 2 行 + 测试
 
 ---

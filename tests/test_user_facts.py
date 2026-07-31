@@ -603,3 +603,73 @@ async def test_correction_signal_requires_name_context(db_store):
     await noticer.notice("我不叫潘纪振，其实我叫小明", EmotionState(), "bonded", now=now)
     facts = await store.active_facts("identity")
     assert any("小明" in (f.get("content") or "") for f in facts)
+
+
+@pytest.mark.asyncio
+async def test_state_other_cannot_supersede_stable(db_store):
+    """Fix A+A′：other/concern 的 state 噪声不能顶替 stable 事实（实证：男性/恋人被噪声顶替）。"""
+    db, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    t0 = datetime(2026, 8, 1, 12, 0)
+    t1 = datetime(2026, 8, 1, 12, 5)
+
+    stable_id = await store.add(
+        "other", "他是男性", 0.98, "stable", "他亲口说的", 0.7, t0
+    )
+    # state other 噪声走 _land：应只 add，不顶替 stable
+    res = await noticer._land(
+        {"fact_type": "other", "content": "他快忘记了某本书的内容",
+         "confidence": 0.7, "stability": "state", "emotional_weight": 0.4},
+        "我快忘记那本书的内容了", t1,
+    )
+    assert res is not None and res["action"] == "add"
+
+    # stable 事实仍 active、未被顶替（Cursor 建议的断言）
+    stable = await db.get_user_fact(stable_id)
+    assert stable["superseded_by"] is None
+    actives = await store.active_facts("other")
+    assert any(int(f["id"]) == stable_id for f in actives)
+
+
+@pytest.mark.asyncio
+async def test_slot_state_still_supersedes_state(db_store):
+    """Fix A：槽位型 state（occupation）仍能 state→state 顶替。"""
+    db, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    t0 = datetime(2026, 8, 1, 12, 0)
+    t1 = datetime(2026, 8, 1, 12, 5)
+
+    old_id = await store.add(
+        "occupation", "他在上海工作", 0.9, "state", "他说过", 0.6, t0
+    )
+    res = await noticer._land(
+        {"fact_type": "occupation", "content": "他在北京工作",
+         "confidence": 0.9, "stability": "state", "emotional_weight": 0.6},
+        "我在北京工作", t1,
+    )
+    assert res is not None and res["action"] == "supersede"
+    old = await db.get_user_fact(old_id)
+    assert old["superseded_by"] is not None
+    actives = await store.active_facts("occupation")
+    assert len(actives) == 1
+    assert "北京" in actives[0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_stable_state_coexist_when_not_slot(db_store):
+    """Fix A′：非槽位 type 的 state 不顶替，与 stable 并存（各自 add）。"""
+    db, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    t0 = datetime(2026, 8, 1, 12, 0)
+    t1 = datetime(2026, 8, 1, 12, 5)
+
+    await store.add("concern", "他担心健康", 0.8, "stable", "他说过", 0.6, t0)
+    res = await noticer._land(
+        {"fact_type": "concern", "content": "他此刻在为考试发愁",
+         "confidence": 0.7, "stability": "state", "emotional_weight": 0.5},
+        "我在为考试发愁", t1,
+    )
+    assert res is not None and res["action"] == "add"
+    actives = await store.active_facts("concern")
+    # 两条并存：stable 未被顶替
+    assert len(actives) == 2

@@ -179,6 +179,10 @@ _STAGE_RANK = {
 _SIMILARITY_CONFIRM = 0.72
 _SIMILARITY_CONFLICT = 0.35  # 同 type 已有 active 且不够像 → 视为冲突可取代（state）
 
+# 槽位型 state：独一槽位、最新值覆盖（工作/城市）——允许 state→state 顶替。
+# 其余 type（other/concern 等）的 state 不走 type 级顶替，只 confirm 或 add（Fix A′）。
+_SLOT_STATE_TYPES = frozenset({"occupation", "location"})
+
 # 注入 prompt 时按阶段的条数上限（克制，不堆砌）
 _FACT_PROMPT_LIMITS = {
     "stranger": 2,
@@ -522,9 +526,11 @@ class FactStore:
             return best
         return None
 
-    async def find_active_of_type(self, fact_type: str) -> dict | None:
-        """同 type 下任意一条 active（state 取代时用）。"""
+    async def find_active_of_type(self, fact_type: str, only_state: bool = False) -> dict | None:
+        """同 type 下任意一条 active；only_state=True 时只在 state 里找（state 取代用）。"""
         rows = await self.active_facts(fact_type)
+        if only_state:
+            rows = [r for r in rows if str(r.get("stability")) == "state"]
         return rows[0] if rows else None
 
 
@@ -1317,10 +1323,16 @@ class FactNoticer:
                 "content": similar.get("content"),
             }
 
-        # 先定位旧 active（find_active_of_type），再插入新行，避免把新行当成旧行
+        # 定位可被顶替的旧 active（Fix A + A′）：
+        #   - force_type（如改名）：跨 stability 顶替，维持原行为
+        #   - state 且槽位型（occupation/location）：只顶 state 旧值（永不碰 stable）
+        #   - 其余 state（other/concern 等）：不走 type 级顶替，仅 find_similar confirm 或 add
+        #   - stable 新事实：从不顶替
         old: dict | None = None
-        if stability == "state" or force_type:
+        if force_type:
             old = await self.store.find_active_of_type(fact_type)
+        elif stability == "state" and fact_type in _SLOT_STATE_TYPES:
+            old = await self.store.find_active_of_type(fact_type, only_state=True)
 
         new_id = await self.store.add(
             fact_type,

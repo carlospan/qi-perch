@@ -5,6 +5,8 @@
 - 给出 fact_type（identity/family/occupation/location/preference/health/important_date/life_event/concern/other）
 - confidence：用户明说约 0.9；隐含约 0.7；你猜的约 0.4（低于 0.6 的不要输出）
 - stability：会变的用 state（工作/城市/当前愁），其余 stable
+- 会很快消失的一时状态不要抽（困了/在忙/此刻安静/正在刷手机）——这些不是关于他的稳定事实
+- 但当前持续的情况仍要抽（在做设计工作/住在上海/最近长期失眠/和某人确认了恋人关系）
 - 没有可抽的事实就返回空数组 []
 - 只输出 JSON 数组，不要解释
 
