@@ -84,7 +84,7 @@ elif force_type:
 - 「他有点困」(state) 再也顶替不了「他是男性」(stable) ✓ stable 受保护
 - 改名（force_supersede_type）仍能跨 stability 顶替 ✓
 
-> **给 Cursor 的问题**：state 顶替目前**不看内容相似度**（只要 type 匹配 + 不够像就顶）。Fix A 后，state 噪声虽不能伤 stable，但仍会顶替同 type 的 state 事实（如「他在忙别的事」顶「他在那边很安静」）。这层要不要再加"state 顶替也需内容相关"的闸？我倾向**先不加**（state 设计本就是"最新值覆盖"，如工作/城市），但想听你判断。
+> **已定稿（采纳 Cursor 建议）**：state 顶替**不加全局内容相似度闸**（会误伤正当更新：「他在上海工作」→「他在北京工作」文本本就不像，靠的是槽位覆盖）。改用 **Fix A′ 按 type 分流**：occupation/location 维持槽位覆盖（only_state）；other/concern 的 state 不走 type 级顶替，只 confirm 或 add。实证噪声都是 other+state，此法比相似度闸更准。
 
 ### Fix B（源头减量）：prompt 明确"瞬时状态不抽"
 
@@ -126,8 +126,8 @@ Fix B 是 prompt，无单测；靠后续观察噪声是否减少。
 
 - 不动 `find_similar` / confirm 逻辑（它工作正常）
 - 不改 stranger weight floor（M2 已调，无关）
-- state 顶替是否加内容相似度闸——**留给 Cursor 审时定**（§三 Fix A 下的问题）
+- state 顶替**不加全局内容相似度闸**（Cursor 审定：会误伤槽位更新；改用 Fix A′ 按 type 分流）
 
 ---
 
-*请 Cursor 审：①Fix A 的 only_state 方案是否正确隔离了 stable（有无遗漏路径）②state 顶替要不要再加内容相似度闸 ③Fix B 措辞会不会误伤"当前持续"事实。*
+*审查闭环（2026-08-01）：Cursor 审定——根因成立、Fix A 方向对；state 顶替不加全局相似度闸，改用 Fix A′ 按 type 分流；Fix B 补正反例。Qoder 施工落地（`fd1d613`），190 测试全绿；Cursor 复核代码与测试通过。*
