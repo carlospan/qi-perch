@@ -162,6 +162,10 @@ class PromptBuilder:
                 "\n\n【主动开口】这是你自己想说的话，不是在回应对方。"
                 "更短。不要提建议。不要像通知。"
             )
+            if intention.act == "share_state":
+                system += (
+                    "你只有卡内 state/loop 素材，不要凭空拔高或下沉自我认知结论。"
+                )
 
         messages: list[dict] = [{"role": "system", "content": system}]
 

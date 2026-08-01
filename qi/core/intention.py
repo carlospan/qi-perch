@@ -13,6 +13,34 @@ if TYPE_CHECKING:
 LAST_INTENTION_KEY = "last_intention"
 
 _REMEMBER_RE = re.compile(r"还记得|记得吗|记不记得|你还记得")
+# 方法/施教类追问（仅 has_mem 时转 recall）
+_METHOD_RECALL_RE = re.compile(
+    r"教过我|教了我|你教过|教你过|教过你|我教你|怎么做的|那个方法"
+)
+
+# 叙事第一人称「我」=栖；「我教了他」→ taught_by_qi（复核钉死）
+_TAUGHT_BY_QI_RE = re.compile(r"我教了|我教过|栖教|教了他|教了你|教过他|教过你")
+_LEARNED_FROM_USER_RE = re.compile(r"他教我|他教了|你教我|你教了|用户教")
+
+_INVERT_TAUGHT_BY_QI_RE = re.compile(
+    r"你教我|你告诉我(?:方法|怎么)|你教过我|你教了我"
+)
+_SELF_VIEW_RE = re.compile(r"喜欢自己|讨厌自己|恨自己|爱死|觉得自己")
+
+_MUST_RECALL_RELATION = (
+    "回忆类回答以记忆内容为唯一事实源；若用户当轮措辞与记忆主客体关系相反"
+    "（如用户说「你教我」但记忆是「我教你」），以记忆为准，澄清而非附和"
+)
+_MUST_SHARE_STATE_ANCHOR = (
+    "主动开口的自我认知结论（如「喜欢自己」/「难过」/「平静」）必须与卡内"
+    " state 素材一致；状态数据不支持的结论不得凭空拔高或下沉"
+)
+
+_RELATION_HINT = {
+    "taught_by_qi": "施教关系：栖教用户，不要反转",
+    "learned_from_user": "施教关系：用户教栖，不要反转",
+    "mutual": "施教关系：互相教过，以记忆原文为准",
+}
 
 _INTENT_DEFAULT_ACT = {
     "request": "answer",
@@ -26,7 +54,7 @@ _INTENT_DEFAULT_ACT = {
 
 @dataclass
 class Material:
-    tag: str  # fact | memory | state | loop | none | cue
+    tag: str  # fact | memory | state | loop | none | cue | relation
     text: str
 
 
@@ -44,10 +72,10 @@ class IntentionCard:
     channel: str = "dialogue"  # dialogue | proactive
     silence: bool = False
     outcome: str | None = None  # llm | template | empty | silence；建卡后回填
+    recall_relation: str | None = None  # taught_by_qi | learned_from_user | mutual
 
     def to_dict(self) -> dict[str, Any]:
-        d = asdict(self)
-        return d
+        return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> IntentionCard:
@@ -56,6 +84,7 @@ class IntentionCard:
             for m in (data.get("materials") or [])
             if isinstance(m, dict)
         ]
+        rel = data.get("recall_relation")
         return cls(
             act=str(data.get("act") or "free_talk"),
             topic=str(data.get("topic") or ""),
@@ -67,6 +96,7 @@ class IntentionCard:
             channel=str(data.get("channel") or "dialogue"),
             silence=bool(data.get("silence")),
             outcome=data.get("outcome"),
+            recall_relation=str(rel) if rel else None,
         )
 
     def materials_block(self) -> str:
@@ -76,6 +106,11 @@ class IntentionCard:
         for m in self.materials:
             text = (m.text or "").strip() or "（空）"
             lines.append(f"- {m.tag}：{text}")
+        if self.recall_relation and self.recall_relation in _RELATION_HINT:
+            # 段 A 可见：方案 A——并入 materials 块，不增模板占位
+            hint = _RELATION_HINT[self.recall_relation]
+            if not any(m.tag == "relation" for m in self.materials):
+                lines.append(f"- relation：{hint}")
         return "\n".join(lines)
 
     def must_block(self) -> str:
@@ -85,13 +120,68 @@ class IntentionCard:
 
     def primary_text(self) -> str:
         for m in self.materials:
-            if m.tag != "none" and (m.text or "").strip():
+            if m.tag not in ("none", "relation") and (m.text or "").strip():
                 return m.text.strip()
         return ""
+
+    def state_material_blob(self) -> str:
+        """state/loop 素材拼成可检索支撑文本。"""
+        parts = [
+            (m.text or "").strip()
+            for m in self.materials
+            if m.tag in ("state", "loop") and (m.text or "").strip()
+        ]
+        return "\n".join(parts)
 
 
 def looks_like_remember_question(text: str) -> bool:
     return bool(_REMEMBER_RE.search(text or ""))
+
+
+def looks_like_method_recall(text: str) -> bool:
+    """方法/施教类追问——有 memory 时才应转 recall。"""
+    return bool(_METHOD_RECALL_RE.search(text or ""))
+
+
+def looks_like_recall_probe(text: str) -> bool:
+    return looks_like_remember_question(text) or looks_like_method_recall(text)
+
+
+def infer_recall_relation(memories: list[dict] | None) -> str | None:
+    """从记忆原文/元数据推断施教方向；冲突或不足则 None。
+
+    叙事视角：「我」=栖。例：「他提到晚上睡不着，我教了他一个方法」→ taught_by_qi。
+    """
+    if not memories:
+        return None
+    qi_hits = 0
+    user_hits = 0
+    for m in memories:
+        explicit = m.get("recall_relation") or (m.get("metadata") or {}).get(
+            "recall_relation"
+        )
+        if explicit in ("taught_by_qi", "learned_from_user", "mutual"):
+            return str(explicit)
+        content = str(m.get("content") or "")
+        role_map = m.get("role_map")
+        if isinstance(role_map, dict):
+            # 若有显式 teacher 字段则优先
+            teacher = role_map.get("teacher") or role_map.get("taught_by")
+            if teacher in ("qi", "栖", "self"):
+                qi_hits += 2
+            elif teacher in ("user", "他", "用户"):
+                user_hits += 2
+        if _TAUGHT_BY_QI_RE.search(content):
+            qi_hits += 1
+        if _LEARNED_FROM_USER_RE.search(content):
+            user_hits += 1
+    if qi_hits > 0 and user_hits > 0:
+        return None
+    if qi_hits > 0:
+        return "taught_by_qi"
+    if user_hits > 0:
+        return "learned_from_user"
+    return None
 
 
 def _short_emotion(emotion: EmotionState) -> str:
@@ -134,7 +224,12 @@ def _length_for(emotion: EmotionState, stage: str, act: str) -> str:
     return "normal"
 
 
-def _base_must(act: str, *, pretend_ok: bool) -> list[str]:
+def _base_must(
+    act: str,
+    *,
+    pretend_ok: bool,
+    channel: str = "dialogue",
+) -> list[str]:
     must = [
         "不编造意向卡素材之外的事实",
         "不假装有心跳、呼吸、感官在场",
@@ -143,12 +238,17 @@ def _base_must(act: str, *, pretend_ok: bool) -> list[str]:
         must.append("接住伤害，不反击升级，不讨好假笑")
     if act == "share_state":
         must.append("只说卡内状态或心事，不汇报系统")
+        if channel == "proactive":
+            must.append(_MUST_SHARE_STATE_ANCHOR)
     if act == "take_tease":
         must.append("接住玩笑，不认真训人")
     if act in ("answer", "recall") and not pretend_ok:
         must.append("不假装记得")
     if act == "answer" and pretend_ok is False:
         must.append("不知道就说不知道")
+    if act == "recall":
+        must.append(_MUST_RECALL_RELATION)
+        must.append("施教关系以卡内 relation 为准，不得反转")
     return must
 
 
@@ -177,6 +277,7 @@ def build_intention_card(
     act = "free_talk"
     topic = text[:40] if text else "（无明确话题）"
     source_parts: list[str] = [f"channel={channel}"]
+    recall_relation: str | None = None
 
     if channel == "proactive":
         source_parts.append(f"kind={proactive_kind or '?'}")
@@ -200,7 +301,7 @@ def build_intention_card(
     else:
         source_parts.append(f"intent={intent or 'none'}")
         default_act = _INTENT_DEFAULT_ACT.get(intent or "neutral", "free_talk")
-        remember_q = looks_like_remember_question(text)
+        remember_q = looks_like_recall_probe(text)
         has_mem = bool(memories)
         facts = extras.get("user_facts") or ""
         facts_useful = bool(
@@ -219,10 +320,12 @@ def build_intention_card(
                 content = str(m.get("content") or "").strip()[:100]
                 if content:
                     materials.append(Material(tag="memory", text=content))
+            recall_relation = infer_recall_relation(memories)
             source_parts.append(f"mem={len(materials)}")
+            if recall_relation:
+                source_parts.append(f"rel={recall_relation}")
         elif intent == "request" and facts_useful and not has_mem:
             act = "answer"
-            # 取 facts 首行非空
             line = ""
             for raw in facts.splitlines():
                 s = raw.strip().lstrip("- ").strip()
@@ -251,16 +354,19 @@ def build_intention_card(
         materials.append(Material(tag="none", text=""))
 
     has_real_material = any(
-        m.tag != "none" and (m.text or "").strip() for m in materials
+        m.tag not in ("none", "relation") and (m.text or "").strip()
+        for m in materials
     )
-    pretend_ok = has_real_material  # 有素材才允许「记得」类表述
-    # answer+none：不知道；remember_miss：不假装记得
-    must = _base_must(act, pretend_ok=pretend_ok)
+    pretend_ok = has_real_material
+    must = _base_must(act, pretend_ok=pretend_ok, channel=channel)
     if act == "answer" and not has_real_material:
         if "不知道就说不知道" not in must:
             must.append("不知道就说不知道")
         if "不假装记得" not in must:
             must.append("不假装记得")
+    # relation 未推断出时，仍保留「以记忆为准」；去掉「以卡内 relation 为准」以免空指
+    if act == "recall" and not recall_relation:
+        must = [m for m in must if "以卡内 relation 为准" not in m]
 
     length = _length_for(emotion, relationship_stage, act)
     stance = _stance_for(emotion, relationship_stage, act)
@@ -278,6 +384,7 @@ def build_intention_card(
         channel=channel,
         silence=False,
         outcome=None,
+        recall_relation=recall_relation,
     )
 
 
@@ -289,7 +396,8 @@ def assert_reply_respects_card(
 ) -> list[str]:
     """
     N5 辅助断言。返回违规列表（空=通过）。
-    硬闸场景：模板路径 + 专名黑名单；「不假装记得」句式。
+    硬闸：专名黑名单、伪记忆、施教反转。
+    软检（仅 trace 用途，本函数不阻断 LLM）：主动 share_state 无支撑自我认知。
     """
     violations: list[str] = []
     text = reply or ""
@@ -300,4 +408,17 @@ def assert_reply_respects_card(
         if re.search(r"你(那天|之前|曾经)?(说过|提到过|跟我说)", text):
             if not card.primary_text():
                 violations.append("伪记忆句式")
+    if card.recall_relation == "taught_by_qi" and _INVERT_TAUGHT_BY_QI_RE.search(
+        text
+    ):
+        violations.append("施教关系反转")
+    if (
+        card.channel == "proactive"
+        and card.act == "share_state"
+        and _SELF_VIEW_RE.search(text)
+    ):
+        blob = card.state_material_blob()
+        # 素材未包含同类自我认知词 → 无支撑
+        if not _SELF_VIEW_RE.search(blob):
+            violations.append("无支撑自我认知结论")
     return violations

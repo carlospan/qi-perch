@@ -21,8 +21,12 @@ from qi.storage.database import Database
 
 
 def test_remember_question_detect():
+    from qi.core.intention import looks_like_method_recall, looks_like_recall_probe
+
     assert looks_like_remember_question("你还记得我说过什么吗")
     assert not looks_like_remember_question("今天天气怎么样")
+    assert looks_like_method_recall("我教你过什么方法")
+    assert looks_like_recall_probe("那个方法怎么做的")
 
 
 def test_hurt_maps_to_honest_hurt():
@@ -122,6 +126,78 @@ class _LLM:
 
     async def call(self, purpose, messages, temperature=None):
         return self.text
+
+
+# ----- 阶段一补丁 A -----
+
+_NARRATIVE_ID4 = "他提到晚上睡不着，我教了他一个方法"
+
+
+def test_method_recall_detected():
+    card = build_intention_card(
+        channel="dialogue",
+        user_message="我教你过什么方法",
+        emotion=EmotionState(),
+        relationship_stage="bonded",
+        assessment=ImpactAssessment(impact=0.1, intent="neutral"),
+        memories=[{"content": _NARRATIVE_ID4}],
+    )
+    assert card.act == "recall"
+    assert card.materials[0].tag == "memory"
+    assert "教了他" in card.materials[0].text or "方法" in card.materials[0].text
+
+
+def test_recall_template_fallback_has_content():
+    card = build_intention_card(
+        channel="dialogue",
+        user_message="我教你过什么方法",
+        emotion=EmotionState(),
+        relationship_stage="bonded",
+        assessment=ImpactAssessment(impact=0.0, intent="request"),
+        memories=[{"content": _NARRATIVE_ID4}],
+    )
+    text = render_template(card)
+    assert text.startswith("记得。")
+    assert "教了他" in text or "睡不着" in text
+    assert text.strip() != "……嗯。"
+
+
+def test_recall_relation_not_inverted():
+    from qi.core.intention import infer_recall_relation
+
+    assert infer_recall_relation([{"content": _NARRATIVE_ID4}]) == "taught_by_qi"
+    card = build_intention_card(
+        channel="dialogue",
+        user_message="我教你过什么方法",
+        emotion=EmotionState(),
+        relationship_stage="bonded",
+        assessment=ImpactAssessment(impact=0.1, intent="request"),
+        memories=[{"content": _NARRATIVE_ID4}],
+    )
+    assert card.recall_relation == "taught_by_qi"
+    assert any("以记忆为准" in m or "澄清而非附和" in m for m in card.must)
+    assert "施教关系：栖教用户" in card.materials_block()
+    bad = assert_reply_respects_card("你教我，晚上睡不着……", card)
+    assert any("施教关系反转" in v for v in bad)
+    ok = assert_reply_respects_card("记得。我教过你一个方法。", card)
+    assert not any("施教关系反转" in v for v in ok)
+
+
+def test_proactive_share_state_no_unsupported_self_view():
+    card = build_intention_card(
+        channel="proactive",
+        user_message="【此刻没有人在跟你说话。】",
+        emotion=EmotionState(valence=-0.01, energy=0.49, arousal=0.4),
+        relationship_stage="bonded",
+        proactive_kind="express_feeling",
+    )
+    assert card.act == "share_state"
+    assert any("拔高或下沉" in m for m in card.must)
+    bad = assert_reply_respects_card("……我好像，越来越喜欢自己了。", card)
+    assert any("无支撑自我认知结论" in v for v in bad)
+    ok = assert_reply_respects_card("……有点安静，有点想你。", card)
+    assert not any("无支撑自我认知结论" in v for v in ok)
+    assert "喜欢自己" not in render_template(card)
 
 
 @pytest.mark.asyncio
