@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS narrative_memories (
     strength REAL NOT NULL,
     source_event_ids TEXT,
     recall_count INTEGER DEFAULT 0,
-    tags TEXT
+    tags TEXT,
+    archived INTEGER NOT NULL DEFAULT 0
 )
 """
 
@@ -285,6 +286,7 @@ class Database:
         await self._conn.execute(_CREATE_BROADCAST_TRACES)
         await self._migrate_creations_mentioned_at()
         await self._migrate_broadcast_traces_gws()
+        await self._migrate_narrative_archived()
         for ddl in _CREATE_INDEXES:
             await self._conn.execute(ddl)
         await self._conn.execute(
@@ -323,6 +325,17 @@ class Database:
         if "arb_matches_legacy" not in cols:
             await conn.execute(
                 "ALTER TABLE broadcast_traces ADD COLUMN arb_matches_legacy INTEGER"
+            )
+
+    async def _migrate_narrative_archived(self) -> None:
+        """包 8：叙事归档标记（不删行）。"""
+        conn = self._require_conn()
+        async with conn.execute("PRAGMA table_info(narrative_memories)") as cursor:
+            cols = {str(row[1]) for row in await cursor.fetchall()}
+        if "archived" not in cols:
+            await conn.execute(
+                "ALTER TABLE narrative_memories "
+                "ADD COLUMN archived INTEGER NOT NULL DEFAULT 0"
             )
 
     def _require_conn(self) -> aiosqlite.Connection:
@@ -592,6 +605,42 @@ class Database:
         )
         await conn.commit()
 
+    async def archive_narrative_memory(self, memory_id: int) -> bool:
+        """标记归档；已归档或不存在返回 False。"""
+        conn = self._require_conn()
+        cur = await conn.execute(
+            """
+            UPDATE narrative_memories SET archived = 1
+            WHERE id = ? AND COALESCE(archived, 0) = 0
+            """,
+            (memory_id,),
+        )
+        await conn.commit()
+        return int(cur.rowcount or 0) > 0
+
+    async def list_archivable_narratives(
+        self,
+        *,
+        max_importance: float = 0.35,
+        limit: int = 3,
+    ) -> list[dict]:
+        """低重要且从未 recall、未归档的叙事。"""
+        conn = self._require_conn()
+        async with conn.execute(
+            """
+            SELECT id, content, importance, recall_count, strength
+            FROM narrative_memories
+            WHERE COALESCE(archived, 0) = 0
+              AND importance < ?
+              AND COALESCE(recall_count, 0) = 0
+            ORDER BY importance ASC, id ASC
+            LIMIT ?
+            """,
+            (float(max_importance), int(limit)),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
     # ----- 身体记忆 -----
 
     async def get_body_memory(self, key: str) -> Any | None:
@@ -626,6 +675,7 @@ class Database:
             SELECT id, content, importance, strength, created_at
             FROM narrative_memories
             WHERE strength >= 0.2
+              AND COALESCE(archived, 0) = 0
             ORDER BY created_at DESC
             LIMIT ?
             """,

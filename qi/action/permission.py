@@ -37,6 +37,30 @@ def can_explore(_relationship_stage: str = "stranger") -> bool:
     return True
 
 
+def can_archive(
+    _relationship_stage: str = "stranger",
+    scars: list[dict] | None = None,
+) -> bool:
+    """归档自己的叙事：自反动作，默认允许；伤疤可收紧。"""
+    return scar_caution_multiplier("archive", scars) > 0
+
+
+def can_budget_tune(
+    _relationship_stage: str = "stranger",
+    scars: list[dict] | None = None,
+) -> bool:
+    """自调行动权重：自反，默认允许。"""
+    return scar_caution_multiplier("budget_tune", scars) > 0
+
+
+def can_journal(
+    _relationship_stage: str = "stranger",
+    scars: list[dict] | None = None,
+) -> bool:
+    """写内在日记：自反，默认允许；仅应由 GWS/execute_kind 触发。"""
+    return scar_caution_multiplier("journal", scars) > 0
+
+
 def can_read_user_file(
     relationship_stage: str,
     trust: float = 0.5,
@@ -153,6 +177,9 @@ def permission_summary(
         "share": can_share(relationship_stage),
         "tend": can_tend(relationship_stage),
         "explore": can_explore(relationship_stage),
+        "archive": can_archive(relationship_stage, scars),
+        "budget_tune": can_budget_tune(relationship_stage, scars),
+        "journal": can_journal(relationship_stage, scars),
         "read_user_file": {"allowed": read_ok, "needs_confirmation": read_confirm},
         "write_user_file": {"allowed": write_ok, "needs_confirmation": write_confirm},
         "irreversible": {"allowed": irrev_ok, "needs_confirmation": irrev_confirm},

@@ -91,13 +91,23 @@ def salience_proactive_reach_out(
     return 0.55 if silence_seconds < 7200 else 0.7
 
 
-def salience_report(*, energy: float, security: float) -> float:
-    """极简内稳态报告：低能量或低安全才响。"""
+def salience_report(
+    *,
+    energy: float,
+    security: float,
+    uptime_seconds: float | None = None,
+    uptime_report_seconds: float = 6 * 3600,
+) -> float:
+    """极简内稳态报告：低能量、低安全、或在线过久才响。"""
     score = 0.0
     if energy < 0.3:
         score = max(score, 0.5 + (0.3 - energy))
     if security < 0.35:
         score = max(score, 0.4 + (0.35 - security))
+    if uptime_seconds is not None and uptime_seconds >= uptime_report_seconds:
+        # 包 8：在线过久略抬 report，不另开 LLM
+        overtime = (uptime_seconds - uptime_report_seconds) / 3600.0
+        score = max(score, _clamp01(0.42 + min(0.2, overtime * 0.05)))
     return _clamp01(score)
 
 
@@ -127,9 +137,14 @@ def salience(kind: str, **signals: Any) -> float:
             relationship_stage=str(signals.get("relationship_stage") or "stranger"),
         )
     if kind == "report":
+        uptime = signals.get("uptime_seconds")
         return salience_report(
             energy=float(signals.get("energy") or 0.6),
             security=float(signals.get("security") or 0.5),
+            uptime_seconds=float(uptime) if uptime is not None else None,
+            uptime_report_seconds=float(
+                signals.get("uptime_report_seconds") or 6 * 3600
+            ),
         )
     return 0.0
 
@@ -181,7 +196,7 @@ def motive_snapshot(
     pressure = 1.0 if want_express else _clamp01(
         float(getattr(brain, "_accumulated_suppressed", 0) or 0) / 3.0
     )
-    return {
+    snap: dict[str, Any] = {
         "homeostasis": {
             "energy": round(e.energy, 4),
             "security": round(e.security, 4),
@@ -191,6 +206,31 @@ def motive_snapshot(
         "curiosity": round(e.curiosity, 4),
         "express_pressure": round(pressure, 4),
     }
+    sensing = getattr(brain, "last_sensing", None)
+    if sensing is not None:
+        snap["sensing_uptime"] = round(float(sensing.uptime_seconds), 3)
+    closed = None
+    if brain.action is not None:
+        closed = getattr(brain.action, "last_closed_loop", None)
+    if isinstance(closed, dict) and closed.get("op"):
+        after = closed.get("after") or {}
+        delta = ""
+        if closed.get("op") == "archive":
+            delta = f"archived_ids={after.get('archived_ids')}"
+        elif closed.get("op") == "budget_tune":
+            delta = f"weights={after.get('kind_weights')}"
+        elif closed.get("op") == "journal":
+            delta = f"stream_id={after.get('stream_id')}"
+        elif closed.get("op") == "explore":
+            delta = f"entries={len(after.get('entries') or [])}"
+        else:
+            delta = str(after)[:120]
+        snap["closed_loop"] = {
+            "op": closed.get("op"),
+            "delta": delta,
+            "sensing_uptime": snap.get("sensing_uptime"),
+        }
+    return snap
 
 
 def _observe_proactive_candidates(
@@ -344,6 +384,23 @@ async def collect_contenders(
             except Exception:
                 season = "spring"
                 scale = 1.0
+            archivable_count = 0
+            try:
+                archivable = await brain.action.db.list_archivable_narratives(
+                    limit=3
+                )
+                archivable_count = len(archivable)
+            except Exception:
+                archivable_count = 0
+            open_loop_n = 0
+            try:
+                open_loop_n = len(await brain._load_open_loops())
+            except Exception:
+                open_loop_n = 0
+            uptime = None
+            sensing = getattr(brain, "last_sensing", None)
+            if sensing is not None:
+                uptime = float(sensing.uptime_seconds)
             intents = action_intentions(
                 mode=brain.emotion.mode.value,
                 relationship_stage=brain.relationship_stage,
@@ -357,6 +414,10 @@ async def collect_contenders(
                 season_scale=scale,
                 scars=scars,
                 user_online=brain.user_online,
+                archivable_count=archivable_count,
+                open_loop_count=open_loop_n,
+                sensing_uptime_seconds=uptime,
+                energy=float(brain.emotion.energy),
             )
             for it in intents:
                 if it.kind == "assist":
@@ -405,9 +466,15 @@ async def collect_contenders(
     except Exception:
         logger.debug("broadcast 读 open_loops 失败", exc_info=True)
 
-    # 极简内稳态报告
+    # 极简内稳态报告（含在线过久）
+    uptime_s = None
+    sensing = getattr(brain, "last_sensing", None)
+    if sensing is not None:
+        uptime_s = float(sensing.uptime_seconds)
     report_s = salience_report(
-        energy=brain.emotion.energy, security=brain.emotion.security
+        energy=brain.emotion.energy,
+        security=brain.emotion.security,
+        uptime_seconds=uptime_s,
     )
     if report_s > 0:
         # 相对阶段锚的 attachment 偏差仅写入 reason，不另开随机
@@ -417,11 +484,14 @@ async def collect_contenders(
             or baseline_for("attachment", stage)
         )
         delta = abs(brain.emotion.attachment - att_base)
+        reason = f"内稳态压力 energy/security；attΔ={delta:.2f}"
+        if uptime_s is not None and uptime_s >= 6 * 3600:
+            reason += f"；在线过久 {uptime_s / 3600:.1f}h"
         candidates.append(
             Contender(
                 kind="report",
                 salience=report_s,
-                reason=f"内稳态压力 energy/security；attΔ={delta:.2f}",
+                reason=reason,
             )
         )
 

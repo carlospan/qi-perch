@@ -7,7 +7,10 @@ from datetime import datetime
 
 from qi.action.budget import ActionBudget
 from qi.action.permission import (
+    can_archive,
+    can_budget_tune,
     can_explore,
+    can_journal,
     can_share,
     can_tend,
     scar_caution_multiplier,
@@ -21,6 +24,9 @@ KIND_SHARE = "share"
 KIND_TEND = "tend"
 KIND_EXPLORE = "explore"
 KIND_ASSIST = "assist"
+KIND_ARCHIVE = "archive"
+KIND_BUDGET_TUNE = "budget_tune"
+KIND_JOURNAL = "journal"
 
 # 用户明确请求帮忙的口语线索（contract 第 25：不主动给帮助建议）
 _HELP_REQUEST_CUES = (
@@ -65,12 +71,16 @@ def action_intentions(
     season_scale: float = 1.0,
     scars: list[dict] | None = None,
     user_online: bool = True,
+    archivable_count: int = 0,
+    open_loop_count: int = 0,
+    sensing_uptime_seconds: float | None = None,
+    energy: float | None = None,
 ) -> list[ActionIntention]:
     """
     返回本拍可考虑的行动意图（倾向，非硬触发）。
     优先级永远低于 respond：有 pending 时 brain 不调用本函数做自主行动。
 
-    - share / tend / explore：自主，占 ActionBudget；受 permission + season_scale。
+    - share / tend / explore / archive / budget_tune / journal：自主，占 ActionBudget。
     - assist：仅当用户明确请求才候选；不占自主预算；本阶段不执行（桩）。
     """
     if not user_online or mode == "dreaming":
@@ -104,6 +114,7 @@ def action_intentions(
             warmth = max(0.0, valence) + max(0.0, curiosity - 0.4) * 0.5
             if warmth >= 0.15 or curiosity >= 0.55:
                 pri = (0.55 + warmth * 0.2) * scale
+                pri *= budget.weight_for(KIND_SHARE)
                 out.append(
                     ActionIntention(
                         kind=KIND_SHARE,
@@ -115,10 +126,11 @@ def action_intentions(
         # tend：有值得标记的时刻（纪念日 / 换季等由调用方给出 occasion）
         if tend_occasion and can_tend(relationship_stage):
             if scar_caution_multiplier(KIND_TEND, scars) > 0:
+                pri = 0.5 * scale * budget.weight_for(KIND_TEND)
                 out.append(
                     ActionIntention(
                         kind=KIND_TEND,
-                        priority=0.5 * scale,
+                        priority=pri,
                         reason=f"值得标记：{tend_occasion}",
                     )
                 )
@@ -132,6 +144,7 @@ def action_intentions(
         ):
             # 好奇越高、季节越暖，优先级越高；多数拍仍由 ActionLayer 概率门控
             pri = (0.35 + (curiosity - 0.65) * 0.8) * scale
+            pri *= budget.weight_for(KIND_EXPLORE)
             out.append(
                 ActionIntention(
                     kind=KIND_EXPLORE,
@@ -139,6 +152,48 @@ def action_intentions(
                     reason="独处时思绪飘远",
                 )
             )
+
+        # archive：有可归档叙事时低优先级
+        if (
+            archivable_count > 0
+            and can_archive(relationship_stage, scars)
+        ):
+            out.append(
+                ActionIntention(
+                    kind=KIND_ARCHIVE,
+                    priority=0.28 * scale,
+                    reason=f"有 {archivable_count} 段可轻轻收起的记忆",
+                )
+            )
+
+        # budget_tune：权重仍中性且好奇/能量偏极端时，或已偏离需再调
+        if can_budget_tune(relationship_stage, scars):
+            energy_v = 0.6 if energy is None else float(energy)
+            extreme = curiosity >= 0.75 or energy_v < 0.35
+            drifted = not budget.weights_neutral()
+            if extreme or drifted:
+                out.append(
+                    ActionIntention(
+                        kind=KIND_BUDGET_TUNE,
+                        priority=0.26 * scale,
+                        reason="重新掂量今天伸手的分寸",
+                    )
+                )
+
+        # journal：open_loop 或在线过久时略抬（仍低优；执行靠 GWS）
+        if can_journal(relationship_stage, scars):
+            uptime = float(sensing_uptime_seconds or 0.0)
+            if open_loop_count > 0 or uptime >= 6 * 3600:
+                pri = 0.24 * scale
+                if open_loop_count > 0:
+                    pri += min(0.1, 0.03 * open_loop_count)
+                out.append(
+                    ActionIntention(
+                        kind=KIND_JOURNAL,
+                        priority=pri,
+                        reason="想给自己留一行内在笔记",
+                    )
+                )
 
     out.sort(key=lambda i: i.priority, reverse=True)
     return out

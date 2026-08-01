@@ -84,6 +84,8 @@ class NarrativeMemory:
             row = await self.db.get_narrative_memory(item["id"])
             if row is None:
                 continue
+            if int(row.get("archived") or 0):
+                continue
             strength = float(row["strength"])
             if strength < RECALL_MIN_STRENGTH:
                 continue

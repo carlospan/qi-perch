@@ -6,12 +6,25 @@ from datetime import datetime
 from typing import Any
 
 # 言语主动日限是 3（ProactiveGate / contract 第 28 条）。
-# 自主行动应更紧：默认 1 次/天。share / tend / explore 共享这一预算。
+# 自主行动应更紧：默认 1 次/天。share / tend / explore / self_ops 共享这一预算。
 AUTONOMOUS_ACTION_DAILY_LIMIT = 1
 
 # 响应式协助（assist）是「回应」，不占自主预算，但仍受 permission 门控。
 
 BODY_MEMORY_KEY = "action_budget"
+
+DEFAULT_KIND_WEIGHTS: dict[str, float] = {
+    "share": 1.0,
+    "tend": 1.0,
+    "explore": 1.0,
+}
+
+WEIGHT_MIN = 0.2
+WEIGHT_MAX = 1.5
+
+
+def _clamp_weight(value: float) -> float:
+    return max(WEIGHT_MIN, min(WEIGHT_MAX, float(value)))
 
 
 class ActionBudget:
@@ -19,6 +32,7 @@ class ActionBudget:
     决定今天还能不能自主伸手。
     与 ProactiveGate 同构：跨天重置、can / record、snapshot / restore；
     持久化走 body_memory key「action_budget」（由 Brain / ActionLayer 写入）。
+    kind_weights：对 share/tend/explore 意图优先级的缩放（包 8）。
     """
 
     def __init__(self, config: dict | None = None):
@@ -30,6 +44,14 @@ class ActionBudget:
         self.day: str | None = None
         self.last_kind: str | None = None
         self.last_at: datetime | None = None
+        self.kind_weights: dict[str, float] = dict(DEFAULT_KIND_WEIGHTS)
+        raw_weights = action_cfg.get("kind_weights")
+        if isinstance(raw_weights, dict):
+            for k, v in raw_weights.items():
+                try:
+                    self.kind_weights[str(k)] = _clamp_weight(float(v))
+                except (TypeError, ValueError):
+                    continue
 
     def reset_day(self, now: datetime) -> None:
         day = now.strftime("%Y-%m-%d")
@@ -48,12 +70,25 @@ class ActionBudget:
         self.last_kind = kind
         self.last_at = now
 
+    def weight_for(self, kind: str) -> float:
+        return float(self.kind_weights.get(kind, 1.0))
+
+    def set_kind_weight(self, kind: str, value: float) -> None:
+        self.kind_weights[kind] = _clamp_weight(value)
+
+    def weights_neutral(self) -> bool:
+        for k, default in DEFAULT_KIND_WEIGHTS.items():
+            if abs(self.weight_for(k) - default) > 1e-6:
+                return False
+        return True
+
     def snapshot(self) -> dict[str, Any]:
         return {
             "day": self.day,
             "count_today": self.count_today,
             "last_kind": self.last_kind,
             "last_at": self.last_at.isoformat() if self.last_at else None,
+            "kind_weights": dict(self.kind_weights),
         }
 
     def restore(self, data: dict[str, Any] | None) -> None:
@@ -70,3 +105,12 @@ class ActionBudget:
                 self.last_at = None
         else:
             self.last_at = None
+        weights = data.get("kind_weights")
+        if isinstance(weights, dict):
+            merged = dict(DEFAULT_KIND_WEIGHTS)
+            for k, v in weights.items():
+                try:
+                    merged[str(k)] = _clamp_weight(float(v))
+                except (TypeError, ValueError):
+                    continue
+            self.kind_weights = merged

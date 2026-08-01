@@ -98,6 +98,7 @@ class Brain:
         self.proactive = ProactiveGate(config)
         self.proactive_queue: asyncio.Queue[str] = asyncio.Queue()
         self.action: ActionLayer | None = None
+        self.last_sensing = None  # SensingSnapshot | None（包 8）
         self._drift_signals: list[str] = []
         self._last_avatar_payload: dict | None = None
         self._traces: deque[dict] = deque(maxlen=20)
@@ -257,9 +258,17 @@ class Brain:
     async def _heartbeat(self) -> str | None:
         self.heartbeat_count += 1
         from qi.inner_life.identity_snapshot import note_snapshot_beat
+        from qi.sensing import collect as collect_sensing
 
         note_snapshot_beat()
         now = datetime.now()
+        try:
+            self.last_sensing = collect_sensing(
+                heartbeat_count=self.heartbeat_count, now=now
+            )
+        except Exception:
+            logger.debug("传感采集失败", exc_info=True)
+            self.last_sensing = None
         self.proactive.reset_day(now)
         self._gws_broadcast_hint = None
         response: str | None = None
@@ -640,6 +649,7 @@ class Brain:
                         mode=self.emotion.mode.value,
                         user_online=self.user_online,
                         scars=scars,
+                        sensing=self.last_sensing,
                     )
                     if action_result is not None:
                         await self._persist_action_budget()

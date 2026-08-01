@@ -10,14 +10,18 @@ from qi.action.budget import (
 from qi.action.explore import ExploreAction
 from qi.action.layer import SEASON_ACTION_SCALE, ActionLayer, resolve_season_scale
 from qi.action.permission import (
+    can_archive,
+    can_budget_tune,
     can_explore,
     can_irreversible,
+    can_journal,
     can_read_user_file,
     can_share,
     can_tend,
     can_write_user_file,
     outcome_creates_scar,
 )
+from qi.action.self_ops import SelfOps
 from qi.action.share import ShareAction
 from qi.action.tend import TendAction
 from qi.action.volition import (
@@ -34,11 +38,15 @@ __all__ = [
     "ActionIntention",
     "ActionLayer",
     "ExploreAction",
+    "SelfOps",
     "ShareAction",
     "TendAction",
     "action_intentions",
+    "can_archive",
+    "can_budget_tune",
     "can_explore",
     "can_irreversible",
+    "can_journal",
     "can_read_user_file",
     "can_share",
     "can_tend",
