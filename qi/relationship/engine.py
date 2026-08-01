@@ -402,6 +402,9 @@ class RelationshipEngine:
             result["stage_changed"] = True
             result["new_stage"] = new_stage
             await self._refresh_narrative(old_stage, new_stage)
+            from qi.inner_life.identity_snapshot import mark_identity_snapshot_stale
+
+            await mark_identity_snapshot_stale(self.db)
 
         await self.persist()
         return result

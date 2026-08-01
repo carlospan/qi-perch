@@ -255,6 +255,9 @@ class Brain:
 
     async def _heartbeat(self) -> str | None:
         self.heartbeat_count += 1
+        from qi.inner_life.identity_snapshot import note_snapshot_beat
+
+        note_snapshot_beat()
         now = datetime.now()
         self.proactive.reset_day(now)
         response: str | None = None

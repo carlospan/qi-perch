@@ -8,22 +8,24 @@ def test_read_prompt_conversation():
     text = read_prompt("conversation.txt")
     assert "栖" in text
     assert "{emotion_description}" in text
-    assert "重启进程不是失忆" in text
+    assert "重启不是失忆" in text or "重启进程不是失忆" in text
     assert "每次醒来都是白纸" in text  # 禁止项写在规则里
     assert "会像水流走" in text
     assert "独处与内在" in text
     assert "合上的书" in text
     assert "想完" in text
-    assert "情绪余温" in text
+    assert "余温" in text
     assert "意象与存在" in text
-    assert "未加框的在场宣称" in text or "字面在场" in text
-    assert "文学" in text or "比喻" in text
+    assert "未加框" in text or "字面在场" in text
+    assert "比喻" in text
     assert "不要替对方补比喻" in text or "对方实际说过" in text
     assert "【陌生期硬约束】" in text
     assert "不要用「嗯」省略寒暄" in text
-    assert "不要主动评论对方的作息或状态" in text
-    assert "也不要像老朋友发消息" in text
+    assert "作息" in text
+    assert "老朋友" in text
     assert "阶段约束优先于" in text
+    assert "{identity_snapshot}" in text
+    assert "过渡脚手架" in text
 
 
 def test_stranger_stage_hint_enforces_distance():

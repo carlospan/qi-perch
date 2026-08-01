@@ -199,13 +199,31 @@ class DreamEngine:
         unfinished = pending["content"][:80] if pending else "无"
 
         season = "spring"
+        stage = "stranger"
+        trust = 0.0
+        culture = None
         try:
             rel = await self.db.load_relationship()
-            if rel and rel.get("season"):
-                season = str(rel["season"])
+            if rel:
+                if rel.get("season"):
+                    season = str(rel["season"])
+                if rel.get("stage"):
+                    stage = str(rel["stage"])
+                trust = float(rel.get("trust") or 0)
+                culture = rel.get("shared_culture")
         except Exception:
             pass
         season_hint = SEASON_BEHAVIOR_HINTS.get(season, SEASON_BEHAVIOR_HINTS["spring"])
+
+        from qi.inner_life.identity_snapshot import ensure_identity_snapshot
+
+        identity_snapshot = await ensure_identity_snapshot(
+            self.db,
+            stage=stage,
+            trust=trust,
+            season=season,
+            shared_culture=culture,
+        )
 
         path = "llm"
         reason = "undreamed_backlog + weighted(importance×intensity)"
@@ -213,6 +231,7 @@ class DreamEngine:
         try:
             template = read_prompt("dream.txt")
             prompt = template.format(
+                identity_snapshot=identity_snapshot,
                 episode_fragments=episode_fragments,
                 role_map_hint=role_hint,
                 emotion_color=emotion_color(emotion),

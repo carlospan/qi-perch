@@ -61,10 +61,34 @@ async def gather_prompt_context(
         ):
             recent = recent[:-1]
 
+    shared_culture = "（还没有只属于你们的默契）"
+    relationship_hint = ""
+    scar_hint = ""
+    season_hint = ""
+    trust = 0.0
+    culture_raw: list | str | None = None
+    if brain.relationship is not None:
+        shared_culture = format_culture_for_prompt(
+            brain.relationship.state.shared_culture
+        )
+        relationship_hint = brain.relationship.stage_prompt_hint()
+        season_hint = brain.relationship.state.season
+        trust = float(brain.relationship.state.trust or 0)
+        culture_raw = brain.relationship.state.shared_culture
+    if brain.scars is not None and brain._db is not None:
+        scars = await brain._db.list_scars()
+        scar_hint = format_scars_for_prompt(scars)
+
     if brain.inner_life is not None:
         try:
+            traces = list(brain._traces) if getattr(brain, "_traces", None) else None
             life_extras = await brain.inner_life.prompt_extras(
-                brain.emotion, brain.relationship_stage
+                brain.emotion,
+                brain.relationship_stage,
+                trust=trust,
+                season=season_hint or "spring",
+                shared_culture=culture_raw if culture_raw is not None else shared_culture,
+                traces=traces,
             )
             extras.update(life_extras)
         except Exception:
@@ -84,20 +108,6 @@ async def gather_prompt_context(
     if brain._drift_signals:
         extras["drift_hint"] = "；".join(brain._drift_signals)
         brain._drift_signals = []
-
-    shared_culture = "（还没有只属于你们的默契）"
-    relationship_hint = ""
-    scar_hint = ""
-    season_hint = ""
-    if brain.relationship is not None:
-        shared_culture = format_culture_for_prompt(
-            brain.relationship.state.shared_culture
-        )
-        relationship_hint = brain.relationship.stage_prompt_hint()
-        season_hint = brain.relationship.state.season
-    if brain.scars is not None and brain._db is not None:
-        scars = await brain._db.list_scars()
-        scar_hint = format_scars_for_prompt(scars)
 
     return PromptContext(
         recent_messages=recent,

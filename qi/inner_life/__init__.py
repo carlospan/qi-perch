@@ -11,6 +11,11 @@ from qi.inner_life.consciousness import (
 )
 from qi.inner_life.creativity import Creativity
 from qi.inner_life.dream import DreamEngine
+from qi.inner_life.identity_snapshot import (
+    SNAPSHOT_VALENCE_SURGE,
+    ensure_identity_snapshot,
+    mark_identity_snapshot_stale,
+)
 from qi.inner_life.self_model import SelfModel
 
 if TYPE_CHECKING:
@@ -75,6 +80,8 @@ class InnerLife:
 
         delta_v = emotion.valence - self._prev_valence
         self.self_model.note_emotion_surge(delta_v)
+        if abs(delta_v) > SNAPSHOT_VALENCE_SURGE:
+            await mark_identity_snapshot_stale(self.db)
 
         # 对话首轮闭 loop：允许在 awake（deliver 之后）写一笔，供下一轮
         if prefer_close_loop:
@@ -126,6 +133,11 @@ class InnerLife:
         self,
         emotion: EmotionState,
         relationship_stage: str,
+        *,
+        trust: float = 0.0,
+        season: str = "spring",
+        shared_culture: str | list | None = None,
+        traces: list | None = None,
     ) -> dict[str, str]:
         """组装可注入对话 prompt 的内在生命片段。"""
         thoughts = await self.consciousness.recent_for_prompt()
@@ -134,9 +146,18 @@ class InnerLife:
         creation_hint = await self.creativity.maybe_share_hint(
             emotion, relationship_stage
         )
+        snapshot = await ensure_identity_snapshot(
+            self.db,
+            stage=relationship_stage,
+            trust=trust,
+            season=season,
+            shared_culture=shared_culture,
+            traces=traces,
+        )
         return {
             "recent_thoughts": thoughts,
             "self_narrative": self_summary,
+            "identity_snapshot": snapshot,
             "dream_hint": dream_hint or "",
             "creation_hint": creation_hint or "",
             "emotion_residue": emotion_residue_hint(emotion),

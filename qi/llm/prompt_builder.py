@@ -100,7 +100,11 @@ class PromptBuilder:
             )
 
         emotion_residue = extras.get("emotion_residue") or "没有特别明显的情绪余温"
-        self_narrative = extras.get("self_narrative") or "（还在认识自己）"
+        identity_snapshot = (
+            extras.get("identity_snapshot")
+            or extras.get("self_narrative")
+            or "（还在认识自己）"
+        )
         dream_hint = extras.get("dream_hint") or ""
         creation_hint = extras.get("creation_hint") or ""
         first_time_hint = extras.get("first_time_hint") or ""
@@ -149,7 +153,7 @@ class PromptBuilder:
             recent_actions=recent_actions,
             shared_culture=shared_culture or "（还没有只属于你们的默契）",
             emotion_residue=emotion_residue,
-            self_narrative=self_narrative,
+            identity_snapshot=identity_snapshot,
             inner_notes=inner_notes,
             body_hint=extras.get("body_hint") or "",
         )

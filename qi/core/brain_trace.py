@@ -22,7 +22,7 @@ async def record_trace(
     impact: float | None,
     now: datetime,
 ) -> None:
-    """心跳决策痕迹——给人排障，不进 prompt。"""
+    """心跳决策痕迹——给人排障；压缩标签可进身份快照，不进对话流水账。"""
     trace = {
         "at": now.isoformat(timespec="seconds"),
         "mode": brain.emotion.mode.value,

@@ -215,6 +215,11 @@ async def season_detection(brain: Brain) -> None:
                 if new != old:
                     brain.relationship.state.season = new
                     await brain.relationship.persist()
+                    from qi.inner_life.identity_snapshot import (
+                        mark_identity_snapshot_stale,
+                    )
+
+                    await mark_identity_snapshot_stale(brain._db)
                     if brain.inner_life is not None:
                         await _enqueue_and_think(
                             brain,

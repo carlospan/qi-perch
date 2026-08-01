@@ -109,6 +109,10 @@ class SelfModel:
             existential_questions=existential,
         )
         self._pending_major = False
+        # 失效闭环置位：后台 reflect 成功后必须让快照重建，不能顶着旧自我用一周
+        from qi.inner_life.identity_snapshot import mark_identity_snapshot_stale
+
+        await mark_identity_snapshot_stale(self.db)
         return narrative
 
     async def summary_for_prompt(self, max_chars: int = 220) -> str:

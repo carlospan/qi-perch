@@ -417,11 +417,29 @@ class ConsciousnessStream:
             chat_embers = "（此刻不主动翻交谈；让念头自己来）"
 
         season = "spring"
+        stage = "stranger"
+        trust = 0.0
+        culture = None
         rel = await self.db.load_relationship()
-        if rel and rel.get("season"):
-            season = str(rel["season"])
+        if rel:
+            if rel.get("season"):
+                season = str(rel["season"])
+            if rel.get("stage"):
+                stage = str(rel["stage"])
+            trust = float(rel.get("trust") or 0)
+            culture = rel.get("shared_culture")
         season_hint = SEASON_BEHAVIOR_HINTS.get(
             season, SEASON_BEHAVIOR_HINTS["spring"]
+        )
+
+        from qi.inner_life.identity_snapshot import ensure_identity_snapshot
+
+        identity_snapshot = await ensure_identity_snapshot(
+            self.db,
+            stage=stage,
+            trust=trust,
+            season=season,
+            shared_culture=culture,
         )
 
         if loop and loop.get("id"):
@@ -436,6 +454,7 @@ class ConsciousnessStream:
                 silence_duration=_format_silence(silence),
                 emotion_summary=emotion.description(),
                 season_hint=season_hint,
+                identity_snapshot=identity_snapshot,
                 recent_memories=mem_text,
                 open_loop=open_loop_text,
                 pending_thoughts=pending_text,
