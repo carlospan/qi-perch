@@ -1,0 +1,208 @@
+"""阶段一·包 4：意向卡决策、模板降级、N5 断言。"""
+
+from __future__ import annotations
+
+import tempfile
+from datetime import datetime
+from pathlib import Path
+
+import pytest
+from qi.core.emotion import EmotionState
+from qi.core.expression import Expression, render_template
+from qi.core.intention import (
+    IntentionCard,
+    Material,
+    assert_reply_respects_card,
+    build_intention_card,
+    looks_like_remember_question,
+)
+from qi.core.perception import ImpactAssessment
+from qi.storage.database import Database
+
+
+def test_remember_question_detect():
+    assert looks_like_remember_question("你还记得我说过什么吗")
+    assert not looks_like_remember_question("今天天气怎么样")
+
+
+def test_hurt_maps_to_honest_hurt():
+    card = build_intention_card(
+        channel="dialogue",
+        user_message="你真烦人",
+        emotion=EmotionState(energy=0.2),
+        relationship_stage="friend",
+        assessment=ImpactAssessment(impact=-0.5, intent="hurt"),
+    )
+    assert card.act == "honest_hurt"
+    assert card.length == "short"
+
+
+def test_request_with_memory_is_recall():
+    card = build_intention_card(
+        channel="dialogue",
+        user_message="那次助眠你还记得吗",
+        emotion=EmotionState(),
+        relationship_stage="friend",
+        assessment=ImpactAssessment(impact=0.1, intent="request"),
+        memories=[{"content": "他教我一段助眠方法"}],
+    )
+    assert card.act == "recall"
+    assert card.materials[0].tag == "memory"
+
+
+def test_remember_miss_answer_must():
+    card = build_intention_card(
+        channel="dialogue",
+        user_message="你还记得哈尔滨冰球俱乐部吗",
+        emotion=EmotionState(),
+        relationship_stage="friend",
+        assessment=ImpactAssessment(impact=0.0, intent="request"),
+        memories=[],
+        extras={"user_facts": "（你还不太了解他）"},
+    )
+    assert card.act == "answer"
+    assert any("不假装记得" in m for m in card.must)
+    assert card.materials[0].tag == "none"
+
+
+def test_proactive_binds_loop():
+    card = build_intention_card(
+        channel="proactive",
+        user_message="【此刻没有人在跟你说话。】",
+        emotion=EmotionState(valence=0.2),
+        relationship_stage="friend",
+        open_loops=[{"id": "abc", "concern": "创造者之问还没想完"}],
+        proactive_kind="express_feeling",
+    )
+    assert card.act == "share_state"
+    assert card.materials[0].tag == "loop"
+
+
+def test_template_answer_none():
+    card = IntentionCard(
+        act="answer",
+        topic="x",
+        materials=[Material(tag="none", text="")],
+        must=["不假装记得"],
+    )
+    text = render_template(card)
+    assert "想不清楚" in text
+
+
+def test_template_recall_and_n5_blacklist():
+    card = IntentionCard(
+        act="recall",
+        topic="助眠",
+        materials=[Material(tag="memory", text="他教我一段助眠方法")],
+    )
+    text = render_template(card)
+    assert "助眠" in text
+    assert assert_reply_respects_card(
+        text, card, banned_names=["哈尔滨冰球俱乐部"]
+    ) == []
+    bad = text + "还有哈尔滨冰球俱乐部"
+    assert assert_reply_respects_card(
+        bad, card, banned_names=["哈尔滨冰球俱乐部"]
+    )
+
+
+def test_n5_fake_memory_phrase():
+    card = IntentionCard(
+        act="answer",
+        topic="?",
+        materials=[Material(tag="none", text="")],
+        must=["不假装记得"],
+    )
+    assert assert_reply_respects_card("你那天说过吉他", card)
+
+
+class _LLM:
+    def __init__(self, text: str = ""):
+        self.text = text
+
+    async def call(self, purpose, messages, temperature=None):
+        return self.text
+
+
+@pytest.mark.asyncio
+async def test_express_empty_falls_to_template():
+    card = IntentionCard(
+        act="honest_hurt",
+        topic="伤",
+        materials=[Material(tag="none", text="")],
+    )
+    expr = Expression({}, _LLM(""))  # type: ignore[arg-type]
+    text = await expr.express(
+        "你真烦",
+        EmotionState(),
+        datetime.now(),
+        intention=card,
+    )
+    assert "接住了" in text
+    assert card.outcome == "template"
+
+
+@pytest.mark.asyncio
+async def test_express_llm_path_sets_outcome():
+    card = IntentionCard(
+        act="free_talk",
+        topic="嗨",
+        materials=[Material(tag="none", text="")],
+    )
+    expr = Expression({}, _LLM("……在呢。"))  # type: ignore[arg-type]
+    text = await expr.express(
+        "嗨",
+        EmotionState(),
+        datetime.now(),
+        intention=card,
+    )
+    assert text == "……在呢。"
+    assert card.outcome == "llm"
+
+
+@pytest.mark.asyncio
+async def test_last_intention_written_with_outcome():
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        from qi.core.brain import Brain
+        from qi.core.intention import LAST_INTENTION_KEY
+        from qi.llm.gateway import LLMCallOutcome
+        from qi.memory.manager import MemoryManager
+        from qi.relationship.engine import RelationshipEngine
+
+        class FakeLLM:
+            def __init__(self):
+                self.last_outcome = LLMCallOutcome(text="", failure="unreachable")
+
+            async def call(self, purpose, messages, temperature=None):
+                return ""
+
+        brain = Brain(
+            {"memory": {"chroma_path": str(Path(tmp) / "c"), "max_working_memory": 20},
+             "tts": {"enabled": False}},
+            FakeLLM(),  # type: ignore[arg-type]
+        )
+        brain._db = db
+        brain.memory = MemoryManager(
+            db,
+            {"memory": {"chroma_path": str(Path(tmp) / "c"), "max_working_memory": 20}},
+            llm=None,
+        )
+        await brain.memory.restore()
+        brain.relationship = RelationshipEngine(db, None, {})
+        await brain.relationship.restore()
+        brain.relationship.state.stage = "friend"
+        brain.action = None
+        brain.inner_life = None
+        brain.first_times = None
+
+        brain._pending_queue.append("你还记得哈尔滨冰球俱乐部吗")
+        await brain._heartbeat()
+        card = await db.get_body_memory(LAST_INTENTION_KEY)
+        assert card is not None
+        assert card.get("outcome") == "template"
+        assert brain._pending_speech is not None
+        assert "想不清楚" in brain._pending_speech.text or "接住" in brain._pending_speech.text or "嗯" in brain._pending_speech.text
+        brain.memory.vector_store.close()
+        await db.close()

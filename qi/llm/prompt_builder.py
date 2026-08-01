@@ -1,4 +1,4 @@
-"""Prompt 组装器——把状态注入栖的意识，而不是下指令。"""
+"""Prompt 组装器——意向卡进段 A，底线约束进段 B。"""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from qi.core.emotion import EmotionState
+    from qi.core.intention import IntentionCard
 
 from qi.prompts import read_prompt
 
@@ -63,14 +64,6 @@ class PromptBuilder:
                 self._template = read_prompt("conversation.txt")
         return self._template
 
-    def _format_memories(self, memories: list[dict] | str) -> str:
-        if isinstance(memories, str):
-            return memories if memories else "（暂时没有特别的记忆）"
-        if not memories:
-            return "（暂时没有特别的记忆）"
-        lines = [f"- {m['content']}" for m in memories if m.get("content")]
-        return "\n".join(lines) if lines else "（暂时没有特别的记忆）"
-
     def build_conversation_prompt(
         self,
         user_message: str,
@@ -86,11 +79,26 @@ class PromptBuilder:
         scar_hint: str = "",
         season: str = "spring",
         proactive_kind: str | None = None,
+        intention: IntentionCard | None = None,
     ) -> list[dict]:
+        from qi.core.intention import IntentionCard as IC
+        from qi.core.intention import Material
+        from qi.relationship.season import SEASON_BEHAVIOR_HINTS
+
         extras = inner_extras or {}
-        recent_thoughts = extras.get("recent_thoughts") or (
-            "（这一阵没有留下可说的念头痕迹——可能很安静，或进程没在转；不等于你没有内在）"
-        )
+        if intention is None:
+            # 测试兜底：最小 free_talk 卡（生产路径由 brain 必建卡）
+            intention = IC(
+                act="free_talk",
+                topic=(user_message or "")[:40],
+                materials=[Material(tag="none", text="")],
+                stance="自然",
+                must=["不编造意向卡素材之外的事实"],
+                length="normal",
+                source="fallback",
+                channel="dialogue",
+            )
+
         emotion_residue = extras.get("emotion_residue") or "没有特别明显的情绪余温"
         self_narrative = extras.get("self_narrative") or "（还在认识自己）"
         dream_hint = extras.get("dream_hint") or ""
@@ -108,17 +116,27 @@ class PromptBuilder:
         if first_time_hint:
             inner_notes_parts.append(first_time_hint)
         if drift_hint:
-            inner_notes_parts.append(f"你注意到他可能变了：{drift_hint}。温柔地重新认识，不要质问。")
+            inner_notes_parts.append(
+                f"你注意到他可能变了：{drift_hint}。温柔地重新认识，不要质问。"
+            )
         inner_notes = "\n".join(inner_notes_parts) if inner_notes_parts else "（无）"
-
-        from qi.relationship.season import SEASON_BEHAVIOR_HINTS
 
         season_hint = SEASON_BEHAVIOR_HINTS.get(season, "")
         rel_hint = relationship_hint or "礼貌、好奇、小心翼翼。"
         scars = scar_hint or "（无）"
 
+        # memories 参数保留兼容，事实以意向卡为准（不再倾倒全量检索）
+        _ = memories
+        _ = user_profile
+
         template = self._load_template()
         system = template.format(
+            intention_act=intention.act,
+            intention_topic=intention.topic or "（无）",
+            intention_materials=intention.materials_block(),
+            intention_stance=intention.stance,
+            intention_length=intention.length,
+            intention_must=intention.must_block(),
             emotion_description=emotion.description(),
             energy_level=_energy_level(emotion.energy),
             time_feeling=_time_feeling(now),
@@ -127,12 +145,9 @@ class PromptBuilder:
             relationship_hint=rel_hint,
             season_hint=season_hint,
             scar_hint=scars,
-            relevant_memories=self._format_memories(memories),
             user_facts=user_facts,
             recent_actions=recent_actions,
             shared_culture=shared_culture or "（还没有只属于你们的默契）",
-            user_profile=user_profile or "（还在认识你）",
-            recent_thoughts=recent_thoughts,
             emotion_residue=emotion_residue,
             self_narrative=self_narrative,
             inner_notes=inner_notes,

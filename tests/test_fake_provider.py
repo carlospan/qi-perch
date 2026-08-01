@@ -112,8 +112,8 @@ async def test_fixed_return_advances_four_lines():
 
 
 @pytest.mark.asyncio
-async def test_unreachable_dialogue_silent_but_organs_advance():
-    """对话 UNREACHABLE：静默，但情绪/记忆/关系仍推进。"""
+async def test_unreachable_dialogue_template_but_organs_advance():
+    """对话 UNREACHABLE：模板开口（包 4 契约），情绪/记忆/关系仍推进。"""
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         llm = FakeLLM(mode="unreachable")
         brain, db = await _wire_brain(tmp, llm)
@@ -123,8 +123,11 @@ async def test_unreachable_dialogue_silent_but_organs_advance():
         brain._pending_queue.append(_USER_LINE)
         await brain._heartbeat()
 
-        assert brain._pending_speech is None
+        assert brain._pending_speech is not None
+        assert brain._pending_speech.text
         assert llm.last_outcome.failure == "unreachable"
+        intent = await db.get_body_memory("last_intention")
+        assert intent and intent.get("outcome") == "template"
         assert brain.emotion.valence != before.valence or brain.emotion.security != before.security
         recent = await db.load_recent_messages(limit=5)
         assert any(m.get("content") == _USER_LINE for m in recent)
@@ -135,8 +138,8 @@ async def test_unreachable_dialogue_silent_but_organs_advance():
 
 
 @pytest.mark.asyncio
-async def test_unreachable_proactive_uses_local_fallback_and_records():
-    """主动 UNREACHABLE：本地短句兜底，且计入日限。"""
+async def test_unreachable_proactive_template_and_records():
+    """主动 UNREACHABLE：意向卡模板开口，且计入日限。"""
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         llm = FakeLLM(mode="unreachable")
         brain, db = await _wire_brain(tmp, llm)
@@ -149,16 +152,17 @@ async def test_unreachable_proactive_uses_local_fallback_and_records():
 
         assert brain._pending_speech is not None
         assert brain._pending_speech.proactive is True
-        expected = brain.proactive.fallback_line(KIND_EXPRESS_FEELING)
-        assert brain._pending_speech.text == expected
+        assert brain._pending_speech.text
+        intent = await db.get_body_memory("last_intention")
+        assert intent and intent.get("outcome") == "template"
         assert brain.proactive.count_today == 1
         assert KIND_EXPRESS_FEELING in brain.proactive.last_at
         await _cleanup(brain, db)
 
 
 @pytest.mark.asyncio
-async def test_empty_proactive_silent_no_record():
-    """主动 EMPTY：静默，不占日限。"""
+async def test_empty_proactive_template_and_records():
+    """主动 EMPTY：同样模板开口并计入日限（废止 EMPTY 不 record）。"""
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         llm = FakeLLM(mode="empty")
         brain, db = await _wire_brain(tmp, llm)
@@ -168,9 +172,12 @@ async def test_empty_proactive_silent_no_record():
 
         await brain._heartbeat()
 
-        assert brain._pending_speech is None
+        assert brain._pending_speech is not None
+        assert brain._pending_speech.proactive is True
         assert llm.last_outcome.failure == "empty"
-        assert brain.proactive.count_today == 0
+        intent = await db.get_body_memory("last_intention")
+        assert intent and intent.get("outcome") == "template"
+        assert brain.proactive.count_today == 1
         await _cleanup(brain, db)
 
 

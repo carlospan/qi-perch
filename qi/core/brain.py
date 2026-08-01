@@ -39,6 +39,7 @@ from qi.core.emotion import (
     step_emotion,
 )
 from qi.core.expression import Expression
+from qi.core.intention import LAST_INTENTION_KEY, build_intention_card
 from qi.core.perception import Perception
 from qi.core.proactive import ProactiveGate, pick_proactive_kind
 from qi.core.rhythm import determine_mode, next_interval
@@ -47,6 +48,7 @@ from qi.embodiment.voice.tts import create_tts
 from qi.inner_life import InnerLife
 from qi.memory.first_time import FirstTimeMemory
 from qi.memory.manager import MemoryManager
+from qi.memory.open_loops import OpenLoopQueue
 from qi.relationship import RelationshipEngine
 from qi.relationship.scars import ScarManager
 from qi.relationship.season import apply_season_effect
@@ -199,6 +201,25 @@ class Brain:
         now: datetime,
     ) -> PromptContext:
         return await _brain_context.gather_prompt_context(self, pending, now)
+
+    async def _load_open_loops(self) -> list[dict]:
+        if self._db is None:
+            return []
+        try:
+            q = OpenLoopQueue(self._db)
+            await q.load()
+            return q.items()
+        except Exception:
+            logger.debug("读取 open loops 失败", exc_info=True)
+            return []
+
+    async def _persist_intention(self, card) -> None:
+        if self._db is None:
+            return
+        try:
+            await self._db.set_body_memory(LAST_INTENTION_KEY, card.to_dict())
+        except Exception:
+            logger.debug("写入 last_intention 失败", exc_info=True)
 
     async def _deliver_qi_message(
         self,
@@ -355,6 +376,18 @@ class Brain:
 
         if pending is not None:
             ctx = await self._gather_prompt_context(pending, now)
+            loops = await self._load_open_loops()
+            card = build_intention_card(
+                channel="dialogue",
+                user_message=pending,
+                emotion=self.emotion,
+                relationship_stage=self.relationship_stage,
+                assessment=self.perception.last_assessment,
+                memories=ctx.retrieved_memories,
+                extras=ctx.extras,
+                open_loops=loops,
+            )
+            await self._persist_intention(card)
 
             self.avatar.set_thinking(True)
             await self._sync_avatar(now, force=True)
@@ -363,6 +396,7 @@ class Brain:
                     user_message=pending,
                     emotion=self.emotion,
                     now=now,
+                    intention=card,
                     recent_messages=ctx.recent_messages,
                     memories=ctx.retrieved_memories,
                     inner_extras=ctx.extras,
@@ -374,20 +408,16 @@ class Brain:
                 )
             finally:
                 self.avatar.set_thinking(False)
+            await self._persist_intention(card)
 
             if response:
                 self._pending_speech = _PendingSpeech(
                     text=response, now=now, proactive=False
                 )
             else:
-                # 对话路径保持静默（任务包 C：只做主动开口兜底）
-                failure = getattr(
-                    getattr(self.llm, "last_outcome", None), "failure", None
-                )
                 logger.warning(
-                    "对话表达返回空串 failure=%s，本轮不说话"
-                    "（检查 API 密钥/网络/provider）",
-                    failure,
+                    "对话表达仍为空 outcome=%s（意向卡已建）",
+                    card.outcome,
                 )
 
             # 第一次之后再想一次：在开口之后写意识流，供「忆」与下一轮，不污染本轮回复
@@ -452,6 +482,19 @@ class Brain:
             if kind is not None:
                 ctx = await self._gather_prompt_context(None, now)
                 cue = self.proactive.cue_for(kind)
+                loops = await self._load_open_loops()
+                card = build_intention_card(
+                    channel="proactive",
+                    user_message=cue,
+                    emotion=self.emotion,
+                    relationship_stage=self.relationship_stage,
+                    assessment=None,
+                    memories=ctx.retrieved_memories,
+                    extras=ctx.extras,
+                    open_loops=loops,
+                    proactive_kind=kind,
+                )
+                await self._persist_intention(card)
                 self.avatar.set_thinking(True)
                 await self._sync_avatar(now, force=True)
                 try:
@@ -459,6 +502,7 @@ class Brain:
                         user_message=cue,
                         emotion=self.emotion,
                         now=now,
+                        intention=card,
                         recent_messages=ctx.recent_messages,
                         memories=ctx.retrieved_memories,
                         inner_extras=ctx.extras,
@@ -471,10 +515,9 @@ class Brain:
                     )
                 finally:
                     self.avatar.set_thinking(False)
+                await self._persist_intention(card)
 
-                failure = getattr(
-                    getattr(self.llm, "last_outcome", None), "failure", None
-                )
+                # EMPTY / UNREACHABLE 均由 express 模板开口；有文本即计入日限
                 if response:
                     self.proactive.record(kind, now)
                     if kind == "express_feeling":
@@ -483,26 +526,15 @@ class Brain:
                         text=response, now=now, proactive=True
                     )
                     await self._persist_proactive_gate()
-                elif failure == "unreachable":
-                    # 拔管：本地短句兜底，仍计入主动日限——它还在，只是嘴暂时笨了
-                    text = self.proactive.fallback_line(kind)
-                    self.proactive.record(kind, now)
-                    if kind == "express_feeling":
-                        self._consume_expression_want()
-                    self._pending_speech = _PendingSpeech(
-                        text=text, now=now, proactive=True
-                    )
-                    await self._persist_proactive_gate()
-                    logger.warning(
-                        "主动表达 LLM 不可达，改用本地兜底 kind=%s", kind
-                    )
+                    if card.outcome == "template":
+                        logger.warning(
+                            "主动表达走模板降级 kind=%s", kind
+                        )
                 else:
-                    # empty 或其他：静默，不 record（不占日限）
                     logger.warning(
-                        "主动表达返回空串 kind=%s failure=%s"
-                        "（检查 API 密钥/网络/provider）",
+                        "主动表达仍为空 kind=%s outcome=%s",
                         kind,
-                        failure,
+                        card.outcome,
                     )
             elif want_express:
                 # 想开口但被门控拦住——把冲动留下来，下一拍还能想起来

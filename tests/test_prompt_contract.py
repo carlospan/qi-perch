@@ -22,6 +22,12 @@ _PLACEHOLDER = re.compile(r"(?<!\{)\{(\w+)\}(?!\})")  # 排除 {{}} 转义
 # 各模板占位符必须与对应填充代码一致（见评估文档 §三清单）。
 EXPECTED: dict[str, set[str]] = {
     "conversation": {
+        "intention_act",
+        "intention_topic",
+        "intention_materials",
+        "intention_stance",
+        "intention_length",
+        "intention_must",
         "emotion_description",
         "energy_level",
         "time_feeling",
@@ -30,12 +36,9 @@ EXPECTED: dict[str, set[str]] = {
         "relationship_hint",
         "season_hint",
         "scar_hint",
-        "relevant_memories",
         "user_facts",
         "recent_actions",
         "shared_culture",
-        "user_profile",
-        "recent_thoughts",
         "emotion_residue",
         "self_narrative",
         "inner_notes",
