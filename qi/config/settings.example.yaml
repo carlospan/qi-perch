@@ -76,6 +76,12 @@ proactive_cooldown:
   share_creation: 86400
   express_feeling: 7200
 
+# 全局工作空间（阶段二·包 7）：默认 shadow，验证一致率后再翻 enabled
+gws:
+  enabled: false
+  shadow_beats: 50
+  shadow_match_min: 0.99
+
 # 行动层（L7）：自主行动紧于言语日限 3
 action:
   autonomous_daily_limit: 1

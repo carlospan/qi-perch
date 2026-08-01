@@ -230,7 +230,10 @@ CREATE TABLE IF NOT EXISTS broadcast_traces (
     winner_salience REAL NOT NULL,
     candidates_json TEXT NOT NULL,
     motive_json TEXT NOT NULL,
-    outcome TEXT
+    outcome TEXT,
+    winner_arb TEXT,
+    winner_arb_salience REAL,
+    arb_matches_legacy INTEGER
 )
 """
 
@@ -281,6 +284,7 @@ class Database:
         await self._conn.execute(_CREATE_ACTIONS)
         await self._conn.execute(_CREATE_BROADCAST_TRACES)
         await self._migrate_creations_mentioned_at()
+        await self._migrate_broadcast_traces_gws()
         for ddl in _CREATE_INDEXES:
             await self._conn.execute(ddl)
         await self._conn.execute(
@@ -301,6 +305,24 @@ class Database:
         if "mentioned_at" not in cols:
             await conn.execute(
                 "ALTER TABLE creations ADD COLUMN mentioned_at DATETIME"
+            )
+
+    async def _migrate_broadcast_traces_gws(self) -> None:
+        """包 7：旧库补仲裁对照列。"""
+        conn = self._require_conn()
+        async with conn.execute("PRAGMA table_info(broadcast_traces)") as cursor:
+            cols = {str(row[1]) for row in await cursor.fetchall()}
+        if "winner_arb" not in cols:
+            await conn.execute(
+                "ALTER TABLE broadcast_traces ADD COLUMN winner_arb TEXT"
+            )
+        if "winner_arb_salience" not in cols:
+            await conn.execute(
+                "ALTER TABLE broadcast_traces ADD COLUMN winner_arb_salience REAL"
+            )
+        if "arb_matches_legacy" not in cols:
+            await conn.execute(
+                "ALTER TABLE broadcast_traces ADD COLUMN arb_matches_legacy INTEGER"
             )
 
     def _require_conn(self) -> aiosqlite.Connection:
@@ -1501,14 +1523,19 @@ class Database:
         candidates: list[dict] | None,
         motive: dict | None,
         outcome: str | None,
+        winner_arb: str | None = None,
+        winner_arb_salience: float | None = None,
+        arb_matches_legacy: bool | None = None,
     ) -> int:
         conn = self._require_conn()
+        match_i = None if arb_matches_legacy is None else (1 if arb_matches_legacy else 0)
         cur = await conn.execute(
             """
             INSERT INTO broadcast_traces
                 (beat, timestamp, winner_kind, winner_salience,
-                 candidates_json, motive_json, outcome)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                 candidates_json, motive_json, outcome,
+                 winner_arb, winner_arb_salience, arb_matches_legacy)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 int(beat),
@@ -1520,6 +1547,9 @@ class Database:
                 json.dumps(candidates or [], ensure_ascii=False),
                 json.dumps(motive or {}, ensure_ascii=False),
                 outcome,
+                winner_arb,
+                None if winner_arb_salience is None else float(winner_arb_salience),
+                match_i,
             ),
         )
         await conn.commit()
@@ -1530,7 +1560,8 @@ class Database:
         async with conn.execute(
             """
             SELECT id, beat, timestamp, winner_kind, winner_salience,
-                   candidates_json, motive_json, outcome
+                   candidates_json, motive_json, outcome,
+                   winner_arb, winner_arb_salience, arb_matches_legacy
             FROM broadcast_traces
             ORDER BY id DESC
             LIMIT ?

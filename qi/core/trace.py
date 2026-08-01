@@ -436,19 +436,37 @@ async def persist_broadcast(
     kind: str | None,
     action_type: str | None,
     now: datetime,
+    candidates: list[Contender] | None = None,
+    winner_arb_kind: str | None = None,
+    winner_arb_salience: float | None = None,
 ) -> None:
-    """每拍写一条 broadcast_traces；失败不抛。"""
+    """每拍写一条 broadcast_traces（含 GWS shadow 对照）；失败不抛。"""
     if brain._db is None:
         return
     try:
-        candidates = await collect_contenders(
-            brain,
-            pending=pending,
-            want_express=want_express,
-            kind=kind,
-            action_type=action_type,
-            now=now,
+        from qi.core.gws import (
+            arbitrate,
+            executable_contenders,
+            gws_config,
+            record_shadow_beat,
+            shadow_match,
         )
+
+        hint = getattr(brain, "_gws_broadcast_hint", None)
+        if candidates is None and isinstance(hint, dict):
+            candidates = hint.get("candidates")
+            if winner_arb_kind is None:
+                winner_arb_kind = hint.get("winner_arb_kind")
+                winner_arb_salience = hint.get("winner_arb_salience")
+        if candidates is None:
+            candidates = await collect_contenders(
+                brain,
+                pending=pending,
+                want_express=want_express,
+                kind=kind,
+                action_type=action_type,
+                now=now,
+            )
         winner_kind, winner_salience = winner_from_legacy(
             pending=pending,
             kind=kind,
@@ -461,6 +479,23 @@ async def persist_broadcast(
             action_type=action_type,
             want_express=want_express,
         )
+
+        gcfg = gws_config(brain.config)
+        # Shadow 对照：未启用时用可执行子集；启用后优先用分发时的全量仲裁结果
+        if winner_arb_kind is None:
+            shadow_pool = (
+                candidates
+                if gcfg["enabled"]
+                else executable_contenders(candidates)
+            )
+            arb = arbitrate(shadow_pool)
+            winner_arb_kind = arb.kind if arb else "idle"
+            winner_arb_salience = float(arb.salience) if arb else 0.0
+        matched = shadow_match(winner_kind, winner_arb_kind)
+        await record_shadow_beat(
+            brain._db, matched=matched, config=brain.config
+        )
+
         await brain._db.insert_broadcast_trace(
             beat=int(brain.heartbeat_count),
             timestamp=now,
@@ -469,6 +504,9 @@ async def persist_broadcast(
             candidates=[c.to_dict() for c in candidates],
             motive=motive_snapshot(brain, want_express=want_express),
             outcome=outcome,
+            winner_arb=winner_arb_kind,
+            winner_arb_salience=winner_arb_salience,
+            arb_matches_legacy=matched,
         )
     except Exception:
         logger.debug("写入 broadcast_traces 失败", exc_info=True)

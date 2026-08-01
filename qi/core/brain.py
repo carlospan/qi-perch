@@ -92,6 +92,7 @@ class Brain:
         self._db: Database | None = None
         self._last_response: str | None = None
         self._background = BackgroundTasks(self)
+        self._gws_broadcast_hint: dict | None = None
         self._prev_valence = self.emotion.valence
         self._accumulated_suppressed = 0.0
         self.proactive = ProactiveGate(config)
@@ -260,6 +261,7 @@ class Brain:
         note_snapshot_beat()
         now = datetime.now()
         self.proactive.reset_day(now)
+        self._gws_broadcast_hint = None
         response: str | None = None
         pending = self._pending_queue.popleft() if self._pending_queue else None
         impact_mult = 1.0
@@ -439,109 +441,17 @@ class Brain:
                     logger.exception("第一次后意识流 tick 出错")
 
         elif pending is None:
-            silence_seconds = self.perception.detect_silence(self.last_interaction, now)
-            # 行动与主动言语同拍不叠加：先评估自主行动（更稀有）；
-            # 动了手则不再 pick_proactive_kind；没动手再 fall through 到主动言语。
-            acted = False
-            if self.action is not None:
-                try:
-                    scars = (
-                        await self._db.list_scars()
-                        if self._db is not None
-                        else None
-                    )
-                    action_result = await self.action.tick(
-                        self.emotion,
-                        self.relationship_stage,
-                        self._current_season(),
-                        now,
-                        mode=self.emotion.mode.value,
-                        user_online=self.user_online,
-                        scars=scars,
-                    )
-                    if action_result is not None:
-                        acted = True
-                        action_type = (
-                            str(action_result.get("type") or action_result.get("kind") or "")
-                            or None
-                        )
-                        await self._persist_action_budget()
-                        await self._deliver_action_result(action_result, now)
-                except Exception:
-                    logger.exception("行动层 tick 出错")
+            from qi.core.gws import gws_config
 
-            if not acted:
-                kind = pick_proactive_kind(
-                    want_express=want_express,
-                    relationship_stage=self.relationship_stage,
-                    emotion_security=self.emotion.security,
-                    emotion_attachment=self.emotion.attachment,
-                    silence_seconds=silence_seconds,
-                    mode=self.emotion.mode.value,
-                    user_online=self.user_online,
-                    gate=self.proactive,
-                    now=now,
+            self._gws_broadcast_hint = None
+            if gws_config(self.config)["enabled"]:
+                kind, action_type, response = await self._heartbeat_gws_idle(
+                    want_express=want_express, now=now
                 )
-            if kind is not None:
-                ctx = await self._gather_prompt_context(None, now)
-                cue = self.proactive.cue_for(kind)
-                loops = await self._load_open_loops()
-                card = build_intention_card(
-                    channel="proactive",
-                    user_message=cue,
-                    emotion=self.emotion,
-                    relationship_stage=self.relationship_stage,
-                    assessment=None,
-                    memories=ctx.retrieved_memories,
-                    extras=ctx.extras,
-                    open_loops=loops,
-                    proactive_kind=kind,
+            else:
+                kind, action_type, response = await self._heartbeat_legacy_idle(
+                    want_express=want_express, now=now
                 )
-                await self._persist_intention(card)
-                self.avatar.set_thinking(True)
-                await self._sync_avatar(now, force=True)
-                try:
-                    response = await self.expression.express(
-                        user_message=cue,
-                        emotion=self.emotion,
-                        now=now,
-                        intention=card,
-                        recent_messages=ctx.recent_messages,
-                        memories=ctx.retrieved_memories,
-                        inner_extras=ctx.extras,
-                        relationship_stage=self.relationship_stage,
-                        shared_culture=ctx.shared_culture,
-                        relationship_hint=ctx.relationship_hint,
-                        scar_hint=ctx.scar_hint,
-                        season=ctx.season_hint,
-                        proactive_kind=kind,
-                    )
-                finally:
-                    self.avatar.set_thinking(False)
-                await self._persist_intention(card)
-
-                # EMPTY / UNREACHABLE 均由 express 模板开口；有文本即计入日限
-                if response:
-                    self.proactive.record(kind, now)
-                    if kind == "express_feeling":
-                        self._consume_expression_want()
-                    self._pending_speech = _PendingSpeech(
-                        text=response, now=now, proactive=True
-                    )
-                    await self._persist_proactive_gate()
-                    if card.outcome == "template":
-                        logger.warning(
-                            "主动表达走模板降级 kind=%s", kind
-                        )
-                else:
-                    logger.warning(
-                        "主动表达仍为空 kind=%s outcome=%s",
-                        kind,
-                        card.outcome,
-                    )
-            elif want_express:
-                # 想开口但被门控拦住——把冲动留下来，下一拍还能想起来
-                self._accumulated_suppressed = max(self._accumulated_suppressed, 1.01)
 
         await self._sync_avatar(now)
 
@@ -562,6 +472,211 @@ class Brain:
 
         self._last_response = response
         return response
+
+    async def _speak_proactive(self, kind: str, now: datetime) -> str | None:
+        """主动开口表达块——legacy / GWS 共用。"""
+        ctx = await self._gather_prompt_context(None, now)
+        cue = self.proactive.cue_for(kind)
+        loops = await self._load_open_loops()
+        card = build_intention_card(
+            channel="proactive",
+            user_message=cue,
+            emotion=self.emotion,
+            relationship_stage=self.relationship_stage,
+            assessment=None,
+            memories=ctx.retrieved_memories,
+            extras=ctx.extras,
+            open_loops=loops,
+            proactive_kind=kind,
+        )
+        await self._persist_intention(card)
+        self.avatar.set_thinking(True)
+        await self._sync_avatar(now, force=True)
+        try:
+            response = await self.expression.express(
+                user_message=cue,
+                emotion=self.emotion,
+                now=now,
+                intention=card,
+                recent_messages=ctx.recent_messages,
+                memories=ctx.retrieved_memories,
+                inner_extras=ctx.extras,
+                relationship_stage=self.relationship_stage,
+                shared_culture=ctx.shared_culture,
+                relationship_hint=ctx.relationship_hint,
+                scar_hint=ctx.scar_hint,
+                season=ctx.season_hint,
+                proactive_kind=kind,
+            )
+        finally:
+            self.avatar.set_thinking(False)
+        await self._persist_intention(card)
+
+        if response:
+            self.proactive.record(kind, now)
+            if kind == "express_feeling":
+                self._consume_expression_want()
+            self._pending_speech = _PendingSpeech(
+                text=response, now=now, proactive=True
+            )
+            await self._persist_proactive_gate()
+            if card.outcome == "template":
+                logger.warning("主动表达走模板降级 kind=%s", kind)
+        else:
+            logger.warning(
+                "主动表达仍为空 kind=%s outcome=%s",
+                kind,
+                card.outcome,
+            )
+        return response
+
+    async def _heartbeat_legacy_idle(
+        self, *, want_express: bool, now: datetime
+    ) -> tuple[str | None, str | None, str | None]:
+        """旧路径：先 action.tick，再 pick_proactive（包 7 shadow 默认）。"""
+        silence_seconds = self.perception.detect_silence(self.last_interaction, now)
+        kind: str | None = None
+        action_type: str | None = None
+        response: str | None = None
+        acted = False
+        if self.action is not None:
+            try:
+                scars = (
+                    await self._db.list_scars() if self._db is not None else None
+                )
+                action_result = await self.action.tick(
+                    self.emotion,
+                    self.relationship_stage,
+                    self._current_season(),
+                    now,
+                    mode=self.emotion.mode.value,
+                    user_online=self.user_online,
+                    scars=scars,
+                )
+                if action_result is not None:
+                    acted = True
+                    action_type = (
+                        str(
+                            action_result.get("type")
+                            or action_result.get("kind")
+                            or ""
+                        )
+                        or None
+                    )
+                    await self._persist_action_budget()
+                    await self._deliver_action_result(action_result, now)
+            except Exception:
+                logger.exception("行动层 tick 出错")
+
+        if not acted:
+            kind = pick_proactive_kind(
+                want_express=want_express,
+                relationship_stage=self.relationship_stage,
+                emotion_security=self.emotion.security,
+                emotion_attachment=self.emotion.attachment,
+                silence_seconds=silence_seconds,
+                mode=self.emotion.mode.value,
+                user_online=self.user_online,
+                gate=self.proactive,
+                now=now,
+            )
+        if kind is not None:
+            response = await self._speak_proactive(kind, now)
+        elif want_express:
+            self._accumulated_suppressed = max(self._accumulated_suppressed, 1.01)
+        return kind, action_type, response
+
+    async def _heartbeat_gws_idle(
+        self, *, want_express: bool, now: datetime
+    ) -> tuple[str | None, str | None, str | None]:
+        """GWS 启用：全量仲裁后互斥分发。"""
+        from qi.core.gws import arbitrate
+        from qi.core.proactive import KIND_EXPRESS_FEELING
+        from qi.core.trace import collect_contenders
+
+        kind: str | None = None
+        action_type: str | None = None
+        response: str | None = None
+        candidates = await collect_contenders(
+            self,
+            pending=None,
+            want_express=want_express,
+            kind=None,
+            action_type=None,
+            now=now,
+        )
+        winner = arbitrate(candidates)
+        self._gws_broadcast_hint = {
+            "candidates": candidates,
+            "winner_arb_kind": winner.kind if winner else "idle",
+            "winner_arb_salience": float(winner.salience) if winner else 0.0,
+        }
+        if winner is None:
+            if want_express:
+                self._accumulated_suppressed = max(
+                    self._accumulated_suppressed, 1.01
+                )
+            return None, None, None
+
+        wkind = winner.kind
+        if wkind.startswith("proactive:"):
+            kind = wkind.split(":", 1)[1]
+            response = await self._speak_proactive(kind, now)
+        elif wkind.startswith("action:"):
+            action_type = wkind.split(":", 1)[1]
+            if self.action is not None:
+                try:
+                    scars = (
+                        await self._db.list_scars()
+                        if self._db is not None
+                        else None
+                    )
+                    action_result = await self.action.execute_kind(
+                        action_type,
+                        self.emotion,
+                        self.relationship_stage,
+                        self._current_season(),
+                        now,
+                        mode=self.emotion.mode.value,
+                        user_online=self.user_online,
+                        scars=scars,
+                    )
+                    if action_result is not None:
+                        await self._persist_action_budget()
+                        await self._deliver_action_result(action_result, now)
+                    else:
+                        action_type = None
+                except Exception:
+                    logger.exception("GWS 行动分发出错")
+                    action_type = None
+        elif wkind == "close_loop":
+            if self.inner_life is not None:
+                try:
+                    silence = now - self.last_interaction
+                    await self.inner_life.consciousness.maybe_generate(
+                        self.emotion,
+                        silence,
+                        prefer_close=True,
+                        prev_valence=self.emotion.valence,
+                        prev_arousal=self.emotion.arousal,
+                    )
+                    await self._broadcast_journal_entries()
+                except Exception:
+                    logger.exception("GWS close_loop 分发出错")
+        elif wkind == "report":
+            if self.proactive.can(
+                KIND_EXPRESS_FEELING, self.relationship_stage, now
+            ):
+                kind = KIND_EXPRESS_FEELING
+                response = await self._speak_proactive(kind, now)
+            elif want_express:
+                self._accumulated_suppressed = max(
+                    self._accumulated_suppressed, 1.01
+                )
+        elif want_express:
+            self._accumulated_suppressed = max(self._accumulated_suppressed, 1.01)
+
+        return kind, action_type, response
 
     async def _record_trace(
         self,

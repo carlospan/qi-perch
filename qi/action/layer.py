@@ -171,6 +171,65 @@ class ActionLayer:
         self.last_result = result
         return result
 
+    async def execute_kind(
+        self,
+        kind: str,
+        emotion: EmotionState,
+        relationship_stage: str,
+        season: str,
+        now: datetime,
+        *,
+        mode: str,
+        user_online: bool = True,
+        scars: list[dict] | None = None,
+    ) -> dict | None:
+        """GWS 分发：执行指定行动 kind，跳过 tick 内随机软门。"""
+        self.last_result = None
+        if not user_online or mode == "dreaming":
+            return None
+        if mode not in ("solitary", "ambient"):
+            return None
+        if not self.budget.can_autonomous(now):
+            return None
+
+        undelivered = await self.db.load_unshared_creation()
+        tend_occasion = await self.detect_tend_occasion(season, now)
+        scale = self.season_scale(season)
+        result: dict | None = None
+
+        if kind == "share":
+            if undelivered is None:
+                return None
+            result = await self.share.try_share(
+                emotion,
+                relationship_stage,
+                self.budget,
+                season=season,
+                now=now,
+            )
+        elif kind == "tend":
+            if not tend_occasion:
+                return None
+            result = await self.tend.tend(
+                tend_occasion, emotion, season, now=now, speak=False
+            )
+            if result is not None:
+                self.budget.record("tend", now)
+                await self._mark_tend_done(tend_occasion, season, now)
+        elif kind == "explore":
+            result = await self.explore.drift(
+                float(emotion.curiosity),
+                emotion,
+                season,
+                season_scale=scale,
+                now=now,
+            )
+            if result is not None:
+                self.budget.record("explore", now)
+
+        self.last_result = result
+        return result
+
     async def prompt_extras(self, limit: int = 3) -> dict[str, str]:
         """栖最近做过的事——经历背景，不报流水账。"""
         rows = await self.db.list_recent_actions(limit=limit)
