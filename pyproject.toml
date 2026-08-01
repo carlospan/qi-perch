@@ -13,6 +13,9 @@ dependencies = [
     "rich>=13.0",
     "chromadb>=0.5",
     "websockets>=12.0",
+    "onnxruntime>=1.17",
+    "tokenizers>=0.19",
+    "huggingface_hub>=0.23",
 ]
 
 [project.optional-dependencies]

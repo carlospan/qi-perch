@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -16,6 +17,8 @@ if TYPE_CHECKING:
     from qi.core.emotion import EmotionState
     from qi.llm.gateway import LLMGateway
     from qi.storage.database import Database
+
+logger = logging.getLogger("qi.memory")
 
 
 _SELF_DISCLOSURE = (
@@ -67,9 +70,13 @@ class MemoryManager:
         mem_cfg = config.get("memory", {})
         max_working = int(mem_cfg.get("max_working_memory", 20))
         chroma_dir = mem_cfg.get("chroma_path", "data/chroma")
+        bge_dir = mem_cfg.get("bge_model_path")
 
         self.working = WorkingMemory(max_size=max_working)
-        self.vector_store = VectorStore(persist_dir=chroma_dir)
+        self.vector_store = VectorStore(
+            persist_dir=chroma_dir,
+            model_dir=bge_dir,
+        )
         self.narrative = NarrativeMemory(db, self.vector_store, llm=llm)
         self.body = BodyMemory(db)
         self.facts = FactStore(db)
@@ -82,6 +89,12 @@ class MemoryManager:
             limit=self.working.max_size
         )
         self.working.load_from_db(recent)
+        # embedding 换代后：await 回灌完成再对外服务检索
+        if self.vector_store.needs_reindex:
+            try:
+                await self.narrative.reindex_vectors()
+            except Exception:
+                logger.exception("向量索引回灌失败")
 
     async def notice_facts(
         self,

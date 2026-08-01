@@ -114,6 +114,15 @@ class NarrativeMemory:
     async def recall(self, memory_id: int) -> None:
         await self.db.recall_narrative_memory(memory_id)
 
+    async def reindex_vectors(self) -> int:
+        """从 SQLite 叙事表全量回灌向量索引（embedding 换代后无损重建）。"""
+        rows = await self.db.list_narrative_memories_for_reindex(
+            min_strength=FORGET_STRENGTH
+        )
+        n = self.vector_store.reindex_documents(rows)
+        logger.info("向量索引回灌完成：%s 条", n)
+        return n
+
     def select_weave_batch(
         self,
         events: list[dict],

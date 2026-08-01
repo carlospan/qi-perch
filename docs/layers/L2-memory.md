@@ -197,35 +197,29 @@ class WorkingMemory:
 ```python
 # qi/memory/vector_store.py
 # <!-- 回写(2026-07)：persist_dir 可配；upsert；CharNgram；delete，依据：qi/memory/vector_store.py -->
+# <!-- 回写(2026-08-02)：阶段零·包 B——BgeOnnxEmbeddingFunction（CLS+L2，512 维）；
+#      失败回退 CharNgram；collection.metadata.qi_embedding 不匹配则删库+needs_reindex；
+#      MemoryManager.restore await reindex_vectors；search/add 失败不抛。
+#      ONNX 源 onnx-community/bge-small-zh-v1.5-ONNX（BAAI 主库无 onnx/）。 -->
 
-class CharNgramEmbeddingFunction:  # chromadb EmbeddingFunction
-    """离线字符 n-gram 嵌入（dim=384, n=2），不下载 HF 模型。"""
+class CharNgramEmbeddingFunction:  # 回退 EF，dim=384
     ...
 
+class BgeOnnxEmbeddingFunction:  # onnxruntime + tokenizers，dim=512
+    ...
 
 class VectorStore:
     COLLECTION_NAME = "narrative_memories"
 
-    def __init__(self, persist_dir: str = "data/chroma"):
-        # Path(persist_dir).mkdir；PersistentClient；embedding_function=CharNgramEmbeddingFunction()
+    def __init__(self, persist_dir: str = "data/chroma", *, model_dir=None, prefer_bge=True):
+        # 试加载 BGE → 失败 warning 后 n-gram；打开 collection 时校验 qi_embedding
         ...
 
-    def add(self, memory_id: int, content: str, metadata: dict | None = None) -> None:
-        # metadata 清洗为 str/int/float/bool；collection.upsert(ids, documents, metadatas)
-        ...
-
-    def search(self, query: str, top_k: int = 5) -> list[dict]:
-        # count==0 → []；n_results=min(top_k, count)
-        # 返回 [{"id", "content", "distance", "metadata"}]
-        ...
-
-    def delete(self, memory_id: int) -> None:
-        # collection.delete(ids=[str(memory_id)])
-        ...
-
-    def close(self) -> None:
-        # 释放 client（Windows 文件锁）
-        ...
+    def add(...): ...          # 失败仅 warning；空 metadata 补 kind=narrative
+    def search(...): ...       # 失败或 needs_reindex → []
+    def delete(...): ...
+    def reindex_documents(rows): ...
+    def close(self) -> None: ...
 ```
 
 ```python

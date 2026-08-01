@@ -575,6 +575,23 @@ class Database:
             rows = await cursor.fetchall()
         return [dict(r) for r in rows]
 
+    async def list_narrative_memories_for_reindex(
+        self, min_strength: float = 0.1
+    ) -> list[dict]:
+        """向量重建用：SQLite 权威源全量（未遗忘）叙事。"""
+        conn = self._require_conn()
+        async with conn.execute(
+            """
+            SELECT id, content, importance, emotional_intensity, strength
+            FROM narrative_memories
+            WHERE strength >= ?
+            ORDER BY id ASC
+            """,
+            (min_strength,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
     # ----- 意识流 -----
 
     async def save_consciousness(
