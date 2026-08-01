@@ -207,8 +207,26 @@ class Brain:
         )
 
         if pending is not None:
+            # 感知先于关系：同一拍 intent 供 trust/伤疤复用（阶段零·包 A）
+            recent_for_impact: list[dict] = []
+            if self.memory is not None:
+                recent_for_impact = self.memory.working.get_context()
+            elif self._db is not None:
+                recent_for_impact = await self._db.load_recent_messages(limit=5)
+
+            impact = await self.perception.assess_impact_async(
+                pending,
+                self.emotion,
+                self.relationship_stage,
+                recent_messages=recent_for_impact,
+            )
+
             if self.relationship is not None:
-                rel = await self.relationship.on_user_message(pending, now)
+                rel = await self.relationship.on_user_message(
+                    pending,
+                    now,
+                    assessment=self.perception.last_assessment,
+                )
                 if rel.get("stage_changed") and self.inner_life is not None:
                     self.inner_life.self_model.mark_major_event()
 
@@ -229,9 +247,6 @@ class Brain:
                     now,
                 )
 
-            impact = await self.perception.assess_impact_async(
-                pending, self.emotion, self.relationship_stage
-            )
             impact = impact * impact_mult
             self.emotion = apply_event_impact(self.emotion, impact)
             self.emotion = self.perception.apply_security_hint(self.emotion, impact)

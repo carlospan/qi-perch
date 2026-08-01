@@ -237,6 +237,38 @@ def test_negation_aware_interaction_assessment():
     assert s2.is_negative
 
 
+def test_merge_assessment_tease_clears_negative():
+    from qi.core.perception import ImpactAssessment
+    from qi.relationship.engine import merge_impact_assessment
+
+    s = assess_interaction("你烦")
+    assert s.is_negative
+    merged = merge_impact_assessment(
+        s,
+        ImpactAssessment(impact=-0.1, intent="tease", source="llm"),
+    )
+    assert not merged.is_negative
+    assert merged.severity == 0.0
+
+
+@pytest.mark.asyncio
+async def test_on_user_message_tease_assessment_no_scar(db):
+    """有 tease assessment 时不因词表负向伤 trust。"""
+    from qi.core.perception import ImpactAssessment
+    from qi.relationship.engine import RelationshipEngine
+
+    engine = RelationshipEngine(db, config={})
+    await engine.restore()
+    engine.state.trust = 1.0
+    await engine.on_user_message(
+        "你烦",
+        assessment=ImpactAssessment(
+            impact=-0.12, intent="tease", intimacy=0.6, source="llm"
+        ),
+    )
+    assert engine.state.trust == 1.0
+
+
 def test_shared_reference_injects_perspective_anchor():
     """shared_reference 注入带视角锤点，防栖把用户原话里的“你教了我”读反。
 

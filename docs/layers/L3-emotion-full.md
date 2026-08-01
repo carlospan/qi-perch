@@ -28,6 +28,9 @@
 qi/core/emotion.py         # 耦合、内在天气、日内节律、阈值、step_emotion
 qi/core/rhythm.py          # 模式切换（determine_mode）、心跳间隔（next_interval）
 qi/core/perception.py      # 冲击评估 + modulate_impact + apply_security_hint
+# <!-- 回写(2026-08-02)：阶段零·包 A——assess_impact_async 改 LLM JSON 主路径
+#      （intent 调制 + 关键词回退/辱骂短路）；过渡止血，待阶段三回收。
+#      依据：qi/core/perception.py、qi/prompts/perception.txt -->
 ```
 
 ## 实现步骤

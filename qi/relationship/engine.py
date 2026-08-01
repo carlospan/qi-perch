@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
-from qi.core.perception import count_hits_negation_aware
+from qi.core.perception import ImpactAssessment, count_hits_negation_aware
 from qi.relationship.stages import check_stage_upgrade
 from qi.relationship.trust import (
     apply_daily_decay,
@@ -181,6 +181,40 @@ def assess_interaction(message: str) -> InteractionSignals:
     )
 
 
+def merge_impact_assessment(
+    signals: InteractionSignals,
+    assessment: ImpactAssessment | None,
+) -> InteractionSignals:
+    """用感知层 intent 覆盖正负判定——不再另起一套「笨」类关键词伤信任。"""
+    if assessment is None or assessment.intent is None:
+        return signals
+    intent = assessment.intent
+    if intent == "hurt":
+        signals.is_negative = True
+        signals.is_positive = False
+        # severity 按 |impact|，不用固定档
+        signals.severity = max(0.0, min(1.0, abs(assessment.impact)))
+    elif intent == "tease":
+        # 调侃不进负面信任/伤疤路径
+        signals.is_negative = False
+        signals.severity = 0.0
+    elif intent == "comfort":
+        signals.is_negative = False
+        signals.severity = 0.0
+        signals.is_positive = True
+        signals.quality = max(signals.quality, 0.6)
+    elif intent == "disclosure":
+        signals.is_negative = False
+        signals.severity = 0.0
+        signals.self_disclosure = max(signals.self_disclosure, 0.7)
+    else:
+        # request / neutral：清掉关键词误伤的负向
+        if intent in ("request", "neutral"):
+            signals.is_negative = False
+            signals.severity = 0.0
+    return signals
+
+
 def depth_increment(
     signals: InteractionSignals,
     already_today: float,
@@ -264,16 +298,23 @@ class RelationshipEngine:
             shared_culture=self.state.shared_culture,
         )
 
-    async def on_user_message(self, message: str, now: datetime | None = None) -> dict:
+    async def on_user_message(
+        self,
+        message: str,
+        now: datetime | None = None,
+        *,
+        assessment: ImpactAssessment | None = None,
+    ) -> dict:
         """
         处理一次用户消息对关系的影响。
         返回：{impact_multiplier, scar_created, stage_changed, old_stage, new_stage}
+        assessment：感知层同一拍的 intent（可选）；有则覆盖正负判定。
         """
         now = now or datetime.now()
         self._roll_day(now)
         self._had_interaction_today = True
 
-        signals = assess_interaction(message)
+        signals = merge_impact_assessment(assess_interaction(message), assessment)
         old_stage = self.state.stage
         result = {
             "impact_multiplier": 1.0,

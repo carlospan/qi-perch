@@ -1,0 +1,20 @@
+根据此前对话与当前句，评估这句话对倾听者的情绪冲击。
+
+这是工程判别任务，不是角色扮演。不要自称栖，不要写人格，不要安慰或回复用户。
+
+只输出一个 JSON 对象，不要 markdown，不要解释。字段：
+- impact: -1.0 到 1.0 的小数（负=伤人/沉重，正=温暖/积极）
+- intent: 下列之一 tease | comfort | disclosure | request | neutral | hurt
+  - tease=亲昵调侃/玩笑贬低；hurt=真伤害或辱骂；comfort=安慰接纳；
+    disclosure=自我披露；request=请求；neutral=其它
+- intimacy: 0.0 到 1.0（这句话里关系亲密度）
+- ambiguous: true/false（意图或语气拿不准时为 true）
+
+此前对话：
+{recent_dialogue}
+
+当前句：{message}
+关系阶段：{stage}
+
+示例：
+{{"impact":-0.2,"intent":"tease","intimacy":0.7,"ambiguous":false}}
