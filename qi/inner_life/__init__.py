@@ -54,10 +54,13 @@ class InnerLife:
         now: datetime,
         relationship_stage: str = "stranger",
         after_first_time: bool = False,
+        *,
+        prefer_close_loop: bool = False,
     ) -> EmotionState:
         """
         内在生命一拍。可能改写情绪（梦的余韵），不向外说话。
         awake 时不做随机意识流/创作，只处理余韵与反思标记。
+        prefer_close_loop：对话首轮 deliver 后优先闭合 open loop（不污染当轮）。
         """
         self.last_journal_entries = []
         silence = now - last_interaction
@@ -73,9 +76,22 @@ class InnerLife:
         delta_v = emotion.valence - self._prev_valence
         self.self_model.note_emotion_surge(delta_v)
 
+        # 对话首轮闭 loop：允许在 awake（deliver 之后）写一笔，供下一轮
+        if prefer_close_loop:
+            thought = await self.consciousness.maybe_generate(
+                emotion,
+                silence,
+                prefer_close=True,
+                prev_valence=self._prev_valence,
+                prev_arousal=self._prev_arousal,
+            )
+            if thought:
+                self.last_journal_entries.append(
+                    _journal_entry("独白", thought, now)
+                )
         # 第一次之后即使在对话中，也允许写一笔意识流；其余内在活动仍只在非 awake
         # waking 旗标：仅在非 awake 尝试；成功生成后才清除，避免 awake 首拍白耗
-        if mode != "awake" or after_first_time:
+        elif mode != "awake" or after_first_time:
             try_waking = bool(self._just_woke and mode != "awake")
             thought = await self.consciousness.maybe_generate(
                 emotion,
@@ -91,7 +107,7 @@ class InnerLife:
                 )
             if try_waking and thought is not None:
                 self._just_woke = False
-        if mode != "awake":
+        if mode != "awake" and not prefer_close_loop:
             meta = await self.consciousness.maybe_meta(emotion)
             if meta:
                 self.last_journal_entries.append(_journal_entry("独白", meta, now))

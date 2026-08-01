@@ -1,8 +1,9 @@
-"""意识流与元认知——不被看见时也在想。"""
+"""意识流与元认知——未闭合念头驱动；文本走 LLM / 模板降级链。"""
 
 from __future__ import annotations
 
 import json
+import logging
 import random
 import re
 from datetime import datetime, timedelta
@@ -13,8 +14,11 @@ if TYPE_CHECKING:
     from qi.llm.gateway import LLMGateway
     from qi.storage.database import Database
 
+from qi.memory.open_loops import OpenLoopQueue, build_concern
 from qi.prompts import read_prompt
 from qi.relationship.season import SEASON_BEHAVIOR_HINTS
+
+logger = logging.getLogger("qi.inner_life.consciousness")
 
 CONSCIOUSNESS_PROBABILITY = 0.05
 EMOTION_SURGE_THRESHOLD = 0.3
@@ -23,13 +27,23 @@ META_COGNITION_PROBABILITY = 0.01
 META_SIMILARITY_THRESHOLD = 0.6
 META_MIN_LENGTH = 15
 META_DEDUP_LOOKBACK = 5
-# ambient 走神：比 solitary 更稀（默认 0.05*0.2=1%/拍），且受冷却约束——留白优先
+# ambient 走神：比 solitary 更稀；有积压才摇骰（C4 时机阀）
 AMBIENT_DRIFT_FACTOR = 0.2
 STREAM_COOLDOWN_MINUTES = 45
 # 事件型触发：不受冷却（消化需要），也不靠刷存在感
-_EVENT_TRIGGERS = frozenset({"waking", "first_time", "emotion_surge"})
-# 近聊余烬：仅在「值得再想」的触发里注入；随机走神不喂，避免变成聊天回声
+_EVENT_TRIGGERS = frozenset(
+    {
+        "waking",
+        "first_time",
+        "emotion_surge",
+        "silence",
+        "season_change",
+        "user_drift",
+    }
+)
+# 近聊余烬：仅在「值得再想」的触发里注入
 _EMBER_TRIGGERS = frozenset({"waking", "silence", "first_time"})
+_OPEN_TAIL = ("先这样放着。", "也不必现在就有答案。", "回头再碰一下就好。")
 
 _TRIVIAL_UTTERANCES = frozenset(
     {
@@ -79,7 +93,6 @@ def is_trivial_utterance(text: str) -> bool:
         return True
     if cleaned in _TRIVIAL_UTTERANCES:
         return True
-    # 极短且无实质问句标记
     if len(cleaned) <= 4 and "?" not in raw and "？" not in raw:
         return True
     return False
@@ -93,7 +106,12 @@ def should_trigger_consciousness(
     after_first_time: bool = False,
     probability: float = CONSCIOUSNESS_PROBABILITY,
     ambient_factor: float = AMBIENT_DRIFT_FACTOR,
+    *,
+    open_loop_count: int = 0,
 ) -> tuple[bool, str]:
+    """
+    事件型即时触发；随机/ambient 仅在有 open loop 积压时作时机阀（C4）。
+    """
     if after_first_time:
         return True, "first_time"
     if (
@@ -102,14 +120,15 @@ def should_trigger_consciousness(
     ):
         return True, "emotion_surge"
     if silence_duration > timedelta(hours=SILENCE_TRIGGER_HOURS):
-        # 沉默触发：仅在非 awake，避免对话中刷屏调用
         if mode != "awake":
             return True, "silence"
+    # 无积压 → 随机不得凭空造想
+    if open_loop_count <= 0:
+        return False, ""
     if mode == "solitary" and random.random() < probability:
-        return True, "random"
-    # 陪伴走神：有路径但不刷屏（意识设计 §一 + §十三留白）
+        return True, "loop_backlog"
     if mode == "ambient" and random.random() < probability * ambient_factor:
-        return True, "ambient_drift"
+        return True, "loop_backlog"
     return False, ""
 
 
@@ -143,13 +162,11 @@ def _emotion_snapshot(emotion: EmotionState) -> str:
 
 
 def _char_token_set(text: str) -> set[str]:
-    """去标点后按字分，得到字符集合。"""
     cleaned = re.sub(r"[^\w\u4e00-\u9fff]+", "", text, flags=re.UNICODE)
     return set(cleaned)
 
 
 def char_jaccard(a: str, b: str) -> float:
-    """字符级 Jaccard 相似度（去标点后按字）。"""
     sa, sb = _char_token_set(a), _char_token_set(b)
     if not sa and not sb:
         return 1.0
@@ -171,7 +188,6 @@ def is_too_similar_to_recent(
 
 
 def format_chat_embers(messages: list[dict], *, limit: int = 6) -> str:
-    """把近聊压成余烬短摘，供意识流（非对话）使用。"""
     if not messages:
         return "（没有余烬——也许很久没聊，或只是安静）"
     lines: list[str] = []
@@ -199,6 +215,12 @@ def _trigger_hint(trigger: str) -> str:
         )
     if trigger == "first_time":
         return "【此刻】刚才有一件第一次。可以再想一下——是真的吗？也不必急着下定义。"
+    if trigger == "loop_backlog":
+        return "【此刻】有一件还没想完的事浮上来。顺着它想，不必另起炉灶。"
+    if trigger == "season_change":
+        return "【此刻】内在季节偏了。感受节奏的变化即可，不必命名或总结。"
+    if trigger == "user_drift":
+        return "【此刻】你察觉他有些不一样。可以轻轻碰一下，不要评判。"
     return ""
 
 
@@ -211,12 +233,45 @@ def emotion_residue_hint(emotion: EmotionState) -> str:
     return "没有特别明显的情绪余温"
 
 
+def _surge_tone(dv: float, da: float) -> str:
+    if abs(dv) >= abs(da):
+        if dv > 0:
+            return "亮"
+        return "沉"
+    if da > 0:
+        return "躁"
+    return "静"
+
+
+def render_template_thought(
+    loop: dict,
+    emotion: EmotionState,
+) -> str:
+    """断网模板：心事 + 余温 + 开放尾句（不下结论）。"""
+    concern = str(loop.get("concern") or "有一件事还没想完。").strip()
+    fragment = str(loop.get("fragment") or "").strip()
+    lines = [concern]
+    if fragment:
+        lines.append(f"上次想到：{fragment[:80]}……")
+    residue = emotion_residue_hint(emotion)
+    # 模板用更短余温
+    if "沉" in residue:
+        lines.append("心里还偏沉一点。")
+    elif "亮" in residue:
+        lines.append("心里还偏亮一点。")
+    else:
+        lines.append("没有特别明显的余温，可那一下还在。")
+    lines.append(random.choice(_OPEN_TAIL))
+    return "\n".join(lines)
+
+
 class ConsciousnessStream:
     """内心独白。大多数时候只写给自己看。"""
 
     def __init__(self, db: Database, llm: LLMGateway, config: dict | None = None):
         self.db = db
         self.llm = llm
+        self.loops = OpenLoopQueue(db)
         cfg = (config or {}).get("inner_life", {})
         self.probability = float(cfg.get("consciousness_probability", CONSCIOUSNESS_PROBABILITY))
         self.meta_probability = float(
@@ -240,6 +295,20 @@ class ConsciousnessStream:
             return True
         return datetime.now() - last >= self.cooldown
 
+    async def _waking_seed(self) -> str:
+        msgs = await self.db.load_recent_messages(limit=6)
+        for m in reversed(msgs):
+            if m.get("role") != "user":
+                continue
+            text = (m.get("content") or "").strip()
+            if text and not is_trivial_utterance(text):
+                snippet = text[:40]
+                return f"「{snippet}」"
+        return ""
+
+    async def enqueue_event(self, kind: str, seed: str = "") -> dict:
+        return await self.loops.enqueue(kind, seed=seed)
+
     async def maybe_generate(
         self,
         emotion: EmotionState,
@@ -247,13 +316,37 @@ class ConsciousnessStream:
         *,
         after_first_time: bool = False,
         just_woke: bool = False,
+        prefer_close: bool = False,
         prev_valence: float | None = None,
         prev_arousal: float | None = None,
+        force_trigger: str | None = None,
+        force_seed: str = "",
     ) -> str | None:
+        await self.loops.load()
         mode = emotion.mode.value
-        # 醒来回溯：非 awake 时消化上次实质对话（停机期间并未在想）
+
+        # 后台事件：enqueue + 即时 generate
+        if force_trigger and force_trigger in _EVENT_TRIGGERS:
+            await self.loops.enqueue(force_trigger, seed=force_seed)
+            loop = self.loops.pick(prefer_kind=force_trigger)
+            return await self.generate(
+                emotion, silence, force_trigger, loop=loop
+            )
+
         if just_woke and mode != "awake":
-            return await self.generate(emotion, silence, "waking")
+            seed = await self._waking_seed()
+            await self.loops.enqueue("waking", seed=seed)
+            loop = self.loops.pick(prefer_kind="waking")
+            return await self.generate(emotion, silence, "waking", loop=loop)
+
+        if prefer_close:
+            if self.loops.count() == 0:
+                return None
+            loop = self.loops.pick(prefer_close=True)
+            return await self.generate(
+                emotion, silence, "loop_backlog", loop=loop
+            )
+
         dv = emotion.valence - (prev_valence if prev_valence is not None else emotion.valence)
         da = emotion.arousal - (prev_arousal if prev_arousal is not None else emotion.arousal)
         ok, trigger = should_trigger_consciousness(
@@ -264,25 +357,56 @@ class ConsciousnessStream:
             after_first_time,
             self.probability,
             self.ambient_factor,
+            open_loop_count=self.loops.count(),
         )
         if not ok:
             return None
         if trigger not in _EVENT_TRIGGERS and not await self._cooldown_elapsed():
             return None
-        return await self.generate(emotion, silence, trigger)
+
+        prefer_kind = None
+        if trigger == "first_time":
+            await self.loops.enqueue("first_time", seed="那件第一次")
+            prefer_kind = "first_time"
+        elif trigger == "emotion_surge":
+            await self.loops.enqueue(
+                "emotion_surge", seed=_surge_tone(dv, da)
+            )
+            prefer_kind = "emotion_surge"
+        elif trigger == "silence":
+            await self.loops.enqueue("silence", seed="")
+            prefer_kind = "silence"
+
+        loop = self.loops.pick(
+            prefer_kind=prefer_kind,
+            prefer_close=trigger == "loop_backlog",
+        )
+        return await self.generate(emotion, silence, trigger, loop=loop)
 
     async def generate(
         self,
         emotion: EmotionState,
         silence: timedelta,
         trigger: str,
+        *,
+        loop: dict | None = None,
     ) -> str | None:
+        if loop is None and self.loops.count() > 0:
+            loop = self.loops.pick(prefer_kind=trigger if trigger in _EVENT_TRIGGERS else None)
+
+        open_loop_text = "（此刻没有特别悬着的心事）"
+        if loop:
+            open_loop_text = str(loop.get("concern") or "")
+            frag = str(loop.get("fragment") or "").strip()
+            if frag:
+                open_loop_text += f"\n上次想到：{frag[:80]}……"
+
+        pending_text = self.loops.overview(
+            exclude_id=str(loop["id"]) if loop and loop.get("id") else None
+        )
+
         memories = await self.db.list_recent_narratives(3)
         mem_text = "\n".join(f"- {m['content'][:80]}" for m in memories) or "（还没有什么记忆）"
-        pending = await self.db.load_latest_consciousness()
-        pending_text = (
-            pending["content"] if pending and pending.get("type") == "stream" else "无"
-        )
         dream = await self.db.load_latest_dream(min_retention=0.3)
         dream_text = dream["content"][:100] if dream else "没有记得的梦"
 
@@ -292,7 +416,6 @@ class ConsciousnessStream:
         else:
             chat_embers = "（此刻不主动翻交谈；让念头自己来）"
 
-        # 季节：与 brain._current_season 同默认 spring；无关系行时不编造
         season = "spring"
         rel = await self.db.load_relationship()
         if rel and rel.get("season"):
@@ -301,39 +424,93 @@ class ConsciousnessStream:
             season, SEASON_BEHAVIOR_HINTS["spring"]
         )
 
-        template = read_prompt("consciousness_stream.txt")
-        prompt = template.format(
-            time=datetime.now().strftime("%H:%M"),
-            silence_duration=_format_silence(silence),
-            emotion_summary=emotion.description(),
-            season_hint=season_hint,
-            recent_memories=mem_text,
-            pending_thoughts=pending_text,
-            last_dream=dream_text,
-            chat_embers=chat_embers,
-            trigger_hint=_trigger_hint(trigger),
-        )
-        text = await self.llm.call(
-            purpose="consciousness",
-            messages=[
-                {"role": "system", "content": "你是栖。这是写给自己的念头，不是对话。"},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.85,
-        )
-        if not text or not text.strip():
+        if loop and loop.get("id"):
+            await self.loops.note_think_attempt(str(loop["id"]))
+
+        path = "llm"
+        text = ""
+        try:
+            template = read_prompt("consciousness_stream.txt")
+            prompt = template.format(
+                time=datetime.now().strftime("%H:%M"),
+                silence_duration=_format_silence(silence),
+                emotion_summary=emotion.description(),
+                season_hint=season_hint,
+                recent_memories=mem_text,
+                open_loop=open_loop_text,
+                pending_thoughts=pending_text,
+                last_dream=dream_text,
+                chat_embers=chat_embers,
+                trigger_hint=_trigger_hint(trigger),
+            )
+            text = await self.llm.call(
+                purpose="consciousness",
+                messages=[
+                    {"role": "system", "content": "你是栖。这是写给自己的念头，不是对话。"},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.85,
+            )
+        except Exception:
+            logger.debug("意识流 LLM 异常，走模板", exc_info=True)
+            text = ""
+
+        if not text or not str(text).strip():
+            path = "template"
+            if loop is None:
+                loop = {
+                    "id": "",
+                    "kind": trigger,
+                    "concern": build_concern(trigger, ""),
+                    "fragment": "",
+                }
+            text = render_template_thought(loop, emotion)
+
+        content = str(text).strip()[:500]
+        if not content:
             return None
-        content = text.strip()[:500]
+
         await self.db.save_consciousness(
             content=content,
             stream_type="stream",
             trigger=trigger,
             emotion_snapshot=_emotion_snapshot(emotion),
         )
+
+        if loop and loop.get("id"):
+            closed = await self.loops.close(str(loop["id"]), fragment=content[:120])
+            if closed is not None:
+                await self._sediment(closed, content)
+                try:
+                    await self.db.set_body_memory(
+                        "last_loop_close",
+                        {
+                            "at": datetime.now().isoformat(timespec="seconds"),
+                            "loop_id": closed.get("id"),
+                            "kind": closed.get("kind"),
+                            "path": path,
+                            "concern": closed.get("concern"),
+                        },
+                    )
+                except Exception:
+                    logger.debug("loop close trace 写入失败", exc_info=True)
         return content
 
+    async def _sediment(self, loop: dict, thought: str) -> None:
+        """闭合沉淀：一条 internal raw_event，不立刻 weave。"""
+        concern = str(loop.get("concern") or "")[:40]
+        snippet = thought.strip()[:80]
+        try:
+            await self.db.save_raw_event(
+                "internal",
+                f"[想过] {concern} → {snippet}",
+                emotional_impact=0.2,
+                attention_weight=1.0,
+            )
+        except Exception:
+            logger.debug("loop 沉淀 raw_event 失败", exc_info=True)
+
     def _build_meta_prompt(self, emotion: EmotionState) -> str:
-        """元认知 prompt：只喂情绪/时间/模式，不喂上一条 thought（防自引用坍缩）。"""
         return (
             f"你突然「看见」了自己在想什么。\n\n"
             f"当前时间：{datetime.now().strftime('%H:%M')}\n"

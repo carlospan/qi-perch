@@ -18,32 +18,51 @@ from qi.inner_life.dream import (
 from qi.storage.database import Database
 
 
-def test_consciousness_trigger_solitary_random(monkeypatch):
+def test_consciousness_no_backlog_no_idle_think(monkeypatch):
+    """C4：无积压时随机不得凭空造想。"""
+    monkeypatch.setattr("qi.inner_life.consciousness.random.random", lambda: 0.0)
+    ok, reason = should_trigger_consciousness(
+        "solitary", 0.0, 0.0, timedelta(minutes=10), open_loop_count=0
+    )
+    assert ok is False and reason == ""
+
+
+def test_consciousness_trigger_loop_backlog(monkeypatch):
     monkeypatch.setattr("qi.inner_life.consciousness.random.random", lambda: 0.01)
     ok, reason = should_trigger_consciousness(
-        "solitary", 0.0, 0.0, timedelta(minutes=10)
+        "solitary", 0.0, 0.0, timedelta(minutes=10), open_loop_count=1
     )
-    assert ok and reason == "random"
+    assert ok and reason == "loop_backlog"
 
 
-def test_consciousness_trigger_ambient_drift(monkeypatch):
+def test_consciousness_trigger_ambient_with_backlog(monkeypatch):
     monkeypatch.setattr("qi.inner_life.consciousness.random.random", lambda: 0.005)
     ok, reason = should_trigger_consciousness(
-        "ambient", 0.0, 0.0, timedelta(minutes=5), ambient_factor=0.2
+        "ambient",
+        0.0,
+        0.0,
+        timedelta(minutes=5),
+        ambient_factor=0.2,
+        open_loop_count=2,
     )
-    assert ok and reason == "ambient_drift"
+    assert ok and reason == "loop_backlog"
 
 
 def test_consciousness_ambient_drift_rarer_than_solitary(monkeypatch):
-    """ambient 默认系数更稀：同样 random=0.03 只触发 solitary。"""
+    """ambient 默认系数更稀：同样 random=0.03 只触发 solitary（有积压时）。"""
     monkeypatch.setattr("qi.inner_life.consciousness.random.random", lambda: 0.03)
     ok_s, reason_s = should_trigger_consciousness(
-        "solitary", 0.0, 0.0, timedelta(minutes=10)
+        "solitary", 0.0, 0.0, timedelta(minutes=10), open_loop_count=1
     )
     ok_a, _ = should_trigger_consciousness(
-        "ambient", 0.0, 0.0, timedelta(minutes=10), ambient_factor=0.2
+        "ambient",
+        0.0,
+        0.0,
+        timedelta(minutes=10),
+        ambient_factor=0.2,
+        open_loop_count=1,
     )
-    assert ok_s and reason_s == "random"
+    assert ok_s and reason_s == "loop_backlog"
     assert ok_a is False
 
 
@@ -132,7 +151,7 @@ async def test_waking_flag_survives_awake_tick():
 
 
 @pytest.mark.asyncio
-async def test_stream_cooldown_blocks_ambient_drift(monkeypatch):
+async def test_stream_cooldown_blocks_loop_backlog(monkeypatch):
     from qi.core.emotion import ConsciousnessMode
     from qi.inner_life.consciousness import ConsciousnessStream
 
@@ -140,13 +159,21 @@ async def test_stream_cooldown_blocks_ambient_drift(monkeypatch):
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         db = Database(str(Path(tmp) / "qi.db"))
         await db.initialize()
-        await db.save_consciousness("刚才想过一笔", stream_type="stream", trigger="random")
+        await db.save_consciousness(
+            "刚才想过一笔", stream_type="stream", trigger="loop_backlog"
+        )
         llm = _ScriptedLLM(["不该再写"])
         stream = ConsciousnessStream(
             db,
             llm,
-            config={"inner_life": {"stream_cooldown_minutes": 45, "ambient_drift_factor": 1.0}},
+            config={
+                "inner_life": {
+                    "stream_cooldown_minutes": 45,
+                    "ambient_drift_factor": 1.0,
+                }
+            },
         )
+        await stream.loops.enqueue("silence", seed="")
         emotion = EmotionState(mode=ConsciousnessMode.AMBIENT)
         out = await stream.maybe_generate(emotion, timedelta(minutes=5))
         assert out is None

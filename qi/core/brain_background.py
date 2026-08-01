@@ -216,10 +216,10 @@ async def season_detection(brain: Brain) -> None:
                     brain.relationship.state.season = new
                     await brain.relationship.persist()
                     if brain.inner_life is not None:
-                        await brain._db.save_consciousness(
-                            content=f"季节变了。从{old}到了{new}。",
-                            stream_type="stream",
-                            trigger="season_change",
+                        await _enqueue_and_think(
+                            brain,
+                            kind="season_change",
+                            seed=f"从{old}偏到了{new}",
                         )
             except Exception:
                 logger.exception("季节判定出错")
@@ -260,11 +260,33 @@ async def user_drift(brain: Brain) -> None:
                 await brain._mark_interval_done("last_drift_check")
                 if signals:
                     brain._drift_signals = signals
-                    await brain._db.save_consciousness(
-                        content=f"我注意到他最近变了：{'；'.join(signals)}。不是不好。是……不一样了。",
-                        stream_type="stream",
-                        trigger="user_drift",
-                    )
+                    if brain.inner_life is not None:
+                        await _enqueue_and_think(
+                            brain,
+                            kind="user_drift",
+                            seed="；".join(signals)[:60],
+                        )
             except Exception:
                 logger.exception("用户漂移检测出错")
         await asyncio.sleep(interval)
+
+
+async def _enqueue_and_think(brain: Brain, *, kind: str, seed: str) -> None:
+    """季节/漂移：enqueue + 即时 generate（模板可兜底），不再裸写独白。"""
+    now = datetime.now()
+    silence = now - brain.last_interaction
+    thought = await brain.inner_life.consciousness.maybe_generate(
+        brain.emotion,
+        silence,
+        force_trigger=kind,
+        force_seed=seed,
+    )
+    if thought:
+        brain.inner_life.last_journal_entries = [
+            {
+                "kind": "独白",
+                "text": thought.strip(),
+                "at": int(now.timestamp() * 1000),
+            }
+        ]
+        await brain._broadcast_journal_entries()

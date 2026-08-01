@@ -99,6 +99,8 @@ class Brain:
         self._last_avatar_payload: dict | None = None
         self._traces: deque[dict] = deque(maxlen=20)
         self._trace_day: str | None = None
+        # 本会话首条用户消息：deliver 之后 prefer_close open loop（不污染当轮）
+        self._prefer_close_after_deliver = False
 
     def attach_embodiment(self, server: EmbodimentServer) -> None:
         """接上身体——之后说话会推到前端。"""
@@ -142,6 +144,7 @@ class Brain:
                     await self._deliver_qi_message(
                         speech.text, speech.now, proactive=speech.proactive
                     )
+                    await self._maybe_prefer_close_after_deliver()
                 if not self.alive:
                     break
                 interval = next_interval(self.emotion, self.config)
@@ -207,6 +210,27 @@ class Brain:
         await _brain_delivery.deliver_qi_message(
             self, response, now, proactive=proactive
         )
+
+    async def _maybe_prefer_close_after_deliver(self) -> None:
+        """对话首轮 deliver 之后再闭 loop——严禁污染当轮 prompt。"""
+        if not self._prefer_close_after_deliver:
+            return
+        self._prefer_close_after_deliver = False
+        if self.inner_life is None:
+            return
+        try:
+            now = datetime.now()
+            self.emotion = await self.inner_life.tick(
+                self.emotion,
+                self.last_interaction,
+                now,
+                self.relationship_stage,
+                prefer_close_loop=True,
+            )
+            self.emotion = clamp_emotion(self.emotion)
+            await self._broadcast_journal_entries()
+        except Exception:
+            logger.exception("对话首轮 prefer_close 出错")
 
     async def _heartbeat(self) -> str | None:
         self.heartbeat_count += 1
@@ -286,6 +310,9 @@ class Brain:
             self.emotion = apply_event_impact(self.emotion, impact)
             self.emotion = self.perception.apply_security_hint(self.emotion, impact)
             self.last_interaction = now
+            # 本会话首条：deliver 后再 prefer_close（见 start / receive_user_message）
+            if not self._interacted_this_session:
+                self._prefer_close_after_deliver = True
             self._interacted_this_session = True
 
             if self._db is not None:
@@ -562,6 +589,7 @@ class Brain:
         await self._deliver_qi_message(
             speech.text, speech.now, proactive=speech.proactive
         )
+        await self._maybe_prefer_close_after_deliver()
         return speech.text
 
     async def _background_narrative_weaving(self) -> None:
