@@ -92,6 +92,8 @@ _CREATE_INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_consciousness_stream_timestamp "
     "ON consciousness_stream(timestamp)",
     "CREATE INDEX IF NOT EXISTS idx_episodes_dreamed ON episodes(dreamed)",
+    "CREATE INDEX IF NOT EXISTS idx_broadcast_traces_beat ON broadcast_traces(beat)",
+    "CREATE INDEX IF NOT EXISTS idx_broadcast_traces_ts ON broadcast_traces(timestamp)",
 )
 
 _CREATE_DREAMS = """
@@ -219,6 +221,19 @@ CREATE TABLE IF NOT EXISTS user_facts (
 )
 """
 
+_CREATE_BROADCAST_TRACES = """
+CREATE TABLE IF NOT EXISTS broadcast_traces (
+    id INTEGER PRIMARY KEY,
+    beat INTEGER NOT NULL,
+    timestamp DATETIME NOT NULL,
+    winner_kind TEXT NOT NULL,
+    winner_salience REAL NOT NULL,
+    candidates_json TEXT NOT NULL,
+    motive_json TEXT NOT NULL,
+    outcome TEXT
+)
+"""
+
 _CREATE_ACTIONS = """
 CREATE TABLE IF NOT EXISTS actions (
     id INTEGER PRIMARY KEY,
@@ -264,6 +279,7 @@ class Database:
         await self._conn.execute(_CREATE_USER_MODEL)
         await self._conn.execute(_CREATE_USER_FACTS)
         await self._conn.execute(_CREATE_ACTIONS)
+        await self._conn.execute(_CREATE_BROADCAST_TRACES)
         await self._migrate_creations_mentioned_at()
         for ddl in _CREATE_INDEXES:
             await self._conn.execute(ddl)
@@ -1472,6 +1488,69 @@ class Database:
 
         entries.sort(key=lambda e: int(e["at"]), reverse=True)
         return entries[:limit]
+
+    # ----- 广播痕迹（GWS 地基，阶段二·包 6） -----
+
+    async def insert_broadcast_trace(
+        self,
+        *,
+        beat: int,
+        timestamp: datetime,
+        winner_kind: str,
+        winner_salience: float,
+        candidates: list[dict] | None,
+        motive: dict | None,
+        outcome: str | None,
+    ) -> int:
+        conn = self._require_conn()
+        cur = await conn.execute(
+            """
+            INSERT INTO broadcast_traces
+                (beat, timestamp, winner_kind, winner_salience,
+                 candidates_json, motive_json, outcome)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                int(beat),
+                timestamp.isoformat(timespec="seconds")
+                if isinstance(timestamp, datetime)
+                else str(timestamp),
+                winner_kind,
+                float(winner_salience),
+                json.dumps(candidates or [], ensure_ascii=False),
+                json.dumps(motive or {}, ensure_ascii=False),
+                outcome,
+            ),
+        )
+        await conn.commit()
+        return int(cur.lastrowid or 0)
+
+    async def list_recent_broadcast_traces(self, limit: int = 20) -> list[dict]:
+        conn = self._require_conn()
+        async with conn.execute(
+            """
+            SELECT id, beat, timestamp, winner_kind, winner_salience,
+                   candidates_json, motive_json, outcome
+            FROM broadcast_traces
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (int(limit),),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        out: list[dict] = []
+        for r in rows:
+            d = dict(r)
+            try:
+                d["candidates"] = json.loads(d.pop("candidates_json") or "[]")
+            except json.JSONDecodeError:
+                d["candidates"] = []
+            try:
+                d["motive"] = json.loads(d.pop("motive_json") or "{}")
+            except json.JSONDecodeError:
+                d["motive"] = {}
+            out.append(d)
+        return out
 
     async def close(self) -> None:
         if self._conn is not None:

@@ -45,6 +45,21 @@ async def record_trace(
     except Exception:
         logger.debug("写入决策痕迹失败", exc_info=True)
 
+    # 包 6：并行落 broadcast_traces（只加痕迹，不改行为）
+    try:
+        from qi.core.trace import persist_broadcast
+
+        await persist_broadcast(
+            brain,
+            pending=pending,
+            want_express=want_express,
+            kind=kind,
+            action_type=action_type,
+            now=now,
+        )
+    except Exception:
+        logger.debug("写入广播痕迹失败", exc_info=True)
+
 
 async def format_why(brain: Brain, limit: int = 8) -> str:
     """格式化最近心跳痕迹，供 CLI /why。"""
