@@ -15,7 +15,17 @@ from qi.relationship.trust import (
     apply_negative_event,
     apply_positive_interaction,
     apply_scar_healed_bonus,
+    soft_ceiling_factor,
 )
+
+# temperature 阶段舒适区——初值，未实证校准（代码中无 temperature 阶段阈值可对齐）。
+STAGE_TEMPERATURE_COMFORT = {
+    "stranger": 0.45,
+    "acquaintance": 0.55,
+    "friend": 0.70,
+    "bonded": 0.80,
+}
+TEMPERATURE_DAILY_DRIFT = 0.015
 
 if TYPE_CHECKING:
     from qi.llm.gateway import LLMGateway
@@ -253,9 +263,24 @@ class RelationshipEngine:
             self._depth_day = day
             self._depth_gained_today = 0.0
         if self._interaction_day != day:
-            # 跨日：若昨日无交互，做一次信任微衰
+            # 跨日：若昨日无交互，信任/温度向阶段舒适区缓回（防顶格锁死）
             if self._interaction_day is not None and not self._had_interaction_today:
-                self.state.trust = apply_daily_decay(self.state.trust, False)
+                stage = self.state.stage
+                self.state.trust = apply_daily_decay(
+                    self.state.trust, False, stage=stage
+                )
+                comfort = STAGE_TEMPERATURE_COMFORT.get(
+                    stage, STAGE_TEMPERATURE_COMFORT["stranger"]
+                )
+                self.state.temperature = max(
+                    0.0,
+                    min(
+                        1.0,
+                        self.state.temperature
+                        + TEMPERATURE_DAILY_DRIFT
+                        * (comfort - self.state.temperature),
+                    ),
+                )
             self._interaction_day = day
             self._had_interaction_today = False
 
@@ -336,13 +361,15 @@ class RelationshipEngine:
             {"day": self._depth_day, "gained": self._depth_gained_today},
         )
 
-        # 温度
+        # 温度（正增量近顶软增速；舒适区日回落见 _roll_day）
         if signals.is_positive:
-            self.state.temperature = min(1.0, self.state.temperature + 0.03)
+            d = 0.03 * soft_ceiling_factor(self.state.temperature)
+            self.state.temperature = min(1.0, self.state.temperature + d)
         elif signals.is_negative:
             self.state.temperature = max(0.0, self.state.temperature - 0.08)
         else:
-            self.state.temperature = min(1.0, self.state.temperature + 0.01)
+            d = 0.01 * soft_ceiling_factor(self.state.temperature)
+            self.state.temperature = min(1.0, self.state.temperature + d)
 
         # 信任
         if signals.is_negative:

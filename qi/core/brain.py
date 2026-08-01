@@ -28,9 +28,13 @@ from qi.core.brain_types import (
     SEASON_EMOTION_HOURS as SEASON_EMOTION_HOURS,
 )
 from qi.core.emotion import (
+    MAJOR_COMMITMENT_DAILY_CAP,
+    MAJOR_COMMITMENT_GATE_KEY,
     EmotionState,
     apply_event_impact,
+    apply_relationship_emotion_nudge,
     clamp_emotion,
+    is_major_commitment_signal,
     should_express,
     step_emotion,
 )
@@ -151,6 +155,24 @@ class Brain:
         self.emotion.curiosity = min(1.0, self.emotion.curiosity + 0.05 * len(anomalies))
         self.emotion.security = max(0.0, self.emotion.security - 0.02 * len(anomalies))
 
+    async def _consume_major_commitment_quota(self, now: datetime) -> bool:
+        """大承诺 nudge 日帽 ≤2；body_memory 跨重启不刷新。"""
+        if self._db is None:
+            return True
+        day = now.strftime("%Y-%m-%d")
+        gate = await self._db.get_body_memory(MAJOR_COMMITMENT_GATE_KEY)
+        if not isinstance(gate, dict) or gate.get("day") != day:
+            gate = {"day": day, "count": 0}
+        try:
+            count = int(gate.get("count") or 0)
+        except (TypeError, ValueError):
+            count = 0
+        if count >= MAJOR_COMMITMENT_DAILY_CAP:
+            return False
+        gate["count"] = count + 1
+        await self._db.set_body_memory(MAJOR_COMMITMENT_GATE_KEY, gate)
+        return True
+
     def _track_expression_threshold(self) -> bool:
         """想主动开口吗？被门控挡住时保留积累，真正开口后再清空。"""
         delta = self.emotion.valence - self._prev_valence
@@ -229,6 +251,19 @@ class Brain:
                 )
                 if rel.get("stage_changed") and self.inner_life is not None:
                     self.inner_life.self_model.mark_major_event()
+                allow_commitment = True
+                if (
+                    not rel.get("stage_changed")
+                    and is_major_commitment_signal(rel.get("signals"))
+                ):
+                    allow_commitment = await self._consume_major_commitment_quota(
+                        now
+                    )
+                self.emotion = apply_relationship_emotion_nudge(
+                    self.emotion,
+                    rel,
+                    allow_commitment=allow_commitment,
+                )
 
             if self.first_times is not None:
                 impact_mult, triggered_first = await self.first_times.check(

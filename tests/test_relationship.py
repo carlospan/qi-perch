@@ -197,14 +197,33 @@ def test_stage_upgrade_only_up():
 
 def test_trust_grows_slow_damages_fast():
     t = 0.5
+    # 基增速 0.05 × 软顶 (1-0.5)=0.5 → 0.025
     grown = apply_positive_interaction(t, 1.0)
-    assert grown - t == pytest.approx(0.05, abs=1e-9)
-    # 陌生期增速减半
+    assert grown - t == pytest.approx(0.025, abs=1e-9)
+    # 陌生期再 ×0.5
     grown_stranger = apply_positive_interaction(t, 1.0, stage="stranger")
-    assert grown_stranger - t == pytest.approx(0.025, abs=1e-9)
+    assert grown_stranger - t == pytest.approx(0.0125, abs=1e-9)
     damaged, scar = apply_negative_event(t, 1.0)
     assert t - damaged >= 0.1
     assert scar is True
+
+
+def test_trust_soft_ceiling_slows_near_top():
+    low = apply_positive_interaction(0.2, 1.0, stage="friend") - 0.2
+    high = apply_positive_interaction(0.95, 1.0, stage="friend") - 0.95
+    assert low > high
+    assert high > 0
+
+
+def test_trust_daily_drift_toward_comfort():
+    from qi.relationship.trust import apply_daily_decay
+
+    # 顶格无交互日：向 bonded 舒适区 0.85 缓降
+    after = apply_daily_decay(1.0, False, stage="bonded")
+    assert after < 1.0
+    assert after > 0.85
+    # 有交互日不动
+    assert apply_daily_decay(1.0, True, stage="bonded") == 1.0
 
 
 def test_culture_detects_ritual():

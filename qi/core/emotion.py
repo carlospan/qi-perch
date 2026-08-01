@@ -83,6 +83,26 @@ BASELINES = {
     "attachment": 0.3,
 }
 
+# 关系阶段目标锚（仅 security / attachment）。stranger = BASELINES 现状（契约：陌生不黏）。
+# 依据：description att>0.6「有点想你」、proactive att>0.55、sec>0.7「感到安稳」。
+STAGE_BASELINES: dict[str, dict[str, float]] = {
+    "stranger": {"security": 0.5, "attachment": 0.3},
+    "acquaintance": {"security": 0.55, "attachment": 0.38},
+    "friend": {"security": 0.62, "attachment": 0.48},
+    "bonded": {"security": 0.72, "attachment": 0.62},
+}
+
+# 关系事件 → 情绪 nudge（stage/scar 稀有免日帽；大承诺另计日帽）
+STAGE_CHANGE_NUDGE: dict[str, dict[str, float]] = {
+    "acquaintance": {"attachment": 0.04, "security": 0.03},
+    "friend": {"attachment": 0.06, "security": 0.04},
+    "bonded": {"attachment": 0.10, "security": 0.06},
+}
+SCAR_EMOTION_NUDGE = {"attachment": -0.08, "security": -0.12, "valence": -0.05}
+COMMITMENT_EMOTION_NUDGE = {"attachment": 0.05, "security": 0.03}
+MAJOR_COMMITMENT_DAILY_CAP = 2
+MAJOR_COMMITMENT_GATE_KEY = "major_commitment_day_gate"
+
 DECAY_RATES = {
     "energy": 0.1,
     "valence": 0.08,
@@ -149,14 +169,26 @@ def clamp(value: float, min_val: float, max_val: float) -> float:
     return max(min_val, min(max_val, value))
 
 
+def baseline_for(dim: str, relationship_stage: str | None = None) -> float:
+    """维度稳态目标：security/attachment 随阶段；其余用全局 BASELINES。"""
+    if relationship_stage and dim in ("security", "attachment"):
+        stage_map = STAGE_BASELINES.get(relationship_stage)
+        if stage_map is not None and dim in stage_map:
+            return float(stage_map[dim])
+    return float(BASELINES[dim])
+
+
 def apply_decay(
-    emotion: EmotionState, dt: float, multiplier: float = 1.0
+    emotion: EmotionState,
+    dt: float,
+    multiplier: float = 1.0,
+    relationship_stage: str | None = None,
 ) -> EmotionState:
-    """情绪自然回归基线。"""
+    """情绪自然回归基线（阶段锚）。"""
     new = emotion.model_copy()
     for dim in BASELINES:
         current = getattr(new, dim)
-        baseline = BASELINES[dim]
+        baseline = baseline_for(dim, relationship_stage)
         rate = DECAY_RATES[dim] * multiplier
         setattr(new, dim, current + rate * (baseline - current) * dt)
     return new
@@ -184,10 +216,10 @@ def apply_coupling(
     for (src, dst), weight in COUPLING.items():
         if src == "attachment_unmet":
             src_val = 1.0 - new.attachment
-            src_baseline = 1.0 - BASELINES["attachment"]
+            src_baseline = 1.0 - baseline_for("attachment", relationship_stage)
         else:
             src_val = getattr(new, src)
-            src_baseline = BASELINES[src]
+            src_baseline = baseline_for(src, relationship_stage)
         deviation = src_val - src_baseline
         deltas[dst] = deltas.get(dst, 0.0) + weight * deviation * 0.1 * scale
 
@@ -279,6 +311,47 @@ def clamp_emotion(emotion: EmotionState) -> EmotionState:
     return emotion
 
 
+def is_major_commitment_signal(signals: object | None) -> bool:
+    """大承诺代理：创造者披露，或深度高自我披露（无新 LLM）。"""
+    if signals is None:
+        return False
+    creator = float(getattr(signals, "creator_disclosure", 0) or 0)
+    if creator >= 0.5:
+        return True
+    deep = bool(getattr(signals, "is_deep", False))
+    disclosure = float(getattr(signals, "self_disclosure", 0) or 0)
+    return deep and disclosure >= 0.9
+
+
+def apply_relationship_emotion_nudge(
+    emotion: EmotionState,
+    rel: dict,
+    *,
+    allow_commitment: bool = True,
+) -> EmotionState:
+    """
+    关系事件直接改情绪数值。
+    stage_changed / scar_created 稀有、免日帽；大承诺受 allow_commitment 约束。
+    """
+    new = emotion.model_copy()
+    if rel.get("scar_created"):
+        new.attachment = new.attachment + SCAR_EMOTION_NUDGE["attachment"]
+        new.security = new.security + SCAR_EMOTION_NUDGE["security"]
+        new.valence = new.valence + SCAR_EMOTION_NUDGE["valence"]
+
+    if rel.get("stage_changed"):
+        stage = str(rel.get("new_stage") or "")
+        deltas = STAGE_CHANGE_NUDGE.get(stage)
+        if deltas:
+            new.attachment = new.attachment + deltas.get("attachment", 0.0)
+            new.security = new.security + deltas.get("security", 0.0)
+    elif allow_commitment and is_major_commitment_signal(rel.get("signals")):
+        new.attachment = new.attachment + COMMITMENT_EMOTION_NUDGE["attachment"]
+        new.security = new.security + COMMITMENT_EMOTION_NUDGE["security"]
+
+    return clamp_emotion(new)
+
+
 def step_emotion(
     emotion: EmotionState,
     now: datetime,
@@ -286,7 +359,12 @@ def step_emotion(
     relationship_stage: str | None = None,
 ) -> EmotionState:
     """一次心跳的情绪步进：衰减 → 耦合 → 天气 → 节律 → 夹紧。"""
-    e = apply_decay(emotion, dt=1.0, multiplier=decay_multiplier)
+    e = apply_decay(
+        emotion,
+        dt=1.0,
+        multiplier=decay_multiplier,
+        relationship_stage=relationship_stage,
+    )
     e = apply_coupling(e, relationship_stage=relationship_stage)
     e = apply_mood_cycle(e, now)
     e = apply_circadian(e, now.hour)
