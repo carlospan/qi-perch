@@ -45,6 +45,7 @@ EXPECTED: dict[str, set[str]] = {
         "time",
         "silence_duration",
         "emotion_summary",
+        "season_hint",
         "recent_memories",
         "pending_thoughts",
         "last_dream",

@@ -3,6 +3,7 @@
 当前时间：{time}
 距离上次和用户交互：{silence_duration}
 你最近的情绪：{emotion_summary}
+季节底色（可淡淡渗进画面与语气，不必点明季节名）：{season_hint}
 你最近的记忆片段：{recent_memories}
 你未完成的念头：{pending_thoughts}
 你昨晚的梦（如果有）：{last_dream}

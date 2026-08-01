@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from qi.storage.database import Database
 
 from qi.prompts import read_prompt
+from qi.relationship.season import SEASON_BEHAVIOR_HINTS
 
 CONSCIOUSNESS_PROBABILITY = 0.05
 EMOTION_SURGE_THRESHOLD = 0.3
@@ -291,11 +292,21 @@ class ConsciousnessStream:
         else:
             chat_embers = "（此刻不主动翻交谈；让念头自己来）"
 
+        # 季节：与 brain._current_season 同默认 spring；无关系行时不编造
+        season = "spring"
+        rel = await self.db.load_relationship()
+        if rel and rel.get("season"):
+            season = str(rel["season"])
+        season_hint = SEASON_BEHAVIOR_HINTS.get(
+            season, SEASON_BEHAVIOR_HINTS["spring"]
+        )
+
         template = read_prompt("consciousness_stream.txt")
         prompt = template.format(
             time=datetime.now().strftime("%H:%M"),
             silence_duration=_format_silence(silence),
             emotion_summary=emotion.description(),
+            season_hint=season_hint,
             recent_memories=mem_text,
             pending_thoughts=pending_text,
             last_dream=dream_text,
