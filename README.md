@@ -79,12 +79,17 @@ voice:
 
 | 文档 | 说明 |
 |------|------|
+| [docs/README.md](docs/README.md) | **文档宪法**（权威秩序 / 冲突裁决 / 文档生灭）——读任何文档前先看这个 |
+| [docs/design/栖·数字生命架构方案.md](docs/design/栖·数字生命架构方案.md) | **唯一架构方案**（数字生命判据 C1–C5 + 阶段零~四路线） |
 | [docs/dev/换机搭建.md](docs/dev/换机搭建.md) | **新电脑 / 换机从零搭建** |
 | [docs/progress.md](docs/progress.md) | 各层开发进度 |
 | [docs/contract.md](docs/contract.md) | 人格契约（硬规则） |
+| [docs/栖·意识养成路线图.md](docs/栖·意识养成路线图.md) | 养育侧地图（施工冲突时让位架构方案） |
 | [docs/layers/](docs/layers/) | L1–L7 层实现规格（含用户事实、行动） |
 | [docs/dev/IDE-Agent-执行栖的开发任务.md](docs/dev/IDE-Agent-执行栖的开发任务.md) | 给 Cursor 的开发执行模板 |
+| [docs/dev/施工包-阶段零.md](docs/dev/施工包-阶段零.md) | 当前施工包（过程文档，闭环即删） |
 | [docs/design/](docs/design/) | 设计原文（灵魂书 / 意识设计 / 工程手记） |
+| [docs/journal.md](docs/journal.md) | 相处实录 |
 
 运行时 LLM 提示词在 `qi/prompts/`（如 `conversation.txt`），与开发用元提示词分开。
 
