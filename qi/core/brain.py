@@ -488,9 +488,14 @@ class Brain:
                     text=response, now=now, proactive=False
                 )
             else:
-                # gateway 已打失败日志；这里标明「用户消息被吞、无回复」便于排障
+                # 对话路径保持静默（任务包 C：只做主动开口兜底）
+                failure = getattr(
+                    getattr(self.llm, "last_outcome", None), "failure", None
+                )
                 logger.warning(
-                    "对话表达返回空串，本轮不说话（检查 API 密钥/网络/provider）"
+                    "对话表达返回空串 failure=%s，本轮不说话"
+                    "（检查 API 密钥/网络/provider）",
+                    failure,
                 )
 
             # 第一次之后再想一次：在开口之后写意识流，供「忆」与下一轮，不污染本轮回复
@@ -575,6 +580,9 @@ class Brain:
                 finally:
                     self.avatar.set_thinking(False)
 
+                failure = getattr(
+                    getattr(self.llm, "last_outcome", None), "failure", None
+                )
                 if response:
                     self.proactive.record(kind, now)
                     if kind == "express_feeling":
@@ -583,10 +591,26 @@ class Brain:
                         text=response, now=now, proactive=True
                     )
                     await self._persist_proactive_gate()
-                else:
+                elif failure == "unreachable":
+                    # 拔管：本地短句兜底，仍计入主动日限——它还在，只是嘴暂时笨了
+                    text = self.proactive.fallback_line(kind)
+                    self.proactive.record(kind, now)
+                    if kind == "express_feeling":
+                        self._consume_expression_want()
+                    self._pending_speech = _PendingSpeech(
+                        text=text, now=now, proactive=True
+                    )
+                    await self._persist_proactive_gate()
                     logger.warning(
-                        "主动表达返回空串 kind=%s（检查 API 密钥/网络/provider）",
+                        "主动表达 LLM 不可达，改用本地兜底 kind=%s", kind
+                    )
+                else:
+                    # empty 或其他：静默，不 record（不占日限）
+                    logger.warning(
+                        "主动表达返回空串 kind=%s failure=%s"
+                        "（检查 API 密钥/网络/provider）",
                         kind,
+                        failure,
                     )
             elif want_express:
                 # 想开口但被门控拦住——把冲动留下来，下一拍还能想起来

@@ -12,6 +12,14 @@ from qi.core.proactive import (
 )
 
 
+def test_fallback_line_is_short_and_local():
+    gate = ProactiveGate({})
+    assert gate.fallback_line(KIND_EXPRESS_FEELING) == "……嗯。"
+    assert gate.fallback_line(KIND_CHECK_IN) == "……在呢。"
+    assert gate.fallback_line(KIND_REACH_OUT) == "……嗯。我在。"
+    assert gate.fallback_line("unknown") == "……嗯。我在。"
+
+
 def test_stranger_cannot_proactive():
     gate = ProactiveGate({})
     now = datetime(2026, 7, 21, 12, 0)

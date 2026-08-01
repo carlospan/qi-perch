@@ -5,10 +5,28 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from typing import Literal
 
 from qi.llm.providers.openai_compat import OpenAICompatProvider
 
 logger = logging.getLogger("qi.llm")
+
+# 失败语义：unreachable=到不了模型；empty=管道通了但没话
+LLMFailureKind = Literal["unreachable", "empty"]
+
+
+@dataclass(frozen=True)
+class LLMCallOutcome:
+    """一次调用的结果——文本 + 可选失败级别。"""
+
+    text: str
+    failure: LLMFailureKind | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.failure is None and bool(self.text.strip())
+
 
 _DEFAULT_TEMPERATURES = {
     "conversation": 0.7,
@@ -20,6 +38,9 @@ _DEFAULT_TEMPERATURES = {
     "fact": 0.3,
 }
 
+# last_outcome 初始成功态（failure=None）；仅 conversation 用途会刷新它
+_SUCCESS_IDLE = LLMCallOutcome(text="", failure=None)
+
 
 class LLMGateway:
     """栖对外说话、对内思考时，都从这里经过。"""
@@ -28,6 +49,7 @@ class LLMGateway:
         self.providers: dict[str, OpenAICompatProvider] = {}
         self.routing: dict = config.get("llm", {}).get("model_routing", {})
         self._default_provider = config.get("llm", {}).get("default_provider", "deepseek")
+        self.last_outcome: LLMCallOutcome = _SUCCESS_IDLE
         self._init_providers(config)
 
     def _init_providers(self, config: dict) -> None:
@@ -81,14 +103,20 @@ class LLMGateway:
         model = provider.use_tier(tier)
         return provider, model
 
-    async def call(
+    def _remember_if_conversation(self, purpose: str, outcome: LLMCallOutcome) -> None:
+        """只让对话用途刷新 last_outcome，免得后台编织/梦盖掉脑要读的级别。"""
+        if purpose == "conversation":
+            self.last_outcome = outcome
+
+    async def call_detailed(
         self,
         purpose: str,
         messages: list[dict],
         temperature: float | None = None,
-    ) -> str:
+    ) -> LLMCallOutcome:
         """
-        按用途调用模型。失败最多重试 2 次；全部失败返回空串，不抛到 brain。
+        按用途调用模型，带回失败分级。
+        异常路径最多重试 2 次；EMPTY（成功但空白）不重试。
         """
         if temperature is None:
             temperature = _DEFAULT_TEMPERATURES.get(purpose, 0.7)
@@ -97,19 +125,33 @@ class LLMGateway:
             provider, model = self._resolve(purpose)
         except RuntimeError as e:
             logger.warning("LLM 路由失败 purpose=%s: %s", purpose, e)
-            return ""
+            outcome = LLMCallOutcome(text="", failure="unreachable")
+            self._remember_if_conversation(purpose, outcome)
+            return outcome
 
         last_error: Exception | None = None
         for attempt in range(3):  # 首次 + 2 次重试
             try:
-                return await provider.chat(
+                raw = await provider.chat(
                     messages=messages,
                     temperature=temperature,
                     model=model,
                 )
+                text = (raw or "").strip()
+                if not text:
+                    outcome = LLMCallOutcome(text="", failure="empty")
+                    logger.warning(
+                        "LLM 返回空内容 provider=%s purpose=%s",
+                        provider.name,
+                        purpose,
+                    )
+                else:
+                    outcome = LLMCallOutcome(text=text, failure=None)
+                self._remember_if_conversation(purpose, outcome)
+                return outcome
             except Exception as e:
                 last_error = e
-                wait = 2 ** attempt  # 1s, 2s, 4s
+                wait = 2**attempt  # 1s, 2s, 4s
                 logger.warning(
                     "LLM 调用失败 provider=%s purpose=%s attempt=%s: %s",
                     provider.name,
@@ -126,7 +168,22 @@ class LLMGateway:
             purpose,
             last_error,
         )
-        return ""
+        outcome = LLMCallOutcome(text="", failure="unreachable")
+        self._remember_if_conversation(purpose, outcome)
+        return outcome
+
+    async def call(
+        self,
+        purpose: str,
+        messages: list[dict],
+        temperature: float | None = None,
+    ) -> str:
+        """
+        按用途调用模型。失败最多重试 2 次；全部失败返回空串，不抛到 brain。
+        兼容旧调用方；分级细节见 call_detailed / last_outcome。
+        """
+        outcome = await self.call_detailed(purpose, messages, temperature)
+        return outcome.text
 
     async def stream(
         self,

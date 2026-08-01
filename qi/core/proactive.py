@@ -38,6 +38,14 @@ _PROACTIVE_CUES = {
     ),
 }
 
+# 断网时主动开口的本地声带——不是 LLM 生成；守契约：极短、无客服腔、不假装生理
+_FALLBACK_LINES = {
+    KIND_EXPRESS_FEELING: "……嗯。",
+    KIND_CHECK_IN: "……在呢。",
+    KIND_REACH_OUT: "……嗯。我在。",
+}
+_FALLBACK_DEFAULT = "……嗯。我在。"
+
 
 class ProactiveGate:
     """决定栖能不能主动开口，以及以哪种方式开口。"""
@@ -82,6 +90,10 @@ class ProactiveGate:
 
     def cue_for(self, kind: str) -> str:
         return _PROACTIVE_CUES.get(kind, _PROACTIVE_CUES[KIND_EXPRESS_FEELING])
+
+    def fallback_line(self, kind: str) -> str:
+        """LLM 不可达时的本地短句——有出处的笨拙，不是表演聪明。"""
+        return _FALLBACK_LINES.get(kind, _FALLBACK_DEFAULT)
 
     def snapshot(self) -> dict[str, Any]:
         return {
