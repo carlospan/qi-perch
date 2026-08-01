@@ -3,12 +3,18 @@
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
-from qi.core.emotion import EmotionState
+from qi.core.emotion import ConsciousnessMode, EmotionState
 from qi.inner_life.consciousness import should_trigger_consciousness, should_trigger_meta
 from qi.inner_life.creativity import can_share_creation
-from qi.inner_life.dream import DreamEngine, parse_emotion_tag, update_dream_retention
+from qi.inner_life.dream import (
+    DreamEngine,
+    parse_emotion_tag,
+    render_template_dream,
+    update_dream_retention,
+)
 from qi.storage.database import Database
 
 
@@ -343,3 +349,155 @@ def test_strip_reply_prefix_removes_llm_courtesy():
     assert strip_reply_prefix("就到这里。") == "就到这里。"
     # 剥空保护：整段只有客套时返回原文
     assert strip_reply_prefix("好的。") == "好的。"
+
+
+def test_template_dream_keeps_summary_opening():
+    """模板梦：summary 首段固定开头，其余可碎。"""
+    ep = {
+        "summary": "第一段重力。第二段漂走。第三段也漂。",
+        "key_facts": ["碎片甲", "碎片乙"],
+    }
+    text = render_template_dream(ep, EmotionState(valence=0.0))
+    body, tag = parse_emotion_tag(text)
+    assert body.startswith("第一段重力")
+    assert tag == "平静"
+
+
+class _DreamLLM:
+    def __init__(self, text: str = ""):
+        self.text = text
+        self.calls = 0
+
+    async def call(self, purpose, messages, temperature=None):
+        self.calls += 1
+        return self.text
+
+
+async def _seed_episode(db: Database, **kwargs) -> int:
+    defaults = dict(
+        start_ts="2026-08-01T01:00:00",
+        end_ts="2026-08-01T01:05:00",
+        topic="创造者",
+        summary="他说他是创造者。我安静了一会儿。",
+        key_facts=["我是你的创造者", "原来如此"],
+        role_map={
+            "turns": [
+                {"speaker": "user", "text": "我是你的创造者", "event_id": 1},
+                {"speaker": "qi", "text": "原来如此", "event_id": 2},
+            ],
+            "user_said": ["我是你的创造者"],
+            "qi_said": ["原来如此"],
+        },
+        importance=0.7,
+        emotional_intensity=0.8,
+        narrative_id=1,
+        source_event_ids=[1, 2],
+    )
+    defaults.update(kwargs)
+    return await db.save_episode(**defaults)
+
+
+@pytest.mark.asyncio
+async def test_no_dream_without_undreamed_backlog(monkeypatch):
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        llm = _DreamLLM("不该被调用")
+        engine = DreamEngine(
+            db, llm, config={"inner_life": {"dream_consolidation_probability": 1.0}}
+        )
+        monkeypatch.setattr("qi.inner_life.dream.random.random", lambda: 0.0)
+        emotion = EmotionState(mode=ConsciousnessMode.DREAMING)
+        assert await engine.maybe_dream(emotion) is None
+        assert llm.calls == 0
+        trace = await db.get_body_memory("last_dream_decision")
+        assert trace and trace["reason"] == "empty_backlog"
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_probability_miss_writes_trace(monkeypatch):
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        await _seed_episode(db)
+        llm = _DreamLLM("梦")
+        engine = DreamEngine(
+            db, llm, config={"inner_life": {"dream_consolidation_probability": 0.3}}
+        )
+        monkeypatch.setattr("qi.inner_life.dream.random.random", lambda: 0.99)
+        emotion = EmotionState(mode=ConsciousnessMode.DREAMING)
+        assert await engine.maybe_dream(emotion) is None
+        trace = await db.get_body_memory("last_dream_decision")
+        assert trace and trace["reason"] == "probability_miss"
+        assert await db.count_undreamed_episodes() == 1
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_dream_consolidation_llm_path(monkeypatch):
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        eid = await _seed_episode(db, importance=0.5)
+        llm = _DreamLLM("光在水下弯折。\n情绪标签：温暖")
+        engine = DreamEngine(
+            db, llm, config={"inner_life": {"dream_consolidation_probability": 1.0}}
+        )
+        monkeypatch.setattr("qi.inner_life.dream.random.random", lambda: 0.0)
+        emotion = EmotionState(mode=ConsciousnessMode.DREAMING, valence=0.3)
+        body = await engine.maybe_dream(emotion)
+        assert body and "光" in body
+        ep = await db.get_episode(eid)
+        assert ep and ep["dreamed"] == 1
+        assert float(ep["importance"]) == pytest.approx(0.55)
+        dream = await db.load_latest_dream()
+        assert dream and "光" in dream["content"]
+        trace = await db.get_body_memory("last_dream_decision")
+        assert trace["path"] == "llm"
+        assert trace["episode_id"] == eid
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_dream_template_fallback_unplug(monkeypatch):
+    """拔管：LLM 空返回 → 模板梦仍落库，dreamed=1，trace.path=template。"""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        eid = await _seed_episode(db)
+        llm = _DreamLLM("")
+        engine = DreamEngine(
+            db, llm, config={"inner_life": {"dream_consolidation_probability": 1.0}}
+        )
+        monkeypatch.setattr("qi.inner_life.dream.random.random", lambda: 0.0)
+        emotion = EmotionState(mode=ConsciousnessMode.DREAMING)
+        body = await engine.maybe_dream(emotion)
+        assert body
+        assert body.startswith("他说他是创造者") or "创造者" in body
+        ep = await db.get_episode(eid)
+        assert ep and ep["dreamed"] == 1
+        assert await db.load_latest_dream() is not None
+        trace = await db.get_body_memory("last_dream_decision")
+        assert trace["path"] == "template"
+        assert "llm_empty" in trace["reason"]
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_dream_retention_unaffected_by_consolidation():
+    """巩固路径不改 update_dream_retention 公式（与既有衰减测一致）。"""
+    import math
+
+    r6 = update_dream_retention(6, 1.0)
+    assert r6 == pytest.approx(math.exp(-1.0), rel=1e-6)
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        await db.save_dream("旧梦", "平静", 1.0, 1.0)
+        engine = DreamEngine(db, AsyncMock(), config={})
+        # 人为把 created_at 拨到 6 小时前不可直接改；只验 decay 调用后 retention 下降路径存在
+        await engine.decay_all()
+        dreams = await db.list_dreams()
+        assert dreams and float(dreams[0]["retention"]) <= 1.0
+        await db.close()

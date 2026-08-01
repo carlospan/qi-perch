@@ -91,6 +91,7 @@ _CREATE_INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_raw_events_processed ON raw_events(processed)",
     "CREATE INDEX IF NOT EXISTS idx_consciousness_stream_timestamp "
     "ON consciousness_stream(timestamp)",
+    "CREATE INDEX IF NOT EXISTS idx_episodes_dreamed ON episodes(dreamed)",
 )
 
 _CREATE_DREAMS = """
@@ -102,6 +103,25 @@ CREATE TABLE IF NOT EXISTS dreams (
     emotional_intensity REAL,
     retention REAL NOT NULL DEFAULT 1.0,
     shared_with_user BOOLEAN DEFAULT 0
+)
+"""
+
+_CREATE_EPISODES = """
+CREATE TABLE IF NOT EXISTS episodes (
+    id INTEGER PRIMARY KEY,
+    start_ts DATETIME,
+    end_ts DATETIME,
+    topic TEXT,
+    summary TEXT,
+    key_facts_json TEXT,
+    role_map_json TEXT,
+    status TEXT NOT NULL DEFAULT 'closed',
+    dreamed INTEGER NOT NULL DEFAULT 0,
+    importance REAL NOT NULL DEFAULT 0.5,
+    emotional_intensity REAL NOT NULL DEFAULT 0.5,
+    narrative_id INTEGER,
+    source_event_ids TEXT,
+    created_at DATETIME NOT NULL
 )
 """
 
@@ -235,6 +255,7 @@ class Database:
         await self._conn.execute(_CREATE_BODY_MEMORY)
         await self._conn.execute(_CREATE_CONSCIOUSNESS_STREAM)
         await self._conn.execute(_CREATE_DREAMS)
+        await self._conn.execute(_CREATE_EPISODES)
         await self._conn.execute(_CREATE_CREATIONS)
         await self._conn.execute(_CREATE_SELF_MODEL)
         await self._conn.execute(_CREATE_RELATIONSHIP)
@@ -709,6 +730,124 @@ class Database:
         async with conn.execute("SELECT * FROM dreams ORDER BY created_at DESC") as cursor:
             rows = await cursor.fetchall()
         return [dict(r) for r in rows]
+
+    # ----- 情景 episode（梦巩固骨架）-----
+
+    async def save_episode(
+        self,
+        *,
+        start_ts: str | None,
+        end_ts: str | None,
+        topic: str,
+        summary: str,
+        key_facts: list[str],
+        role_map: dict,
+        status: str = "closed",
+        dreamed: int = 0,
+        importance: float = 0.5,
+        emotional_intensity: float = 0.5,
+        narrative_id: int | None = None,
+        source_event_ids: list[int] | None = None,
+    ) -> int:
+        conn = self._require_conn()
+        cursor = await conn.execute(
+            """
+            INSERT INTO episodes
+                (start_ts, end_ts, topic, summary, key_facts_json, role_map_json,
+                 status, dreamed, importance, emotional_intensity,
+                 narrative_id, source_event_ids, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                start_ts,
+                end_ts,
+                topic,
+                summary,
+                json.dumps(key_facts, ensure_ascii=False),
+                json.dumps(role_map, ensure_ascii=False),
+                status,
+                int(dreamed),
+                float(importance),
+                float(emotional_intensity),
+                narrative_id,
+                json.dumps(source_event_ids or [], ensure_ascii=False),
+                datetime.now().isoformat(timespec="seconds"),
+            ),
+        )
+        await conn.commit()
+        return int(cursor.lastrowid)
+
+    async def get_episode(self, episode_id: int) -> dict | None:
+        conn = self._require_conn()
+        async with conn.execute(
+            "SELECT * FROM episodes WHERE id = ?", (episode_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+        return self._episode_row(row) if row else None
+
+    async def count_undreamed_episodes(self) -> int:
+        conn = self._require_conn()
+        async with conn.execute(
+            """
+            SELECT COUNT(*) AS n FROM episodes
+            WHERE dreamed = 0 AND status = 'closed'
+            """
+        ) as cursor:
+            row = await cursor.fetchone()
+        return int(row["n"]) if row else 0
+
+    async def list_undreamed_episodes(self) -> list[dict]:
+        conn = self._require_conn()
+        async with conn.execute(
+            """
+            SELECT * FROM episodes
+            WHERE dreamed = 0 AND status = 'closed'
+            ORDER BY id ASC
+            """
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [self._episode_row(r) for r in rows]
+
+    async def mark_episode_dreamed(
+        self, episode_id: int, *, importance: float | None = None
+    ) -> None:
+        conn = self._require_conn()
+        if importance is None:
+            await conn.execute(
+                "UPDATE episodes SET dreamed = 1 WHERE id = ?",
+                (episode_id,),
+            )
+        else:
+            await conn.execute(
+                "UPDATE episodes SET dreamed = 1, importance = ? WHERE id = ?",
+                (float(importance), episode_id),
+            )
+        await conn.commit()
+
+    @staticmethod
+    def _episode_row(row: aiosqlite.Row) -> dict:
+        d = dict(row)
+        for key, raw in (
+            ("key_facts", d.get("key_facts_json")),
+            ("role_map", d.get("role_map_json")),
+            ("source_event_ids", d.get("source_event_ids")),
+        ):
+            if key == "source_event_ids":
+                try:
+                    d[key] = json.loads(raw) if raw else []
+                except (json.JSONDecodeError, TypeError):
+                    d[key] = []
+            elif key == "key_facts":
+                try:
+                    d[key] = json.loads(raw) if raw else []
+                except (json.JSONDecodeError, TypeError):
+                    d[key] = []
+            else:
+                try:
+                    d[key] = json.loads(raw) if raw else {}
+                except (json.JSONDecodeError, TypeError):
+                    d[key] = {}
+        return d
 
     # ----- 创作 -----
 

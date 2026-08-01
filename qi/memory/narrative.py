@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from qi.memory.episodic import EpisodicMemory
 from qi.prompts import read_prompt
 
 if TYPE_CHECKING:
@@ -44,6 +45,7 @@ class NarrativeMemory:
         self.db = db
         self.vector_store = vector_store
         self.llm = llm
+        self.episodic = EpisodicMemory(db)
 
     async def save(
         self,
@@ -193,6 +195,24 @@ class NarrativeMemory:
             period_start=period_start,
             period_end=period_end,
         )
+        try:
+            episode_id = await self.episodic.create_from_weave(
+                batch,
+                narrative_id=memory_id,
+                woven=woven.strip(),
+                importance=importance,
+                emotional_intensity=intensity,
+            )
+            logger.info(
+                "编织同步 episode_id=%s narrative_id=%s",
+                episode_id,
+                memory_id,
+            )
+        except Exception:
+            logger.exception(
+                "编织同步 episode 失败 narrative_id=%s（叙事已保存）",
+                memory_id,
+            )
         await self.db.mark_events_processed(event_ids)
         remaining = len(events) - len(batch)
         logger.info(

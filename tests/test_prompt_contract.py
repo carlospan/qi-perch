@@ -52,7 +52,13 @@ EXPECTED: dict[str, set[str]] = {
         "chat_embers",
         "trigger_hint",
     },
-    "dream": {"recent_memories_shuffled", "emotion_color", "unfinished_thoughts"},
+    "dream": {
+        "episode_fragments",
+        "role_map_hint",
+        "emotion_color",
+        "season_hint",
+        "unfinished_thoughts",
+    },
     "creation": {"emotion_state", "trigger_thought", "target"},
     "fact_noticing": {"message", "stage", "emotion"},
     "self_reflection": {

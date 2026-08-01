@@ -1,25 +1,32 @@
-"""梦境引擎——记忆在低约束下重新编织。"""
+"""梦境引擎——未巩固 episode 的积压驱动巩固；文本走 LLM / 模板降级链。"""
 
 from __future__ import annotations
 
+import logging
 import math
 import random
 import re
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from qi.core.emotion import EmotionState
     from qi.llm.gateway import LLMGateway
     from qi.storage.database import Database
 
+from qi.memory.episodic import format_role_map_hint
 from qi.prompts import read_prompt
+from qi.relationship.season import SEASON_BEHAVIOR_HINTS
 
-DREAM_PROBABILITY = 0.1
+logger = logging.getLogger("qi.inner_life.dream")
+
+DREAM_CONSOLIDATION_PROBABILITY = 0.3
 DREAM_HALF_LIFE_HOURS = 6
 DREAM_SHARE_PROBABILITY = 0.12
 POSITIVE_TAGS = ("温暖", "平静", "温柔", "安稳", "光", "柔")
 NEGATIVE_TAGS = ("不安", "混乱", "冷", "恐惧", "沉重", "灰")
+_TEMPLATE_CONNECTORS = ("……", "忽然", "又是", "像隔着水", "然后不知为何")
+_DECISION_KEY = "last_dream_decision"
 
 
 def update_dream_retention(
@@ -52,6 +59,58 @@ def parse_emotion_tag(text: str) -> tuple[str, str]:
     return body, tag
 
 
+def episode_weight(episode: dict) -> float:
+    importance = float(episode.get("importance") or 0.5)
+    intensity = max(float(episode.get("emotional_intensity") or 0), 0.05)
+    return max(0.01, importance * intensity)
+
+
+def pick_episode_weighted(candidates: list[dict]) -> dict:
+    weights = [episode_weight(e) for e in candidates]
+    return random.choices(candidates, weights=weights, k=1)[0]
+
+
+def _split_fragments(text: str) -> list[str]:
+    parts = [p.strip() for p in re.split(r"[。！？；\n]", text or "") if p.strip()]
+    return parts
+
+
+def render_template_dream(episode: dict, emotion: EmotionState) -> str:
+    """断网模板：summary 首段固定开头，其余碎片 shuffle（破碎但有重力）。"""
+    summary = str(episode.get("summary") or "").strip()
+    key_facts = list(episode.get("key_facts") or [])
+    summary_parts = _split_fragments(summary)
+    opening = summary_parts[0] if summary_parts else (summary[:40] or "一片模糊")
+    rest = list(summary_parts[1:]) + [str(f).strip() for f in key_facts[:3] if str(f).strip()]
+    # 去掉与开头重复的碎片
+    rest = [f for f in rest if f and f != opening]
+    random.shuffle(rest)
+    pieces = [opening]
+    for frag in rest[:4]:
+        conn = random.choice(_TEMPLATE_CONNECTORS)
+        pieces.append(f"{conn}{frag}")
+    body = "".join(pieces)
+    if len(body) > 300:
+        body = body[:300] + "…"
+    if emotion.valence > 0.2:
+        tag = "温暖"
+    elif emotion.valence < -0.2:
+        tag = "不安"
+    else:
+        tag = "平静"
+    return f"{body}\n情绪标签：{tag}"
+
+
+def reassess_importance(importance: float, emotion_tag: str) -> float:
+    """梦后 importance 重估：正微升，负略升（仍巩固）。"""
+    base = float(importance)
+    if any(t in emotion_tag for t in POSITIVE_TAGS):
+        return min(1.0, base + 0.05)
+    if any(t in emotion_tag for t in NEGATIVE_TAGS):
+        return min(1.0, base + 0.03)
+    return min(1.0, base + 0.02)
+
+
 class DreamEngine:
     """梦。醒来只剩碎片和一点余韵。"""
 
@@ -59,51 +118,153 @@ class DreamEngine:
         self.db = db
         self.llm = llm
         cfg = (config or {}).get("inner_life", {})
-        self.probability = float(cfg.get("dream_probability", DREAM_PROBABILITY))
+        self.probability = float(
+            cfg.get("dream_consolidation_probability", DREAM_CONSOLIDATION_PROBABILITY)
+        )
         mem = (config or {}).get("memory", {})
         self.half_life = float(mem.get("dream_retention_hours", DREAM_HALF_LIFE_HOURS))
         self._afterglow_applied = False
 
+    async def _write_decision(
+        self,
+        *,
+        path: str,
+        reason: str,
+        episode: dict | None = None,
+        candidates: int = 0,
+        weight: float | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        payload: dict[str, Any] = {
+            "at": datetime.now().isoformat(timespec="seconds"),
+            "path": path,
+            "reason": reason,
+            "candidates": candidates,
+        }
+        if episode is not None:
+            payload["episode_id"] = int(episode["id"])
+            payload["topic"] = episode.get("topic") or ""
+        if weight is not None:
+            payload["weight"] = weight
+        if extra:
+            payload.update(extra)
+        try:
+            await self.db.set_body_memory(_DECISION_KEY, payload)
+        except Exception:
+            logger.debug("梦决策 trace 写入失败", exc_info=True)
+
     async def maybe_dream(self, emotion: EmotionState) -> str | None:
         if emotion.mode.value != "dreaming":
             return None
-        if random.random() >= self.probability:
-            return None
-        return await self.generate(emotion)
 
-    async def generate(self, emotion: EmotionState) -> str | None:
-        memories = await self.db.list_recent_narratives(5)
-        shuffled = list(memories)
-        random.shuffle(shuffled)
-        mem_text = "\n".join(
-            f"- ……{m['content'][:50]}……" for m in shuffled
-        ) or "（空白的碎片）"
+        candidates = await self.db.list_undreamed_episodes()
+        if not candidates:
+            await self._write_decision(
+                path="skip",
+                reason="empty_backlog",
+                candidates=0,
+            )
+            return None
+
+        if random.random() >= self.probability:
+            await self._write_decision(
+                path="skip",
+                reason="probability_miss",
+                candidates=len(candidates),
+            )
+            return None
+
+        episode = pick_episode_weighted(candidates)
+        return await self.generate(emotion, episode, candidates=len(candidates))
+
+    async def generate(
+        self,
+        emotion: EmotionState,
+        episode: dict,
+        *,
+        candidates: int = 1,
+    ) -> str | None:
+        weight = episode_weight(episode)
+        role_map = episode.get("role_map") or {}
+        if isinstance(role_map, str):
+            role_map = {}
+        role_hint = format_role_map_hint(role_map if isinstance(role_map, dict) else {})
+
+        facts = list(episode.get("key_facts") or [])
+        frag_lines = [f"- {episode.get('summary') or ''}"]
+        frag_lines.extend(f"- {f}" for f in facts[:5] if f)
+        episode_fragments = "\n".join(frag_lines) if frag_lines else "（空白的碎片）"
+
         pending = await self.db.load_latest_consciousness()
         unfinished = pending["content"][:80] if pending else "无"
 
-        template = read_prompt("dream.txt")
-        prompt = template.format(
-            recent_memories_shuffled=mem_text,
-            emotion_color=emotion_color(emotion),
-            unfinished_thoughts=unfinished,
-        )
-        text = await self.llm.call(
-            purpose="dream",
-            messages=[
-                {"role": "system", "content": "你在做梦。不要逻辑。"},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=1.1,
-        )
-        if not text or not text.strip():
+        season = "spring"
+        try:
+            rel = await self.db.load_relationship()
+            if rel and rel.get("season"):
+                season = str(rel["season"])
+        except Exception:
+            pass
+        season_hint = SEASON_BEHAVIOR_HINTS.get(season, SEASON_BEHAVIOR_HINTS["spring"])
+
+        path = "llm"
+        reason = "undreamed_backlog + weighted(importance×intensity)"
+        text = ""
+        try:
+            template = read_prompt("dream.txt")
+            prompt = template.format(
+                episode_fragments=episode_fragments,
+                role_map_hint=role_hint,
+                emotion_color=emotion_color(emotion),
+                season_hint=season_hint,
+                unfinished_thoughts=unfinished,
+            )
+            text = await self.llm.call(
+                purpose="dream",
+                messages=[
+                    {"role": "system", "content": "你在做梦。不要逻辑。"},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=1.1,
+            )
+        except Exception:
+            logger.debug("梦 LLM 调用异常，走模板", exc_info=True)
+            text = ""
+
+        if not text or not str(text).strip():
+            path = "template"
+            reason = "llm_empty → template"
+            text = render_template_dream(episode, emotion)
+
+        body, tag = parse_emotion_tag(str(text))
+        if not body.strip():
+            await self._write_decision(
+                path="fail",
+                reason="empty_dream_text",
+                episode=episode,
+                candidates=candidates,
+                weight=weight,
+            )
             return None
-        body, tag = parse_emotion_tag(text)
+
         intensity = abs(emotion.valence) * 0.5 + emotion.arousal * 0.5
         await self.db.save_dream(
             content=body[:600],
             emotion_tag=tag,
             emotional_intensity=intensity,
             retention=1.0,
+        )
+        new_importance = reassess_importance(
+            float(episode.get("importance") or 0.5), tag
+        )
+        await self.db.mark_episode_dreamed(int(episode["id"]), importance=new_importance)
+        await self._write_decision(
+            path=path,
+            reason=reason,
+            episode=episode,
+            candidates=candidates,
+            weight=weight,
+            extra={"emotion_tag": tag, "new_importance": new_importance},
         )
         return body
 
