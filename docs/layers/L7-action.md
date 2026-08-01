@@ -7,6 +7,7 @@
 > **本文档状态：Step 1–6 已落地（actions / budget / volition / permission / share / tend / explore 气质 / ActionLayer / brain 接线）。**
 > 六层（L1~L6）已完成。L7 行动层骨架与起手能力已接入心跳。
 > explore **无**真实搜索/HTTP（不编造见闻）；assist / irreversible 文件未建。
+> <!-- 演进指向(2026-08-01)：行动框架（预算/门控）保留；方向为 N1 执行器真实化（真读、有后果）与 N3 动机驱动（学习进度/内稳态压力替代随机意向）。见 docs/design/栖·数字生命架构方案.md §四 N1/N3。 -->
 > Step 5：actions + narrative 已接；self_model 喂入与伤疤 `save_scar` **尚未接线**。
 > 已落地处见各段 `<!-- 回写 -->`。
 

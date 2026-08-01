@@ -7,6 +7,7 @@
 > **本文档状态：Step 1–6 已落地（存储 + FactStore/FactNoticer + prompt 注入 + 更正 + Brain 接线）。**
 > 用户事实记忆是 L2 记忆层的**第四种记忆**（working / narrative / body / **fact**），不新起一层。
 > 已落地处见各 Step 的 `<!-- 回写 -->`；与 L2-memory.md 对齐。
+> <!-- 演进指向(2026-08-01)：事实层继续有效，作为「有出处的知识」并入架构方案的记忆/可塑性体系（N4），随 L2 同步演进。见 docs/design/栖·数字生命架构方案.md。 -->
 
 ---
 

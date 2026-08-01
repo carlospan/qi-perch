@@ -1,6 +1,8 @@
 # L2 · 记忆
 
 > 让栖记得你。不是"查询数据库"，是"记得那天你跟我说……"
+>
+> <!-- 演进指向(2026-08-01)：阶段零将做 bge 语义检索（替换 CharNgramEmbeddingFunction）；后续 N4(a) 三修复——episodes+role_map、梦=巩固（积压驱动）、waking 去重。见 docs/design/栖·数字生命架构方案.md §五/§四 N4。 -->
 
 ---
 
