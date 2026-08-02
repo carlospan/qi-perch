@@ -18,5 +18,5 @@
 3. 包 9 出 PR 方案（CodeBuddy）→ Cursor 自行读取编码请求并落地（进行中）
 4. 后续：包 9b → 包 10 → 包 11，每包一 PR
 
-> 进行中：包 9 编码请求已落盘，Cursor 直接读 `docs/specs/` 目录文件即可，无需人工转发；待 Cursor 回执后 CodeBuddy 做实施验收。
+> 进行中：包 9 编码请求已落盘，Cursor 直接读 `docs/specs/` 目录文件即可，无需人工转发；待 Cursor 落盘回执后，由方案 Agent（CodeBuddy 等）读取并做实施验收，维护者不直接检查编码。
 > 协作分工：方案 Agent 出方案/验收，Cursor 固定执行编码（详见阶段三主线文档「协作分工」段 / `specs/SDD-GUIDE.md` 第二节，减少双方负担）。
