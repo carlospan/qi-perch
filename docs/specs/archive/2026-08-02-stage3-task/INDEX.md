@@ -20,6 +20,8 @@
 - `包11-PR方案-Cursor编码请求.md` —— 包 11 实施 PR 方案，供 Cursor 自行读取落地的编码请求
 - `包11-PR方案-Cursor编码回执.md` —— Cursor 落盘回执（开工前理解确认 + 完工结果，10 passed / 365 passed / ruff 全过）
 - `包11-PR方案-CodeBuddy验收记录.md` —— 方案 Agent 实施验收记录（实测核对，#1-地基验收通过 ✅；#1-真通过待 HITL）
+- 包 9b 实施 PR 方案 `specs/tasks/2026-08-02-阶段三-包9b-PR方案.md`（方案 Agent 出方案：自身情绪轨迹观察项，挂入 WorldModel 多域）
+- `包9b-PR方案-Cursor编码请求.md` —— 包 9b 实施 PR 方案，供 Cursor 自行读取落地的编码请求
 
 ## 脉络
 
@@ -28,8 +30,8 @@
 3. 包 9 出 PR 方案（方案 Agent）→ Cursor 落地 → 方案 Agent 实测验收通过 ✅
 4. 包 10 出 PR 方案（方案 Agent）→ Cursor 落地 → 方案 Agent 实测验收通过 ✅
 5. 包 11 出 PR 方案（方案 Agent）→ Cursor 落地 → 方案 Agent 实测验收通过 ✅（交付 #1-地基）
-6. 收尾：包 9b（情绪轨迹观察项，不阻塞）
+6. 包 9b 出 PR 方案（方案 Agent）→ Cursor 自行读取编码请求并落地（进行中，观察项不阻塞）
 
-> 已完成：包 11 编码回执落盘，方案 Agent 实测核对（代码+pytest+ruff+grep 心跳未调用训练+gitignore+drift_check）后验收通过（#1-地基），维护者未介入编码检查（符合 SDD-GUIDE 2.3）。
-> **HITL 待办**：判据 #1-真通过（显式训练一次 或 正式降级为观察项）需维护者届时拍板——这是阶段三唯一剩余硬决策点。
+> 进行中：包 9b 编码请求已落盘，Cursor 直接读 `docs/specs/` 目录文件即可，无需人工转发；待 Cursor 落盘回执后，由方案 Agent 读取并做实施验收（观察项，无硬 HITL）。
+> **HITL 待办（阶段三唯一硬决策点）**：判据 #1-真通过（显式训练一次 或 正式降级为观察项）需维护者届时拍板。
 > 协作分工：方案 Agent 出方案/验收，Cursor 固定执行编码（详见阶段三主线文档「协作分工」段 / `specs/SDD-GUIDE.md` 第二节，减少双方负担）。
