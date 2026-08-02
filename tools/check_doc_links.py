@@ -20,6 +20,7 @@ import os
 import re
 import sys
 import unicodedata
+import urllib.parse
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -43,9 +44,6 @@ SKIP_FILES: list[str] = []
 # 仓库根相对链接的裸前缀判定
 ROOT_REL_PREFIXES = ("docs/", "qi/")
 
-# 视为「目标存在即过」的扩展名（目录无扩展名也过）
-ALLOWED_SUFFIXES = {".md", ".yaml", ".yml", ".py", ".txt", ".json", ".png", ".html"}
-
 # 行内链接：[text](target) 或 [text](target "title")
 # 注意：先剥离 code，再匹配，避免误报。
 LINK_RE = re.compile(r"\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
@@ -66,18 +64,22 @@ def _strip_inline_code(line: str) -> str:
 
 
 def _resolve_target(src_file: Path, target: str, repo_root: Path) -> Path | None:
-    """将链接 target 解析为仓库内绝对路径；无法判定返回 None（跳过）。"""
-    # 解码 %XX（中文路径偶发）
+    """将链接 target 解析为仓库内绝对路径；无法判定返回 None（跳过）。
+
+    解析顺序：
+    1. 外部/协议/纯锚点 → 跳过。
+    2. 显式根相对：`/` 开头或 `docs/`/`qi/` 前缀 → 相对 repo root。
+    3. 文件相对优先（CommonMark 惯例）：`./`、`../`、裸 `foo.md` 一律先按
+       当前 .md 所在目录解析。
+    4. 仅当裸名「不含 /」**且**文件相对目标不存在、**且** repo root 下存在
+       同名文件时，回退为仓库根相对（兼容极小概率的「裸根文件名」写法）。
+    """
+    # 去掉锚点/查询串并 URL 解码（正确处理多字节 UTF-8 百分号编码）
     raw = target.split("#")[0].split("?")[0]
     if not raw:
         return None
+    raw = urllib.parse.unquote(raw)
     raw = _nfc(raw)
-    try:
-        raw = bytes(raw, "utf-8").decode("utf-8")
-    except Exception:
-        pass
-    # 移除可能的 url 编码
-    raw = re.sub(r"%([0-9A-Fa-f]{2})", lambda m: chr(int(m.group(1), 16)), raw)
 
     # 跳过外部 / 协议链接 / 纯锚点
     if raw.startswith(("http://", "https://", "mailto:", "ftp://")):
@@ -85,20 +87,25 @@ def _resolve_target(src_file: Path, target: str, repo_root: Path) -> Path | None
     if raw.startswith("#"):
         return None
 
-    # 仓库根相对：裸 docs/、qi/ 前缀，或仓库根存在的文件名
+    # 显式根相对：以 / 开头，或 docs/、qi/ 前缀
+    if raw.startswith("/"):
+        return (repo_root / raw.lstrip("/")).resolve()
     if raw.startswith(ROOT_REL_PREFIXES):
-        candidate = repo_root / raw
-        return candidate
-    # 仓库根文件名（如 README.md、LICENSE）
-    if (repo_root / raw).is_file() or (repo_root / raw).is_dir():
-        return repo_root / raw
+        return (repo_root / raw).resolve()
 
-    # 文件相对：./ ../ 或裸相对（相对当前 md 所在目录）
-    if raw.startswith(("./", "../")) or not raw.startswith("/"):
-        candidate = (src_file.parent / raw).resolve()
-        return candidate
+    # 文件相对优先：相对当前 md 所在目录
+    file_rel = (src_file.parent / raw).resolve()
+    if file_rel.exists():
+        return file_rel
 
-    return None
+    # 裸名（不含 /）且文件相对不存在：回退仓库根同名文件（若有）
+    if "/" not in raw:
+        root_rel = (repo_root / raw).resolve()
+        if root_rel.exists():
+            return root_rel
+
+    # 文件相对不存在且无根回退 → 按文件相对判定（交给 _exists 判死链）
+    return file_rel
 
 
 def _exists(target: Path) -> bool:

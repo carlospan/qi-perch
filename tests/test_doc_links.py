@@ -4,19 +4,17 @@
 """
 from __future__ import annotations
 
+import sys
 import textwrap
 from pathlib import Path
 
 import pytest
 
 # 让 tests/ 能 import tools/
-import sys
-
 TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 sys.path.insert(0, str(TOOLS_DIR))
 
 import check_doc_links as cdl  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # 1. 文件相对 ./ ../ （含中文名）
@@ -169,6 +167,50 @@ def test_noise_dir_excluded(tmp_path: Path):
     rels = [str(f.relative_to(tmp_path)).replace("\\", "/") for f in files]
     assert not any("node_modules" in r for r in rels)
     assert any(r == "qi/pkg/README.md" for r in rels)
+
+
+# ---------------------------------------------------------------------------
+# 7b. 裸同名文件：文件相对优先（修复解析顺序缺陷）
+# ---------------------------------------------------------------------------
+
+def test_bare_name_file_rel_priority(tmp_path: Path):
+    # 根 README.md 与 docs/a/README.md 内容不同；裸 README.md 必须解析到同目录
+    (tmp_path / "README.md").write_text("# root", encoding="utf-8")
+    (tmp_path / "docs" / "a").mkdir(parents=True)
+    (tmp_path / "docs" / "a" / "README.md").write_text("# local", encoding="utf-8")
+    src = tmp_path / "docs" / "a" / "x.md"
+    src.write_text("见 [本地](README.md)", encoding="utf-8")
+    assert cdl.check_file(src, tmp_path) == []
+
+
+def test_bare_name_falls_back_to_root_only_when_local_missing(tmp_path: Path):
+    # 子目录无本地 README，根有同名文件 → 回退根相对（存在即过）
+    (tmp_path / "README.md").write_text("# root", encoding="utf-8")
+    (tmp_path / "docs" / "a").mkdir(parents=True)
+    src = tmp_path / "docs" / "a" / "x.md"
+    src.write_text("见 [根](README.md)", encoding="utf-8")
+    assert cdl.check_file(src, tmp_path) == []
+
+
+def test_bare_name_local_missing_and_root_missing_is_dead(tmp_path: Path):
+    # 本地无、根也无同名 → 判死链（按文件相对判定）
+    (tmp_path / "docs" / "a").mkdir(parents=True)
+    src = tmp_path / "docs" / "a" / "x.md"
+    src.write_text("见 [死](missing.md)", encoding="utf-8")
+    assert cdl.check_file(src, tmp_path) == [(1, "missing.md")]
+
+
+# ---------------------------------------------------------------------------
+# 7c. 多字节 %XX URL 编码（如中文路径百分号）
+# ---------------------------------------------------------------------------
+
+def test_percent_encoded_utf8(tmp_path: Path):
+    # 链接写成 %E4%B8%BB%E9%A2%98.md = 主题.md
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "主题.md").write_text("# 主题", encoding="utf-8")
+    src = tmp_path / "docs" / "index.md"
+    src.write_text("见 [主题](%E4%B8%BB%E9%A2%98.md)", encoding="utf-8")
+    assert cdl.check_file(src, tmp_path) == []
 
 
 # ---------------------------------------------------------------------------
