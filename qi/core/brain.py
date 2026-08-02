@@ -380,6 +380,14 @@ class Brain:
             )
         self.emotion = clamp_emotion(self.emotion)
 
+        # 包 10：learning-progress 好奇（情绪步进之后、内在生命/GWS 之前）
+        try:
+            from qi.motivation.curiosity import CuriositySignal
+
+            await CuriositySignal(config=self.config).update(self, now=now)
+        except Exception:
+            logger.debug("好奇信号更新失败", exc_info=True)
+
         want_express = self._track_expression_threshold()
 
         # 无用户句时照常跑内在生命；有 first_time 时把意识流放到回复之后，
@@ -616,6 +624,7 @@ class Brain:
         kind: str | None = None
         action_type: str | None = None
         response: str | None = None
+        curiosity_val = float(getattr(self.emotion, "curiosity", 0.0) or 0.0)
         candidates = await collect_contenders(
             self,
             pending=None,
@@ -623,6 +632,7 @@ class Brain:
             kind=None,
             action_type=None,
             now=now,
+            curiosity=curiosity_val,
         )
         winner = arbitrate(candidates)
         self._gws_broadcast_hint = {
@@ -755,6 +765,7 @@ class Brain:
         if speech is None:
             return None
         # 生成已在锁内完成；出锁后再「想了想」，再推送——不堵心跳
+        # C4 时机阀：随机仅扰动投递时刻，不是动机来源
         await asyncio.sleep(random.uniform(0.5, 1.5))
         await self._deliver_qi_message(
             speech.text, speech.now, proactive=speech.proactive

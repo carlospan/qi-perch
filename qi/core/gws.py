@@ -24,6 +24,7 @@ _FAMILY_RANK = {
     "close_loop": 40,
     "report": 30,
     "proactive": 20,
+    "curiosity": 15,
     "action": 10,
     "idle": 0,
     "other": -1,
@@ -41,6 +42,8 @@ def kind_family(kind: str | None) -> str:
         return "close_loop"
     if kind == "report":
         return "report"
+    if kind == "curiosity":
+        return "curiosity"
     if kind.startswith("proactive:"):
         return "proactive"
     if kind.startswith("action:"):

@@ -149,6 +149,8 @@ def salience(kind: str, **signals: Any) -> float:
                 signals.get("uptime_report_seconds") or 3 * 3600
             ),
         )
+    if kind == "curiosity":
+        return _clamp01(float(signals.get("curiosity") or 0))
     return 0.0
 
 
@@ -324,6 +326,7 @@ async def collect_contenders(
     kind: str | None,
     action_type: str | None,
     now: datetime,
+    curiosity: float = 0.0,
 ) -> list[Contender]:
     """只读收集本拍竞争者——不算 winner。"""
     candidates: list[Contender] = []
@@ -504,6 +507,16 @@ async def collect_contenders(
             )
         )
 
+    # 包 10：curiosity 竞争者仅在无用户消息时入场（respond 恒胜）
+    if pending is None and curiosity > 0.0:
+        candidates.append(
+            Contender(
+                kind="curiosity",
+                salience=salience(kind="curiosity", curiosity=curiosity),
+                reason="learning-progress 好奇驱动",
+            )
+        )
+
     return candidates
 
 
@@ -538,6 +551,9 @@ async def persist_broadcast(
                 winner_arb_kind = hint.get("winner_arb_kind")
                 winner_arb_salience = hint.get("winner_arb_salience")
         if candidates is None:
+            curiosity_val = float(
+                getattr(getattr(brain, "emotion", None), "curiosity", 0.0) or 0.0
+            )
             candidates = await collect_contenders(
                 brain,
                 pending=pending,
@@ -545,6 +561,7 @@ async def persist_broadcast(
                 kind=kind,
                 action_type=action_type,
                 now=now,
+                curiosity=curiosity_val,
             )
         winner_kind, winner_salience = winner_from_legacy(
             pending=pending,

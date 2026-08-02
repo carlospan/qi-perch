@@ -23,7 +23,8 @@ logger = logging.getLogger("qi.inner_life.consciousness")
 CONSCIOUSNESS_PROBABILITY = 0.05
 EMOTION_SURGE_THRESHOLD = 0.3
 SILENCE_TRIGGER_HOURS = 3  # 补丁 D：与 journal/report 3h 对齐
-META_COGNITION_PROBABILITY = 0.01
+META_COGNITION_PROBABILITY = 0.01  # 史料：旧随机 WHETHER；包 10 改 curiosity
+META_CURIOSITY_MIN = 0.5  # 包 10：元认知由好奇驱动
 META_SIMILARITY_THRESHOLD = 0.6
 META_MIN_LENGTH = 15
 META_DEDUP_LOOKBACK = 5
@@ -125,6 +126,7 @@ def should_trigger_consciousness(
     # 无积压 → 随机不得凭空造想
     if open_loop_count <= 0:
         return False, ""
+    # C4 时机阀：有 open_loop 积压时随机仅扰动释放时刻（非动机来源）
     if mode == "solitary" and random.random() < probability:
         return True, "loop_backlog"
     if mode == "ambient" and random.random() < probability * ambient_factor:
@@ -132,10 +134,17 @@ def should_trigger_consciousness(
     return False, ""
 
 
-def should_trigger_meta(mode: str, probability: float = META_COGNITION_PROBABILITY) -> bool:
+def should_trigger_meta(
+    mode: str,
+    curiosity: float = 0.0,
+    *,
+    probability: float | None = None,
+) -> bool:
+    """包 10：meta WHETHER 由 curiosity 驱动；probability 参数保留兼容、已忽略。"""
+    del probability
     if mode == "awake":
         return False
-    return random.random() < probability
+    return float(curiosity or 0.0) >= META_CURIOSITY_MIN
 
 
 def _format_silence(silence: timedelta) -> str:
@@ -542,7 +551,10 @@ class ConsciousnessStream:
         )
 
     async def maybe_meta(self, emotion: EmotionState) -> str | None:
-        if not should_trigger_meta(emotion.mode.value, self.meta_probability):
+        if not should_trigger_meta(
+            emotion.mode.value,
+            float(getattr(emotion, "curiosity", 0.0) or 0.0),
+        ):
             return None
         prompt = self._build_meta_prompt(emotion)
         text = await self.llm.call(

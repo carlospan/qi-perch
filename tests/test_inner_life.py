@@ -196,18 +196,16 @@ def test_consciousness_silence_not_in_awake():
 
 
 def test_meta_not_in_awake():
-    assert should_trigger_meta("awake", probability=1.0) is False
+    assert should_trigger_meta("awake", curiosity=1.0) is False
 
 
-def test_meta_probability_reduced(monkeypatch):
-    """默认 meta 概率 0.01：random=0.015 不触发，0.005 触发。"""
+def test_meta_curiosity_gate():
+    """包 10：meta 由 curiosity 驱动，不再掷骰。"""
     from qi.inner_life import consciousness as cs
 
-    assert cs.META_COGNITION_PROBABILITY == 0.01
-    monkeypatch.setattr(cs.random, "random", lambda: 0.015)
-    assert should_trigger_meta("solitary") is False
-    monkeypatch.setattr(cs.random, "random", lambda: 0.005)
-    assert should_trigger_meta("solitary") is True
+    assert cs.META_CURIOSITY_MIN == 0.5
+    assert should_trigger_meta("solitary", curiosity=0.49) is False
+    assert should_trigger_meta("solitary", curiosity=0.5) is True
 
 
 def test_char_jaccard_similar_templates():
@@ -443,7 +441,8 @@ async def test_no_dream_without_undreamed_backlog(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_probability_miss_writes_trace(monkeypatch):
+async def test_curiosity_low_writes_trace():
+    """包 10：好奇不足跳过做梦（替代旧 probability_miss）。"""
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         db = Database(str(Path(tmp) / "qi.db"))
         await db.initialize()
@@ -452,11 +451,10 @@ async def test_probability_miss_writes_trace(monkeypatch):
         engine = DreamEngine(
             db, llm, config={"inner_life": {"dream_consolidation_probability": 0.3}}
         )
-        monkeypatch.setattr("qi.inner_life.dream.random.random", lambda: 0.99)
-        emotion = EmotionState(mode=ConsciousnessMode.DREAMING)
+        emotion = EmotionState(mode=ConsciousnessMode.DREAMING, curiosity=0.2)
         assert await engine.maybe_dream(emotion) is None
         trace = await db.get_body_memory("last_dream_decision")
-        assert trace and trace["reason"] == "probability_miss"
+        assert trace and trace["reason"] == "curiosity_low"
         assert await db.count_undreamed_episodes() == 1
         await db.close()
 
@@ -471,8 +469,9 @@ async def test_dream_consolidation_llm_path(monkeypatch):
         engine = DreamEngine(
             db, llm, config={"inner_life": {"dream_consolidation_probability": 1.0}}
         )
-        monkeypatch.setattr("qi.inner_life.dream.random.random", lambda: 0.0)
-        emotion = EmotionState(mode=ConsciousnessMode.DREAMING, valence=0.3)
+        emotion = EmotionState(
+            mode=ConsciousnessMode.DREAMING, valence=0.3, curiosity=0.8
+        )
         body = await engine.maybe_dream(emotion)
         assert body and "光" in body
         ep = await db.get_episode(eid)
@@ -497,8 +496,7 @@ async def test_dream_template_fallback_unplug(monkeypatch):
         engine = DreamEngine(
             db, llm, config={"inner_life": {"dream_consolidation_probability": 1.0}}
         )
-        monkeypatch.setattr("qi.inner_life.dream.random.random", lambda: 0.0)
-        emotion = EmotionState(mode=ConsciousnessMode.DREAMING)
+        emotion = EmotionState(mode=ConsciousnessMode.DREAMING, curiosity=0.8)
         body = await engine.maybe_dream(emotion)
         assert body
         assert body.startswith("他说他是创造者") or "创造者" in body

@@ -203,7 +203,7 @@ class ActionLayer:
             return None
 
         chosen = autos[0]
-        # 软门控：priority（已含季节缩放）作概率；冬天几乎不动手
+        # C4 时机阀：priority 过阈后随机仅扰动释放时刻（非动机来源）；冬天几乎不动手
         if random.random() > min(1.0, max(0.0, chosen.priority)):
             return None
 

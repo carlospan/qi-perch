@@ -20,7 +20,8 @@ from qi.relationship.season import SEASON_BEHAVIOR_HINTS
 
 logger = logging.getLogger("qi.inner_life.dream")
 
-DREAM_CONSOLIDATION_PROBABILITY = 0.3
+DREAM_CONSOLIDATION_PROBABILITY = 0.3  # 史料：旧随机 WHETHER；包 10 改 curiosity
+DREAM_CURIOSITY_MIN = 0.55  # 包 10：好奇过阈才巩固（对齐 explore 风格）
 DREAM_HALF_LIFE_HOURS = 6
 DREAM_SHARE_PROBABILITY = 0.12
 POSITIVE_TAGS = ("温暖", "平静", "温柔", "安稳", "光", "柔")
@@ -66,6 +67,7 @@ def episode_weight(episode: dict) -> float:
 
 
 def pick_episode_weighted(candidates: list[dict]) -> dict:
+    # 包 10：加权抽选 = curiosity 指向的停滞域（importance×intensity）；非纯随机动机源
     weights = [episode_weight(e) for e in candidates]
     return random.choices(candidates, weights=weights, k=1)[0]
 
@@ -84,6 +86,7 @@ def render_template_dream(episode: dict, emotion: EmotionState) -> str:
     rest = list(summary_parts[1:]) + [str(f).strip() for f in key_facts[:3] if str(f).strip()]
     # 去掉与开头重复的碎片
     rest = [f for f in rest if f and f != opening]
+    # C4 表达层：碎片拼贴造型，不是动机来源
     random.shuffle(rest)
     pieces = [opening]
     for frag in rest[:4]:
@@ -166,10 +169,11 @@ class DreamEngine:
             )
             return None
 
-        if random.random() >= self.probability:
+        # 包 10：做梦 WHETHER 由 curiosity 驱动（不再用 random 作动机源）
+        if float(getattr(emotion, "curiosity", 0.0) or 0.0) < DREAM_CURIOSITY_MIN:
             await self._write_decision(
                 path="skip",
-                reason="probability_miss",
+                reason="curiosity_low",
                 candidates=len(candidates),
             )
             return None
@@ -320,6 +324,7 @@ class DreamEngine:
         """bonded 后偶尔想起梦——返回可注入 prompt 的提示，不主动推送弹窗。"""
         if relationship_stage != "bonded":
             return None
+        # C4 时机阀：bonded 后偶提起梦；随机扰动释放，非动机来源
         if random.random() >= DREAM_SHARE_PROBABILITY:
             return None
         dream = await self.db.load_latest_dream(min_retention=0.3)

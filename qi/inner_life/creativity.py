@@ -14,9 +14,10 @@ if TYPE_CHECKING:
 
 from qi.prompts import read_prompt
 
-CREATION_BASE_PROBABILITY = 0.01
+CREATION_BASE_PROBABILITY = 0.01  # 史料：旧随机 WHETHER
 CREATION_HIGH_EMOTION_PROBABILITY = 0.03
 CREATION_EMOTION_THRESHOLD = 0.7
+CREATION_CURIOSITY_MIN = 0.55  # 包 10：好奇或高情绪任一过阈可创作
 CREATION_SHARE_COOLDOWN_HOURS = 24
 STAGE_ORDER = ("stranger", "acquaintance", "friend", "bonded")
 
@@ -99,7 +100,11 @@ class Creativity:
     ) -> str | None:
         if emotion.mode.value != "solitary":
             return None
-        if random.random() >= self._probability(emotion):
+        # 包 10：好奇或情绪强度过阈才创作（移除纯随机动机源）
+        intensity = max(abs(emotion.valence), emotion.arousal)
+        curious = float(getattr(emotion, "curiosity", 0.0) or 0.0) >= CREATION_CURIOSITY_MIN
+        intense = intensity >= CREATION_EMOTION_THRESHOLD
+        if not curious and not intense:
             return None
         return await self.generate(emotion, relationship_stage)
 
@@ -174,7 +179,7 @@ class Creativity:
         creation = await self.db.load_unshared_creation()
         if not creation:
             return None
-        # 低概率，避免每次对话都塞
+        # C4 时机阀：提起创作的释放扰动（非动机来源）；避免每次对话都塞
         if random.random() > 0.25:
             return None
         await self.db.mark_creation_mentioned(int(creation["id"]), now=now)

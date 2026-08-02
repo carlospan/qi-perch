@@ -81,6 +81,7 @@ class ShareAction:
         creation_id = int(creation["id"])
         content = str(creation.get("content") or "")
         creation_type = str(creation.get("type") or "note")
+        # C4 表达层：话术选型，不是动机来源
         line = qi_line or random.choice(_QI_LINES)
 
         await self.db.mark_creation_shared(creation_id)

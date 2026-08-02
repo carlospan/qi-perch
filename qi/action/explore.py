@@ -141,6 +141,7 @@ class ExploreAction:
                 return None
             warmth = max(0.0, (curiosity - 0.65) / 0.35)
             p = self.base_probability * max(0.0, season_scale) * (0.4 + 0.6 * warmth)
+            # C4 时机阀：好奇已过阈，随机仅扰动本拍是否飘出（非动机来源）
             if random.random() > p:
                 return None
 
