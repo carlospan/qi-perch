@@ -53,7 +53,7 @@ npm install
 npm run tauri:dev
 ```
 
-**首次具身**：从 [Live2D Cubism SDK for Web](https://www.live2d.com/download/cubism-sdk/download-web/) 取出 `live2dcubismcore.min.js`，放到 `qi/embodiment/desktop/public/`（**不入库**）。没有它形象不会显示。详见 [换机搭建.md](docs/dev/换机搭建.md) §5。
+**首次具身**：从 [Live2D Cubism SDK for Web](https://www.live2d.com/download/cubism-sdk/download-web/) 取出 `live2dcubismcore.min.js`，放到 `qi/embodiment/desktop/public/`（**不入库**）。没有它形象不会显示。详见 [换机搭建.md](docs/how-to/换机搭建.md) §5。
 
 仅浏览器调试可用 `npm run dev`，打开 http://localhost:5173。  
 后端 WebSocket：`ws://127.0.0.1:9527`。
@@ -77,18 +77,20 @@ voice:
 
 ## 文档
 
+> 完整权威秩序见 [docs/README.md](docs/README.md)（文档宪法 v3）。
+
 | 文档 | 说明 |
 |------|------|
-| [docs/README.md](docs/README.md) | **文档宪法**（权威秩序 / 冲突裁决 / 文档生灭）——读任何文档前先看这个 |
-| [docs/design/栖·数字生命架构方案.md](docs/design/栖·数字生命架构方案.md) | **唯一架构方案**（数字生命判据 C1–C5 + 阶段零~四路线） |
-| [docs/dev/换机搭建.md](docs/dev/换机搭建.md) | **新电脑 / 换机从零搭建** |
+| [docs/README.md](docs/README.md) | **文档宪法 v3**（分场景裁决 / Diátaxis 映射 / SDD 入口） |
+| [docs/explanation/栖·数字生命架构方案.md](docs/explanation/栖·数字生命架构方案.md) | **唯一架构方案**（C1–C5 + 阶段零~四路线） |
+| [docs/how-to/换机搭建.md](docs/how-to/换机搭建.md) | **新电脑 / 换机从零搭建** |
 | [docs/progress.md](docs/progress.md) | 各层开发进度 |
-| [docs/contract.md](docs/contract.md) | 人格契约（硬规则） |
-| [docs/栖·意识养成路线图.md](docs/栖·意识养成路线图.md) | 养育侧地图（施工冲突时让位架构方案） |
-| [docs/layers/](docs/layers/) | L1–L7 层实现规格（含用户事实、行动） |
-| [docs/dev/IDE-Agent-执行栖的开发任务.md](docs/dev/IDE-Agent-执行栖的开发任务.md) | 给 Cursor 的开发执行模板 |
-| [docs/dev/施工包-阶段零.md](docs/dev/施工包-阶段零.md) | 当前施工包（过程文档，闭环即删） |
-| [docs/design/](docs/design/) | 设计原文（灵魂书 / 意识设计 / 工程手记） |
+| [docs/reference/contract.md](docs/reference/contract.md) | 人格契约（硬规则） |
+| [docs/explanation/栖·意识养成路线图.md](docs/explanation/栖·意识养成路线图.md) | 养育侧地图（施工冲突时让位架构方案） |
+| [docs/reference/layers/](docs/reference/layers/) | L1–L7 层实现规格（含用户事实、行动） |
+| [docs/how-to/ide-agent/IDE-Agent-执行栖的开发任务.md](docs/how-to/ide-agent/IDE-Agent-执行栖的开发任务.md) | 给 Cursor 的开发执行模板 |
+| [docs/specs/tasks/](docs/specs/tasks/) | 当前任务包（SDD 规格，闭环归档 `specs/archive/`） |
+| [docs/explanation/](docs/explanation/) | 设计原文（灵魂书 / 意识设计 / 工程手记） |
 | [docs/journal.md](docs/journal.md) | 相处实录 |
 
 运行时 LLM 提示词在 `qi/prompts/`（如 `conversation.txt`），与开发用元提示词分开。

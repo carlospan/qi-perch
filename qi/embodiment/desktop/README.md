@@ -4,7 +4,7 @@
 
 ## Cubism Core（必做）
 
-`public/live2dcubismcore.min.js` **不入库**。从 [Cubism SDK for Web](https://www.live2d.com/download/cubism-sdk/download-web/) 取出后放到 `public/`。缺此文件则 Live2D 不显示。详见 [换机搭建.md](../../../docs/dev/换机搭建.md) §5、[Live2D接入.md](../../../docs/dev/主界面-Live2D接入.md)。
+`public/live2dcubismcore.min.js` **不入库**。从 [Cubism SDK for Web](https://www.live2d.com/download/cubism-sdk/download-web/) 取出后放到 `public/`。缺此文件则 Live2D 不显示。详见 [换机搭建.md](../../../docs/how-to/换机搭建.md) §5、[Live2D接入.md](../../../docs/how-to/ui/主界面-Live2D接入.md)。
 
 ## 启动
 
