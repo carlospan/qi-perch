@@ -212,6 +212,12 @@ def motive_snapshot(
     sensing = getattr(brain, "last_sensing", None)
     if sensing is not None:
         snap["sensing_uptime"] = round(float(sensing.uptime_seconds), 3)
+    world = getattr(brain, "last_world", None)
+    if world is not None:
+        snap["world_surprise"] = round(
+            float(world.get("online_rhythm", {}).get("surprise", 0.0)),
+            4,
+        )
     closed = None
     if brain.action is not None:
         closed = getattr(brain.action, "last_closed_loop", None)

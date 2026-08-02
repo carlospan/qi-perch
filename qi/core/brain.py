@@ -52,6 +52,7 @@ from qi.memory.open_loops import OpenLoopQueue
 from qi.relationship import RelationshipEngine
 from qi.relationship.scars import ScarManager
 from qi.relationship.season import apply_season_effect
+from qi.world import WorldModel
 
 if TYPE_CHECKING:
     from qi.embodiment.server import EmbodimentServer
@@ -99,6 +100,8 @@ class Brain:
         self.proactive_queue: asyncio.Queue[str] = asyncio.Queue()
         self.action: ActionLayer | None = None
         self.last_sensing = None  # SensingSnapshot | None（包 8）
+        self.world = WorldModel()
+        self.last_world = None  # dict | None（包 9：世界模型旁路快照）
         self._drift_signals: list[str] = []
         self._last_avatar_payload: dict | None = None
         self._traces: deque[dict] = deque(maxlen=20)
@@ -269,6 +272,13 @@ class Brain:
         except Exception:
             logger.debug("传感采集失败", exc_info=True)
             self.last_sensing = None
+        # 包 9：世界模型只增旁路信号，不接 GWS / 不改 proactive 权重
+        try:
+            await self.world.update(self, now=now)
+            self.last_world = self.world.snapshot(now=now)
+        except Exception:
+            logger.debug("世界模型更新失败", exc_info=True)
+            self.last_world = None
         self.proactive.reset_day(now)
         self._gws_broadcast_hint = None
         response: str | None = None
