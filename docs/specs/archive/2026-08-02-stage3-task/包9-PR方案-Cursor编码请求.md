@@ -1,6 +1,6 @@
 # 包 9 实施 PR 方案 · Cursor 编码请求
 
-> **用途**：交 Cursor 落地编码（CodeBuddy 只出方案，不写 `qi/` 实现）。  
+> **用途**：供 Cursor 自行读取并落地编码（**Cursor 直接读 `docs/specs/` 下对应文件即可，无需人工转发**；CodeBuddy 只出方案，不写 `qi/` 实现）。  
 > **分工纪律（不可混淆）**：本文件是「执行侧」请求——**只由 Cursor 写实现代码，CodeBuddy 不在此文件范围内敲 `qi/` 代码**。若 CodeBuddy 误把"起草 PR"写成直接出实现，属于越界，应退回只出方案（此失误已发生过一次，故特此强调）。  
 > **依据**：`specs/tasks/2026-08-02-阶段三-包9-PR方案.md`（PR 方案，含精确改动点）、`specs/tasks/2026-08-02-阶段三-主线.md`（v2 包 9 段）、现有代码结构（`qi/core/trace.py` / `qi/core/brain.py` / `qi/storage/database.py`）。  
 > **撰写**：CodeBuddy（2026-08-02）  
@@ -10,7 +10,7 @@
 
 ## 请求
 
-包 9 的实施 PR 方案已写好：`specs/tasks/2026-08-02-阶段三-包9-PR方案.md`。
+包 9 的实施 PR 方案已写好：`specs/tasks/2026-08-02-阶段三-包9-PR方案.md`（同目录下的本文件即编码请求，你直接读取即可，无需人工转发）。
 
 请你**据此落地编码**（新增 `qi/world/online_rhythm.py` + `qi/world/model.py`，改 `qi/core/brain.py` 接入 + `qi/core/trace.py` 注入 `world_surprise`，新增 `tests/test_world_online_rhythm.py`），并遵守方案里的纪律红线：
 
