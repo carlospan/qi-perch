@@ -36,6 +36,7 @@
 | 阶段退出判据 | `specs/stages/stage-*.md` | 唯一施工权威；架构方案 §五 为摘要+链接 |
 | C1–C5 定义本身 | `explanation/栖·数字生命架构方案.md` §一（全文保留不瘦身） | `specs/acceptance.md` 只操作化+链接 |
 | 开放/未决问题 | `specs/open-questions.md` | 带状态列（开放/已结案/已降级） |
+| 配置默认值争议 | `settings.example.yaml`（真源） | `reference/config.md` 只说明/索引，不手抄默认值 |
 
 > **thoughts/**（思想档案）是灵感与对照库，**不在权威链内**；其机制描述与上层冲突时以上层为准。
 
