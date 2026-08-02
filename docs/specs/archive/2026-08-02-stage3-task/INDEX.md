@@ -12,13 +12,16 @@
 - `包9-PR方案-CodeBuddy验收记录.md` —— 方案 Agent 实施验收记录（实测核对，验收通过 ✅）
 - 任务包本体 `specs/tasks/2026-08-02-阶段三-主线.md`（v2：包 9 收在线节律 / 9b 情绪轨迹观察项 / 包 10 补随机审计三栏 / 判据 #1 拆地基·真通过）
 - 包 9 实施 PR 方案 `specs/tasks/2026-08-02-阶段三-包9-PR方案.md`（方案 Agent 出方案，Cursor 编码）
+- 包 10 实施 PR 方案 `specs/tasks/2026-08-02-阶段三-包10-PR方案.md`（方案 Agent 出方案：learning-progress 好奇替换随机数，含随机审计三栏表）
+- `包10-PR方案-Cursor编码请求.md` —— 包 10 实施 PR 方案，供 Cursor 自行读取落地的编码请求
 
 ## 脉络
 
 1. 阶段二已退出，进入阶段三（架构方案 §五 / `specs/stages/stage-3.md`）
 2. 起草任务包 → Cursor 交叉检验（3 必改 + 4 建议）→ 任务包升 v2
-3. 包 9 出 PR 方案（CodeBuddy）→ Cursor 自行读取编码请求并落地 → 方案 Agent 实测验收通过 ✅
-4. 后续：包 9b → 包 10 → 包 11，每包一 PR
+3. 包 9 出 PR 方案（方案 Agent）→ Cursor 自行读取编码请求并落地 → 方案 Agent 实测验收通过 ✅
+4. 包 10 出 PR 方案（方案 Agent）→ Cursor 自行读取编码请求并落地（进行中）
+5. 后续：包 9b（观察项）→ 包 11，每包一 PR
 
-> 已完成：包 9 编码回执落盘，方案 Agent 实测核对（代码+pytest+ruff+git diff）后验收通过，维护者未介入编码检查（符合 SDD-GUIDE 2.3）。
+> 进行中：包 10 编码请求已落盘，Cursor 直接读 `docs/specs/` 目录文件即可，无需人工转发；待 Cursor 落盘回执后，由方案 Agent 读取并做实施验收，维护者不直接检查编码。
 > 协作分工：方案 Agent 出方案/验收，Cursor 固定执行编码（详见阶段三主线文档「协作分工」段 / `specs/SDD-GUIDE.md` 第二节，减少双方负担）。
