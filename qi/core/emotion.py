@@ -146,6 +146,8 @@ CIRCADIAN_ENERGY = {
     22: 0.35, 23: 0.25,
 }
 CIRCADIAN_APPROACH_RATE = 0.05
+# 包 13：账本余额偏移的 energy 趋近速率（与 circadian 同量级；文档化，非平行闸门）
+STASIS_APPROACH_RATE = 0.05
 
 EXPRESSION_THRESHOLD = 0.3
 ACCUMULATION_LIMIT = 1.0
@@ -357,8 +359,13 @@ def step_emotion(
     now: datetime,
     decay_multiplier: float = 1.0,
     relationship_stage: str | None = None,
+    *,
+    energy_baseline_offset: float = 0.0,
 ) -> EmotionState:
-    """一次心跳的情绪步进：衰减 → 耦合 → 天气 → 节律 → 夹紧。"""
+    """一次心跳的情绪步进：衰减 → 耦合 → 天气 → 节律 →（可选）账本偏移趋近 → 夹紧。
+
+    energy_baseline_offset：只调制能量稳态目标，由趋近式生效，禁止盖写 energy。
+    """
     e = apply_decay(
         emotion,
         dt=1.0,
@@ -368,4 +375,10 @@ def step_emotion(
     e = apply_coupling(e, relationship_stage=relationship_stage)
     e = apply_mood_cycle(e, now)
     e = apply_circadian(e, now.hour)
+    if energy_baseline_offset:
+        # 朝 (circadian 目标 + offset) 趋近，与现有趋近式同构
+        target = CIRCADIAN_ENERGY.get(now.hour % 24, 0.5) + float(
+            energy_baseline_offset
+        )
+        e.energy += STASIS_APPROACH_RATE * (target - e.energy)
     return clamp_emotion(e)

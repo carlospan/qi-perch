@@ -419,17 +419,68 @@ class Brain:
                 self._apply_anomaly_nudge(anomalies)
 
         decay_mult = float(self.config.get("emotion", {}).get("decay_multiplier", 1.0))
+        # 包 13：账本余额 → energy 目标偏移（趋近，不盖写）
+        energy_offset = 0.0
+        try:
+            from qi.stasis.pressure import balance_to_energy_offset
+
+            sens = float(
+                (self.config.get("stasis") or {}).get("pressure_sensitivity", 1.0)
+            )
+            energy_offset = balance_to_energy_offset(
+                self.ledger.balance, sensitivity=sens
+            )
+        except Exception:
+            logger.debug("账本→energy 偏移计算失败", exc_info=True)
         self.emotion = step_emotion(
             self.emotion,
             now,
             decay_multiplier=decay_mult,
             relationship_stage=self.relationship_stage,
+            energy_baseline_offset=energy_offset,
         )
         if self.relationship is not None:
             self.emotion = apply_season_effect(
                 self.emotion, self.relationship.state.season
             )
         self.emotion = clamp_emotion(self.emotion)
+
+        # 包 13：分层应对 + starving 标记（不 exit、不写 checkpoint）
+        try:
+            from qi.stasis.pressure import compute_pressure, maybe_mark_starving
+
+            sens = float(
+                (self.config.get("stasis") or {}).get("pressure_sensitivity", 1.0)
+            )
+            starve_beats = int(
+                (self.config.get("stasis") or {}).get("starve_beats", 30)
+            )
+            resp = compute_pressure(
+                self.ledger, self.emotion, sensitivity=sens
+            )
+            if resp.throttle > 0.3:
+                logger.debug(
+                    "内稳态节流倾向 throttle=%.2f energy=%.2f",
+                    resp.throttle,
+                    self.emotion.energy,
+                )
+            if resp.rest > 0.3:
+                logger.debug(
+                    "内稳态休眠倾向 rest=%.2f energy=%.2f",
+                    resp.rest,
+                    self.emotion.energy,
+                )
+            await maybe_mark_starving(
+                self.ledger,
+                self.emotion,
+                self.heartbeat_count,
+                db=self._db,
+                starve_beats=starve_beats,
+                sensitivity=sens,
+                now=now,
+            )
+        except Exception:
+            logger.debug("内稳态压力更新失败", exc_info=True)
 
         # 包 10：learning-progress 好奇（情绪步进之后、内在生命/GWS 之前）
         try:
