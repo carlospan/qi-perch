@@ -228,6 +228,41 @@ async def test_proactive_candidate_in_collect():
 
 
 @pytest.mark.asyncio
+async def test_close_loop_contender_when_open_loops_present():
+    """补丁 D：非空 open_loops → collect 注入 close_loop 且 sal>0。"""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        from qi.memory.open_loops import OpenLoopQueue
+
+        q = OpenLoopQueue(db)
+        await q.enqueue("silence", seed="")
+        assert q.count() >= 1
+
+        brain = Brain({"tts": {"enabled": False}}, _StubLLM())  # type: ignore[arg-type]
+        brain._db = db
+        brain.action = None
+        brain.inner_life = None
+        brain.user_online = True
+        brain.emotion = EmotionState(valence=0.2, energy=0.6)
+        brain.last_interaction = datetime.now() - timedelta(seconds=60)
+        now = datetime.now()
+        cands = await collect_contenders(
+            brain,
+            pending=None,
+            want_express=False,
+            kind=None,
+            action_type=None,
+            now=now,
+        )
+        close = [c for c in cands if c.kind == "close_loop"]
+        assert close
+        assert close[0].salience > 0
+        assert salience_close_loop(open_loop_count=1) > 0
+        await db.close()
+
+
+@pytest.mark.asyncio
 async def test_fake_provider_still_writes_broadcast():
     """拔管：LLM 全失败时痕迹仍落盘。"""
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:

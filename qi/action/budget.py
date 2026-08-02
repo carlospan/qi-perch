@@ -6,9 +6,9 @@ from datetime import datetime
 from typing import Any
 
 # 言语主动日限是 3（ProactiveGate / contract 第 28 条）。
-# 自主行动默认 3 次/天（补丁 C；仍与言语日限对齐、可 YAML 覆盖）。
-# share / tend / explore / self_ops 共享这一预算。
-AUTONOMOUS_ACTION_DAILY_LIMIT = 3
+# 自主行动日限：默认 20。真实频率由可归档记忆量 / 独处门槛 /
+# 在线时长等闸门限定，日限仅作安全阀，不参与行为塑造。
+AUTONOMOUS_ACTION_DAILY_LIMIT = 20
 
 # 响应式协助（assist）是「回应」，不占自主预算，但仍受 permission 门控。
 

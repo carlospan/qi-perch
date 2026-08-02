@@ -95,7 +95,7 @@ def _append_self_ops(
 
     if can_journal(relationship_stage, scars):
         uptime = float(sensing_uptime_seconds or 0.0)
-        if open_loop_count > 0 or uptime >= 6 * 3600:
+        if open_loop_count > 0 or uptime >= 3 * 3600:
             pri = 0.24 * scale
             if open_loop_count > 0:
                 pri += min(0.1, 0.03 * open_loop_count)

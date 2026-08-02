@@ -59,8 +59,8 @@ async def test_actions_table_insert_and_list(db):
 
 
 def test_action_budget_tighter_than_speech_and_resets():
-    # 补丁 C：默认日限 3（与言语日限对齐）；仍可 YAML 收紧到 1
-    assert AUTONOMOUS_ACTION_DAILY_LIMIT == 3
+    # 默认日限 20（安全阀，远高真实触发）；仍可 YAML 收紧到 1
+    assert AUTONOMOUS_ACTION_DAILY_LIMIT == 20
     assert SEASON_ACTION_SCALE["winter"] == 0.2
     assert SEASON_ACTION_SCALE["spring"] == 1.0
 
