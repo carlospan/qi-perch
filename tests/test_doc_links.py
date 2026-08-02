@@ -180,6 +180,9 @@ def test_bare_name_file_rel_priority(tmp_path: Path):
     (tmp_path / "docs" / "a" / "README.md").write_text("# local", encoding="utf-8")
     src = tmp_path / "docs" / "a" / "x.md"
     src.write_text("见 [本地](README.md)", encoding="utf-8")
+    # 直接钉死解析目标：必须落到同目录 README，而非根 README（防假绿）
+    resolved = cdl._resolve_target(src, "README.md", tmp_path)
+    assert resolved == (tmp_path / "docs" / "a" / "README.md").resolve()
     assert cdl.check_file(src, tmp_path) == []
 
 
