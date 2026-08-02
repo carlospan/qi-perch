@@ -46,7 +46,29 @@ def test_salience_boundaries():
     assert salience_action(priority=0.0) == 0.0
     assert salience_action(priority=1.0) == 1.0
     assert salience_close_loop(open_loop_count=0) == 0.0
+    assert salience_close_loop(open_loop_count=1) >= 0.3
     assert salience_close_loop(open_loop_count=5) == 1.0
+
+
+def test_salience_report_uptime_three_hours():
+    from qi.core.trace import salience_report
+
+    assert (
+        salience_report(
+            energy=0.6,
+            security=0.5,
+            uptime_seconds=3 * 3600 + 1,
+        )
+        > 0
+    )
+    assert (
+        salience_report(
+            energy=0.6,
+            security=0.5,
+            uptime_seconds=2 * 3600,
+        )
+        == 0.0
+    )
 
 
 def test_winner_from_legacy_pending_beats_higher_salience():

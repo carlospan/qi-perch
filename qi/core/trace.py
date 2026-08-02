@@ -52,8 +52,11 @@ def salience_action(*, priority: float) -> float:
 
 
 def salience_close_loop(*, open_loop_count: int) -> float:
-    """未闭合念头：积压 0→0，满 5→1。"""
-    return _clamp01(int(open_loop_count) / 5.0)
+    """未闭合念头：积压 0→0；≥1 给 baseline 0.3；满 5→1（补丁 C）。"""
+    n = int(open_loop_count)
+    if n <= 0:
+        return 0.0
+    return _clamp01(max(0.3, n / 5.0))
 
 
 def salience_proactive_express(*, want_express: bool) -> float:
@@ -96,7 +99,7 @@ def salience_report(
     energy: float,
     security: float,
     uptime_seconds: float | None = None,
-    uptime_report_seconds: float = 6 * 3600,
+    uptime_report_seconds: float = 3 * 3600,
 ) -> float:
     """极简内稳态报告：低能量、低安全、或在线过久才响。"""
     score = 0.0
@@ -105,9 +108,9 @@ def salience_report(
     if security < 0.35:
         score = max(score, 0.4 + (0.35 - security))
     if uptime_seconds is not None and uptime_seconds >= uptime_report_seconds:
-        # 包 8：在线过久略抬 report，不另开 LLM
+        # 补丁 C：在线>3h 给 baseline 0.3；不另开 LLM
         overtime = (uptime_seconds - uptime_report_seconds) / 3600.0
-        score = max(score, _clamp01(0.42 + min(0.2, overtime * 0.05)))
+        score = max(score, _clamp01(0.3 + min(0.2, overtime * 0.05)))
     return _clamp01(score)
 
 
@@ -143,7 +146,7 @@ def salience(kind: str, **signals: Any) -> float:
             security=float(signals.get("security") or 0.5),
             uptime_seconds=float(uptime) if uptime is not None else None,
             uptime_report_seconds=float(
-                signals.get("uptime_report_seconds") or 6 * 3600
+                signals.get("uptime_report_seconds") or 3 * 3600
             ),
         )
     return 0.0
@@ -485,7 +488,7 @@ async def collect_contenders(
         )
         delta = abs(brain.emotion.attachment - att_base)
         reason = f"内稳态压力 energy/security；attΔ={delta:.2f}"
-        if uptime_s is not None and uptime_s >= 6 * 3600:
+        if uptime_s is not None and uptime_s >= 3 * 3600:
             reason += f"；在线过久 {uptime_s / 3600:.1f}h"
         candidates.append(
             Contender(

@@ -57,6 +57,57 @@ def looks_like_help_request(message: str | None) -> bool:
     return any(cue in text for cue in _HELP_REQUEST_CUES)
 
 
+def _append_self_ops(
+    out: list[ActionIntention],
+    *,
+    relationship_stage: str,
+    scars: list[dict] | None,
+    scale: float,
+    archivable_count: int,
+    open_loop_count: int,
+    sensing_uptime_seconds: float | None,
+    energy: float | None,
+    curiosity: float,
+    budget: ActionBudget,
+) -> None:
+    """低打扰自反动作：solitary/ambient/awake 共用条件。"""
+    if archivable_count > 0 and can_archive(relationship_stage, scars):
+        out.append(
+            ActionIntention(
+                kind=KIND_ARCHIVE,
+                priority=0.28 * scale,
+                reason=f"有 {archivable_count} 段可轻轻收起的记忆",
+            )
+        )
+
+    if can_budget_tune(relationship_stage, scars):
+        energy_v = 0.6 if energy is None else float(energy)
+        extreme = curiosity >= 0.75 or energy_v < 0.35
+        drifted = not budget.weights_neutral()
+        if extreme or drifted:
+            out.append(
+                ActionIntention(
+                    kind=KIND_BUDGET_TUNE,
+                    priority=0.26 * scale,
+                    reason="重新掂量今天伸手的分寸",
+                )
+            )
+
+    if can_journal(relationship_stage, scars):
+        uptime = float(sensing_uptime_seconds or 0.0)
+        if open_loop_count > 0 or uptime >= 6 * 3600:
+            pri = 0.24 * scale
+            if open_loop_count > 0:
+                pri += min(0.1, 0.03 * open_loop_count)
+            out.append(
+                ActionIntention(
+                    kind=KIND_JOURNAL,
+                    priority=pri,
+                    reason="想给自己留一行内在笔记",
+                )
+            )
+
+
 def action_intentions(
     *,
     mode: str,
@@ -80,7 +131,8 @@ def action_intentions(
     返回本拍可考虑的行动意图（倾向，非硬触发）。
     优先级永远低于 respond：有 pending 时 brain 不调用本函数做自主行动。
 
-    - share / tend / explore / archive / budget_tune / journal：自主，占 ActionBudget。
+    - share / tend / explore：独处气质（solitary/ambient）；占 ActionBudget。
+    - archive / budget_tune / journal：自反，awake 亦可（补丁 C）。
     - assist：仅当用户明确请求才候选；不占自主预算；本阶段不执行（桩）。
     """
     if not user_online or mode == "dreaming":
@@ -99,12 +151,12 @@ def action_intentions(
             )
         )
 
-    # 自主行动：非 awake 独处气质更合适（solitary / ambient）；awake 偏对话
     solitary_like = mode in ("solitary", "ambient")
+    awake_self_ops = mode == "awake"
     can_auto = budget.can_autonomous(now)
     scale = max(0.0, min(1.0, float(season_scale)))
 
-    if can_auto and solitary_like and scale > 0:
+    if can_auto and scale > 0 and solitary_like:
         # share：有未递出创作 + friend+ + 情绪偏暖/好奇时更易
         if (
             has_undelivered_creation
@@ -142,7 +194,6 @@ def action_intentions(
             and can_explore(relationship_stage)
             and scar_caution_multiplier(KIND_EXPLORE, scars) > 0
         ):
-            # 好奇越高、季节越暖，优先级越高；多数拍仍由 ActionLayer 概率门控
             pri = (0.35 + (curiosity - 0.65) * 0.8) * scale
             pri *= budget.weight_for(KIND_EXPLORE)
             out.append(
@@ -153,47 +204,33 @@ def action_intentions(
                 )
             )
 
-        # archive：有可归档叙事时低优先级
-        if (
-            archivable_count > 0
-            and can_archive(relationship_stage, scars)
-        ):
-            out.append(
-                ActionIntention(
-                    kind=KIND_ARCHIVE,
-                    priority=0.28 * scale,
-                    reason=f"有 {archivable_count} 段可轻轻收起的记忆",
-                )
-            )
+        _append_self_ops(
+            out,
+            relationship_stage=relationship_stage,
+            scars=scars,
+            scale=scale,
+            archivable_count=archivable_count,
+            open_loop_count=open_loop_count,
+            sensing_uptime_seconds=sensing_uptime_seconds,
+            energy=energy,
+            curiosity=curiosity,
+            budget=budget,
+        )
 
-        # budget_tune：权重仍中性且好奇/能量偏极端时，或已偏离需再调
-        if can_budget_tune(relationship_stage, scars):
-            energy_v = 0.6 if energy is None else float(energy)
-            extreme = curiosity >= 0.75 or energy_v < 0.35
-            drifted = not budget.weights_neutral()
-            if extreme or drifted:
-                out.append(
-                    ActionIntention(
-                        kind=KIND_BUDGET_TUNE,
-                        priority=0.26 * scale,
-                        reason="重新掂量今天伸手的分寸",
-                    )
-                )
-
-        # journal：open_loop 或在线过久时略抬（仍低优；执行靠 GWS）
-        if can_journal(relationship_stage, scars):
-            uptime = float(sensing_uptime_seconds or 0.0)
-            if open_loop_count > 0 or uptime >= 6 * 3600:
-                pri = 0.24 * scale
-                if open_loop_count > 0:
-                    pri += min(0.1, 0.03 * open_loop_count)
-                out.append(
-                    ActionIntention(
-                        kind=KIND_JOURNAL,
-                        priority=pri,
-                        reason="想给自己留一行内在笔记",
-                    )
-                )
+    elif can_auto and scale > 0 and awake_self_ops:
+        # 补丁 C：对话中仅低频自反，不突兀伸手
+        _append_self_ops(
+            out,
+            relationship_stage=relationship_stage,
+            scars=scars,
+            scale=scale,
+            archivable_count=archivable_count,
+            open_loop_count=open_loop_count,
+            sensing_uptime_seconds=sensing_uptime_seconds,
+            energy=energy,
+            curiosity=curiosity,
+            budget=budget,
+        )
 
     out.sort(key=lambda i: i.priority, reverse=True)
     return out

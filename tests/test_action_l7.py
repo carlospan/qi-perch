@@ -59,7 +59,8 @@ async def test_actions_table_insert_and_list(db):
 
 
 def test_action_budget_tighter_than_speech_and_resets():
-    assert AUTONOMOUS_ACTION_DAILY_LIMIT == 1
+    # 补丁 C：默认日限 3（与言语日限对齐）；仍可 YAML 收紧到 1
+    assert AUTONOMOUS_ACTION_DAILY_LIMIT == 3
     assert SEASON_ACTION_SCALE["winter"] == 0.2
     assert SEASON_ACTION_SCALE["spring"] == 1.0
 
@@ -123,7 +124,8 @@ def test_assist_only_when_user_asks():
 
 
 def test_volition_share_gated_and_budget():
-    budget = ActionBudget({})
+    # 本测专门验「耗尽后无自主」；显式日限 1，避免跟补丁 C 默认 3 搅在一起
+    budget = ActionBudget({"action": {"autonomous_daily_limit": 1}})
     now = datetime(2026, 7, 23, 12, 0)
 
     # acquaintance 有创作也不 share（friend+）
@@ -263,7 +265,7 @@ async def test_deliver_excludes_from_unshared_and_traces(db):
     from qi.core.emotion import EmotionState
 
     crid = await db.save_creation("给风的一行", "poem", '{"valence": 0.2}')
-    budget = ActionBudget({})
+    budget = ActionBudget({"action": {"autonomous_daily_limit": 1}})
     now = datetime(2026, 7, 23, 15, 0)
     share = ShareAction(db, narrative=None)
     emotion = EmotionState()

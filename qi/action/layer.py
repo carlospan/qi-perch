@@ -22,6 +22,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("qi.action")
 
+# 补丁 C：awake 仅放行低打扰自反；share/tend/explore 仍需独处气质
+_AWAKE_SELF_OPS = frozenset({"archive", "journal", "budget_tune"})
+
 # 与 L5 SEASON_BEHAVIOR_HINTS 并列；可通过 config.action.season_scale 覆盖
 SEASON_ACTION_SCALE = {
     "spring": 1.0,
@@ -251,7 +254,10 @@ class ActionLayer:
         self.last_result = None
         if not user_online or mode == "dreaming":
             return None
-        if mode not in ("solitary", "ambient"):
+        if mode == "awake":
+            if kind not in _AWAKE_SELF_OPS:
+                return None
+        elif mode not in ("solitary", "ambient"):
             return None
         if not self.budget.can_autonomous(now):
             return None
