@@ -183,6 +183,25 @@ def test_recall_relation_not_inverted():
     assert not any("施教关系反转" in v for v in ok)
 
 
+def test_incidental_memory_relation_must_and_soft_assert():
+    """补丁 B：道晚安顺带提记忆——act≠recall 仍注入施教约束。"""
+    card = build_intention_card(
+        channel="dialogue",
+        user_message="我要睡觉了",
+        emotion=EmotionState(),
+        relationship_stage="bonded",
+        assessment=ImpactAssessment(impact=0.1, intent="neutral"),
+        memories=[{"content": _NARRATIVE_ID4}],
+    )
+    assert card.act != "recall"
+    assert card.recall_relation == "taught_by_qi"
+    assert any("施教关系" in m and "不得反转" in m for m in card.must)
+    bad = assert_reply_respects_card("记得你教我的那个方法吗", card)
+    assert any("施教关系反转" in v for v in bad)
+    ok = assert_reply_respects_card("记得。我教过你一个方法。", card)
+    assert not any("施教关系反转" in v for v in ok)
+
+
 def test_proactive_share_state_no_unsupported_self_view():
     card = build_intention_card(
         channel="proactive",

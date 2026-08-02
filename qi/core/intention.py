@@ -229,6 +229,7 @@ def _base_must(
     *,
     pretend_ok: bool,
     channel: str = "dialogue",
+    recall_relation: str | None = None,
 ) -> list[str]:
     must = [
         "不编造意向卡素材之外的事实",
@@ -246,7 +247,8 @@ def _base_must(
         must.append("不假装记得")
     if act == "answer" and pretend_ok is False:
         must.append("不知道就说不知道")
-    if act == "recall":
+    # 补丁 B：顺带提记忆（answer/free_talk）也注入施教关系底线
+    if act == "recall" or (recall_relation and act in ("answer", "free_talk")):
         must.append(_MUST_RECALL_RELATION)
         must.append("施教关系以卡内 relation 为准，不得反转")
     return must
@@ -338,6 +340,10 @@ def build_intention_card(
                 materials.append(Material(tag="none", text=""))
         else:
             act = default_act
+            if has_mem:
+                recall_relation = infer_recall_relation(memories)
+                if recall_relation:
+                    source_parts.append(f"rel={recall_relation}")
             if has_mem and act in ("free_talk", "acknowledge", "answer"):
                 content = str(memories[0].get("content") or "").strip()[:80]
                 if content and act == "answer":
@@ -358,7 +364,12 @@ def build_intention_card(
         for m in materials
     )
     pretend_ok = has_real_material
-    must = _base_must(act, pretend_ok=pretend_ok, channel=channel)
+    must = _base_must(
+        act,
+        pretend_ok=pretend_ok,
+        channel=channel,
+        recall_relation=recall_relation,
+    )
     if act == "answer" and not has_real_material:
         if "不知道就说不知道" not in must:
             must.append("不知道就说不知道")
