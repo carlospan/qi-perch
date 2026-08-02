@@ -1,5 +1,7 @@
 # 运行时数据与密钥
 data/
+# 经验回放语料（包 11）：本地产物不提交（已被 data/ 覆盖，显式确认）
+data/corpus/
 *.db
 *.db-journal
 config/settings.yaml
