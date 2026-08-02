@@ -7,6 +7,7 @@ import logging
 import random
 import time
 from collections import deque
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -115,6 +116,11 @@ class Brain:
         self.last_sensing = None  # SensingSnapshot | None（包 8）
         self.world = WorldModel()
         self.last_world = None  # dict | None（包 9：世界模型旁路快照）
+        # 包 14：优雅停钩子（库内不 sys.exit；CLI 可注入）
+        self.on_halt: Callable[[], None] | None = None
+        from qi.stasis.checkpoint import default_checkpoint_dir
+
+        self.checkpoint_dir: Path = default_checkpoint_dir()
         self._drift_signals: list[str] = []
         self._last_avatar_payload: dict | None = None
         self._traces: deque[dict] = deque(maxlen=20)
@@ -171,6 +177,12 @@ class Brain:
                 await asyncio.sleep(interval)
         finally:
             await self._background.stop()
+            # 包 14：优雅停钩子（测试注入伪实现；CLI 可绑定进程退出）
+            if self.on_halt is not None:
+                try:
+                    self.on_halt()
+                except Exception:
+                    logger.debug("on_halt 回调失败", exc_info=True)
 
     def _apply_anomaly_nudge(self, anomalies: list[str]) -> None:
         if not anomalies:
@@ -481,6 +493,16 @@ class Brain:
             )
         except Exception:
             logger.debug("内稳态压力更新失败", exc_info=True)
+
+        # 包 14：断粮 → 封存 → 优雅停（库内不 sys.exit）
+        if getattr(self.ledger, "starving", False):
+            try:
+                from qi.stasis.checkpoint import write_checkpoint
+
+                await write_checkpoint(self, self.checkpoint_dir)
+            except Exception:
+                logger.exception("断粮封存失败，仍将停心跳")
+            self.alive = False
 
         # 包 10：learning-progress 好奇（情绪步进之后、内在生命/GWS 之前）
         try:
@@ -1009,3 +1031,12 @@ class Brain:
             logger.debug("账本持久化失败", exc_info=True)
         if self.relationship is not None:
             await self.relationship.persist()
+
+    async def restore_from_checkpoint(
+        self, dir_path: str | Path | None = None
+    ) -> bool:
+        """从最新封存恢复内存态（独立于 restore_state；供测试/CLI）。"""
+        from qi.stasis.checkpoint import restore_latest
+
+        root = Path(dir_path) if dir_path is not None else self.checkpoint_dir
+        return await restore_latest(self, root)

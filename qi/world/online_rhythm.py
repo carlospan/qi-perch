@@ -105,3 +105,31 @@ class OnlineRhythm:
             "surprise": round(float(surp), 6),
             "bucket": bucket,
         }
+
+    def export_state(self) -> dict[str, Any]:
+        """封存用完整状态（桶计数 + 旁路缓存）。"""
+        return {
+            "buckets": {k: dict(v) for k, v in self._buckets.items()},
+            "last_surprise": self._last_surprise,
+            "last_predicted": self._last_predicted,
+            "last_bucket": self._last_bucket,
+        }
+
+    def restore(self, data: dict[str, Any] | None) -> None:
+        if not data:
+            return
+        buckets = data.get("buckets")
+        if isinstance(buckets, dict):
+            cleaned: dict[str, dict[str, int]] = {}
+            for k, v in buckets.items():
+                if not isinstance(v, dict):
+                    continue
+                cleaned[str(k)] = {
+                    "s": int(v.get("s", 0) or 0),
+                    "f": int(v.get("f", 0) or 0),
+                }
+            self._buckets = cleaned
+        self._last_surprise = float(data.get("last_surprise") or 0.0)
+        self._last_predicted = float(data.get("last_predicted") or 0.5)
+        self._last_bucket = str(data.get("last_bucket") or "")
+        self._loaded = True

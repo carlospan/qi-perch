@@ -368,6 +368,14 @@ class ActionLayer:
             )
         }
 
+    def snapshot(self) -> dict:
+        """封存用：委托 ActionBudget（包 14）。"""
+        return self.budget.snapshot()
+
+    def restore(self, data: dict | None) -> None:
+        """封存恢复：委托 ActionBudget（包 14）。"""
+        self.budget.restore(data)
+
     async def persist_budget(self) -> None:
         try:
             await self.db.set_body_memory(BODY_MEMORY_KEY, self.budget.snapshot())

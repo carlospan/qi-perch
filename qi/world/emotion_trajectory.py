@@ -159,3 +159,44 @@ class EmotionTrajectory:
                 for d in TRACKED_DIMS
             },
         }
+
+    def export_state(self) -> dict[str, Any]:
+        """封存用完整状态（last + deltas 窗口）。"""
+        return {
+            "last": dict(self._last),
+            "deltas": {d: list(self._deltas[d]) for d in TRACKED_DIMS},
+            "last_surprise": dict(self._last_surprise),
+            "last_predicted": dict(self._last_predicted),
+        }
+
+    def restore(self, data: dict[str, Any] | None) -> None:
+        if not data:
+            return
+        last = data.get("last")
+        if isinstance(last, dict):
+            self._last = {
+                d: float(last[d]) for d in TRACKED_DIMS if d in last
+            }
+        deltas = data.get("deltas")
+        if isinstance(deltas, dict):
+            for dim in TRACKED_DIMS:
+                seq = deltas.get(dim)
+                if isinstance(seq, list):
+                    dq: deque[float] = deque(maxlen=_WINDOW)
+                    for x in seq[-_WINDOW:]:
+                        try:
+                            dq.append(float(x))
+                        except (TypeError, ValueError):
+                            continue
+                    self._deltas[dim] = dq
+        surp = data.get("last_surprise")
+        if isinstance(surp, dict):
+            self._last_surprise = {
+                d: float(surp.get(d, 0.0) or 0.0) for d in TRACKED_DIMS
+            }
+        pred = data.get("last_predicted")
+        if isinstance(pred, dict):
+            self._last_predicted = {
+                d: float(pred.get(d, 0.0) or 0.0) for d in TRACKED_DIMS
+            }
+        self._loaded = True
