@@ -8,7 +8,7 @@
 | L3 | 情绪完善 | 🌱 在养 | 2026-07-21 | 2026-07-21 | 耦合/天气/节律/频率/模式切换已接入；日噪声 md5 稳定；expression_threshold 可 YAML 覆盖；`COUPLING_STAGE_SCALE`；感受验证暂缓（待补） |
 | L4 | 内在生命 | 🌱 在养 | 2026-07-21 | 2026-07-21 | 意识流/梦/创作/自我反思已接入；提起 vs 递出已拆分（mentioned_at）；ambient_drift+冷却、waking+余烬、emotion_residue；`last_journal_entries` 实时推送；感受验证暂缓 |
 | L5 | 关系 | 🌱 在养 | 2026-07-21 | 2026-07-21 | 阶段/信任/文化/伤疤/第一次/季节/漂移已接入；first_compliment 不含光秃「谢谢你」；F1 `RECALL_MIN_AGE`；F2 冷启动不测共同沉默；N3b 内在体验禁呼吸/心跳；`last_recorded`；感受验证暂缓（待补） |
-| L6 | 具身 | 🌱 在养 | 2026-07-21 | 2026-07-21 | 黄昏的枝 + Live2D；420×680；情绪→氛围/脸色；谈=`/history`；忆=`/journal` + `journal_entry` 实时；`action` 卡片 UI 未做。启动：`qi-desktop` + `npm run tauri:dev`。见 `docs/dev/换机搭建.md` §5 |
+| L6 | 具身 | 🌱 在养 | 2026-07-21 | 2026-07-21 | 黄昏的枝 + Live2D；420×680；情绪→氛围/脸色；谈=`/history`；忆=`/journal` + `journal_entry` 实时；`action` 卡片 UI 未做。启动：`qi-desktop` + `npm run tauri:dev`。见 `docs/how-to/换机搭建.md` §5 |
 | L7 | 行动 | 🌱 在养 | 2026-07-23 | 2026-07-23 | 第一版骨架已接入：ActionBudget / volition / permission / share·tend·explore / ActionLayer + brain 接线（WS `action` + creation_card 开口）。未做：assist 执行、irreversible、伤疤失败接线、真实搜索、L6 卡片 UI。见 L7-action.md |
 
 状态说明：

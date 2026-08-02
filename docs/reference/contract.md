@@ -1,4 +1,4 @@
-<!-- 现行路径：reference/contract.md（原 docs/contract.md，2026-08-02 重构迁移；正文未改） -->
+<!-- 现行路径：reference/contract.md（原 docs/reference/contract.md，2026-08-02 重构迁移；正文未改） -->
 
 # 栖 · 人格契约
 
@@ -129,4 +129,5 @@
 ---
 
 *栖 · 人格契约 · 完*
+
 
