@@ -35,6 +35,9 @@ qi-desktop = "qi.cli:main_desktop"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# 固化 CI/跨平台正确姿势：禁用缓存提供方 + 把临时目录放到仓库内 .pytest-tmp，
+# 规避 Windows 系统临时区清理时的 PermissionError 误报（详见 tools/verify_package.py）。
+addopts = "-p no:cacheprovider --basetemp=.pytest-tmp"
 
 [build-system]
 requires = ["setuptools>=68"]
