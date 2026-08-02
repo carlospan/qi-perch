@@ -107,10 +107,12 @@ CREATE TABLE IF NOT EXISTS actions (
 ```python
 # qi/action/budget.py
 # <!-- 回写(2026-07-23)：ActionBudget 与 ProactiveGate 同构（can_autonomous/record/snapshot/restore）；
-#      默认日限 1；持久化 key body_memory「action_budget」；config.action.autonomous_daily_limit。
+#      持久化 key body_memory「action_budget」；config.action.autonomous_daily_limit。
 #      依据：qi/action/budget.py、qi/config/settings.example.yaml -->
+# <!-- 演进指向(2026-08-02)：原「默认日限 1」已改。阶段二·补丁 C 放宽至 3、真机实测日限非瓶颈（archive 受可归档记忆量卡、journal/close_loop 受门槛卡），
+#      维护者裁定日限=20（远高真实触发上限、仅作安全阀，不塑造行为）；代码常量/settings.yaml/settings.example.yaml 三处一致为 20。见 docs/progress.md 已拍板决策。 -->
 
-AUTONOMOUS_ACTION_DAILY_LIMIT = 1   # 紧于言语日限 3；可经 config 覆盖
+AUTONOMOUS_ACTION_DAILY_LIMIT = 20   # 远高真实触发上限，仅作安全阀；可经 config 覆盖
 
 class ActionBudget:
     def can_autonomous(self, now) -> bool: ...

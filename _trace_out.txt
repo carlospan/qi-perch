@@ -1,0 +1,32 @@
+全量拍数: 327
+自主胜出拍数 (winner_kind 非 respond/idle): 5
+======================================================================
+[OK ] id=162 kind=action:archive sal=0.14 ts=2026-08-02T13:39:43
+      winner=action:archive sal=0.14 reason=有 3 段可轻轻收起的记忆
+      candidate: action:archive sal=0.14 reason=有 3 段可轻轻收起的记忆
+      motive: {'homeostasis': {'energy': 0.5828, 'security': 0.7042, 'attachment': 0.6456, 'valence': -0.1432}, 'curiosity': 0.5719, '
+
+[OK ] id=163 kind=action:archive sal=0.14 ts=2026-08-02T13:39:47
+      winner=action:archive sal=0.14 reason=有 1 段可轻轻收起的记忆
+      candidate: action:archive sal=0.14 reason=有 1 段可轻轻收起的记忆
+      motive: {'homeostasis': {'energy': 0.5828, 'security': 0.7047, 'attachment': 0.6449, 'valence': -0.1434}, 'curiosity': 0.5718, '
+
+[OK ] id=197 kind=action:archive sal=0.14 ts=2026-08-02T13:54:54
+      winner=action:archive sal=0.14 reason=有 1 段可轻轻收起的记忆
+      candidate: action:archive sal=0.14 reason=有 1 段可轻轻收起的记忆
+      motive: {'homeostasis': {'energy': 0.5917, 'security': 0.659, 'attachment': 0.6507, 'valence': -0.0922}, 'curiosity': 0.6437, 'e
+
+[OK ] id=255 kind=action:archive sal=0.14 ts=2026-08-02T14:21:27
+      winner=action:archive sal=0.14 reason=有 1 段可轻轻收起的记忆
+      candidate: action:archive sal=0.14 reason=有 1 段可轻轻收起的记忆
+      motive: {'homeostasis': {'energy': 0.63, 'security': 0.6714, 'attachment': 0.6588, 'valence': -0.0625}, 'curiosity': 0.6129, 'ex
+
+[OK ] id=285 kind=action:archive sal=0.14 ts=2026-08-02T14:36:38
+      winner=action:archive sal=0.14 reason=有 1 段可轻轻收起的记忆
+      candidate: action:archive sal=0.14 reason=有 1 段可轻轻收起的记忆
+      motive: {'homeostasis': {'energy': 0.6173, 'security': 0.6925, 'attachment': 0.6525, 'valence': -0.133}, 'curiosity': 0.5773, 'e
+
+======================================================================
+因果链清晰: 5/5 (ratio=1.00)
+【结果】样本不足（5<10），判据#2 暂未满足。
+建议：继续让栖独处运行，积累更多自主拍后重跑。
