@@ -220,6 +220,13 @@ def motive_snapshot(
             float(world.get("online_rhythm", {}).get("surprise", 0.0)),
             4,
         )
+        if isinstance(world, dict):
+            et = world.get("emotion_trajectory") or {}
+            surp = et.get("surprise") or {}
+            if isinstance(surp, dict) and surp:
+                snap["emotion_trajectory_surprise"] = {
+                    k: round(float(v), 4) for k, v in surp.items()
+                }
     closed = None
     if brain.action is not None:
         closed = getattr(brain.action, "last_closed_loop", None)
