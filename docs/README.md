@@ -62,9 +62,9 @@
 
 ## 五、SDD 流程入口
 
-- 写 spec / 防 drift 规范：`specs/SDD-GUIDE.md`
+- 写 spec / 防 drift 规范：`specs/SDD-GUIDE.md`（含**双 Agent 协作分工**：CodeBuddy 出方案、Cursor 执行编码）
 - 验收契约（五测试 + 生命感监护）：`specs/acceptance.md`
-- 任务包模板：`specs/tasks/_template.md`
+- 任务包模板：`specs/tasks/_template.md`（已内置分工说明）
 - 进行中任务：`specs/tasks/`；闭环归档：`specs/archive/`
 
 ---
