@@ -4,7 +4,7 @@
 > **依据**：`specs/tasks/2026-08-02-阶段三-主线.md`、`specs/stages/stage-3.md`、架构方案 §五 阶段三 / §九 Q3、`progress.md` 已拍板决策。  
 > **撰写**：CodeBuddy（2026-08-02）  
 > **纪律**：本文件仅为评审请求，未改任务包以外任何文件。  
-> **协作分工**：CodeBuddy 出方案/协调，Cursor 执行编码；见阶段三主线文档「协作分工」段（减少双方负担）。
+> **协作分工**：方案 Agent（CodeBuddy / Codex 等）出方案/协调，Cursor 固定执行编码；见阶段三主线文档「协作分工」段 / `specs/SDD-GUIDE.md` 第二节（减少双方负担）。
 > **待读文件**：主依据 `specs/tasks/2026-08-02-阶段三-主线.md`（任务包本体，含包 9/10/11 与 HITL 批点）、`specs/stages/stage-3.md`（退出判据权威）、`explanation/栖·数字生命架构方案.md` §五 阶段三 / §九 Q3、`progress.md` 已拍板决策。
 
 ---
