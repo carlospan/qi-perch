@@ -419,9 +419,13 @@ class ConsciousnessStream:
         dream = await self.db.load_latest_dream(min_retention=0.3)
         dream_text = dream["content"][:100] if dream else "没有记得的梦"
 
+        from qi.core.intention import anchor_teaching_relation
+
+        recent_msgs = await self.db.load_recent_messages(limit=20)
+        relation_hint = anchor_teaching_relation(recent_msgs)
+
         if trigger in _EMBER_TRIGGERS:
-            recent_msgs = await self.db.load_recent_messages(limit=8)
-            chat_embers = format_chat_embers(recent_msgs)
+            chat_embers = format_chat_embers(recent_msgs[-8:])
         else:
             chat_embers = "（此刻不主动翻交谈；让念头自己来）"
 
@@ -465,6 +469,8 @@ class ConsciousnessStream:
                 season_hint=season_hint,
                 identity_snapshot=identity_snapshot,
                 recent_memories=mem_text,
+                relation_hint=relation_hint
+                or "（无相关施教记忆，不要虚构方法或方向）",
                 open_loop=open_loop_text,
                 pending_thoughts=pending_text,
                 last_dream=dream_text,

@@ -526,3 +526,78 @@ async def test_dream_retention_unaffected_by_consolidation():
         dreams = await db.list_dreams()
         assert dreams and float(dreams[0]["retention"]) <= 1.0
         await db.close()
+
+
+def test_anchor_teaching_relation_qi_taught_sleep():
+    """包 15：栖教用户助眠 → taught_by_qi，且不含虚构「数到七」。"""
+    from qi.core.intention import anchor_teaching_relation
+
+    msgs = [
+        {"role": "user", "content": "晚上又睡不着"},
+        {
+            "role": "qi",
+            "content": "可以试试躺着，不强迫自己睡，看天花板，允许自己醒着。",
+        },
+        {"role": "user", "content": "你教了我一个方法"},
+    ]
+    hint = anchor_teaching_relation(msgs)
+    assert "taught_by_qi" in hint
+    assert "栖教用户" in hint
+    # 原话引用不得把「数到七」写成真实方法（否定句里可点名禁止）
+    quote = hint.split("原话是「", 1)[1].split("」", 1)[0]
+    assert "数到七" not in quote
+    assert "躺着" in quote or "不强迫" in quote
+
+
+def test_anchor_teaching_relation_user_taught_qi():
+    """包 15：用户教栖 → learned_from_user。"""
+    from qi.core.intention import anchor_teaching_relation
+
+    msgs = [
+        {"role": "user", "content": "我教你一个入睡方法：先听雨声。"},
+        {"role": "qi", "content": "好，我记住这个方法。"},
+    ]
+    hint = anchor_teaching_relation(msgs)
+    assert "learned_from_user" in hint
+    assert "用户教栖" in hint
+
+
+def test_anchor_teaching_relation_no_topic():
+    """包 15：无施教/助眠话题 → 空串。"""
+    from qi.core.intention import anchor_teaching_relation
+
+    msgs = [
+        {"role": "user", "content": "今天天气不错"},
+        {"role": "qi", "content": "嗯，亮堂一点。"},
+    ]
+    assert anchor_teaching_relation(msgs) == ""
+
+
+@pytest.mark.asyncio
+async def test_consciousness_prompt_injects_teaching_relation_anchor():
+    """包 15：generate 的 prompt 含施教锚定占位，且 relation_hint 非空。"""
+    from qi.core.emotion import ConsciousnessMode
+    from qi.inner_life.consciousness import ConsciousnessStream
+
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        await db.save_message("user", "晚上又睡不着")
+        await db.save_message(
+            "qi", "可以试试躺着，不强迫自己睡，看天花板。"
+        )
+        await db.save_message("user", "你教了我一个方法")
+        llm = _ScriptedLLM(["你教我的方法……数到七……"])
+        stream = ConsciousnessStream(db, llm, config={})
+        emotion = EmotionState(mode=ConsciousnessMode.SOLITARY)
+        text = await stream.generate(
+            emotion, timedelta(minutes=30), "silence"
+        )
+        assert text is not None
+        assert llm.calls
+        prompt = llm.calls[0]["messages"][1]["content"]
+        assert "施教关系锚定" in prompt
+        assert "taught_by_qi" in prompt
+        assert "数到七" in prompt  # 硬约束句提及；锚定原文不含虚构方法细节
+        assert "不得添加锚定里没有的细节" in prompt
+        await db.close()

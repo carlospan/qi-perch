@@ -51,6 +51,7 @@ EXPECTED: dict[str, set[str]] = {
         "season_hint",
         "identity_snapshot",
         "recent_memories",
+        "relation_hint",
         "open_loop",
         "pending_thoughts",
         "last_dream",

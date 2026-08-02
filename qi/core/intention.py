@@ -184,6 +184,84 @@ def infer_recall_relation(memories: list[dict] | None) -> str | None:
     return None
 
 
+_TOPIC_RE = re.compile(r"教|方法|入睡|睡不着|呼吸|睡")
+_SLEEP_ADVICE_RE = re.compile(r"躺着|不强迫|看天花板|允许自己")
+# 对话视角：用户自称在教栖（与叙事视角的 _LEARNED_FROM_USER_RE 互补）
+_USER_TEACHES_QI_RE = re.compile(r"我教你|我教了你|教你一个|教给你|跟我学")
+# 用户承认「你（栖）教了我」——佐证 taught_by_qi，不是 learned_from_user
+_USER_ACK_QI_TAUGHT_RE = re.compile(r"你教了我|你教过我|你教的(?:那个)?方法")
+
+
+def _is_qi_role(role: str) -> bool:
+    return role in ("qi", "assistant")
+
+
+def anchor_teaching_relation(messages: list[dict]) -> str:
+    """从真实对话（含 role 的 messages）推断助眠/施教方向，返回一句话锚定。
+
+    只读 messages，不写库。无相关话题返回空串。
+    - 扫含「教/方法/入睡/睡不着/呼吸/睡」的 user/assistant 消息；
+    - assistant/qi（栖）对用户说助眠建议（躺着/不强迫/看天花板/允许自己）→ taught_by_qi；
+    - user 说「我教你/教给你」且栖发言有话题佐证 → learned_from_user；
+    - 冲突或不足 → 返回空串（不锚定，不瞎猜）。
+    """
+    if not messages:
+        return ""
+
+    topic_msgs = [
+        m
+        for m in messages
+        if isinstance(m, dict) and _TOPIC_RE.search(str(m.get("content") or ""))
+    ]
+    if not topic_msgs:
+        return ""
+
+    qi_hits = 0
+    user_hits = 0
+    sleep_quotes: list[str] = []
+    qi_topic_ok = False
+
+    for m in topic_msgs:
+        role = str(m.get("role") or "")
+        content = str(m.get("content") or "").strip()
+        if not content:
+            continue
+        if _is_qi_role(role):
+            qi_topic_ok = True
+            if _SLEEP_ADVICE_RE.search(content):
+                qi_hits += 2
+                sleep_quotes.append(content[:60])
+            if _TAUGHT_BY_QI_RE.search(content):
+                qi_hits += 1
+        elif role == "user":
+            if _USER_ACK_QI_TAUGHT_RE.search(content):
+                qi_hits += 1
+            if _USER_TEACHES_QI_RE.search(content):
+                user_hits += 2
+            # 叙事口吻残留（少见）：「你教我」若出自用户则是承认栖教，已由 ACK 覆盖
+
+    # learned_from_user 需栖侧话题佐证，避免单句瞎猜
+    if user_hits > 0 and not qi_topic_ok:
+        user_hits = 0
+
+    if qi_hits > 0 and user_hits > 0:
+        return ""
+    if qi_hits > 0:
+        quote = "、".join(sleep_quotes[:2]) if sleep_quotes else "（见近聊助眠建议）"
+        # 显式排除易漂移虚构细节；含 taught_by_qi 便于验收断言
+        return (
+            f"关于入睡方法：是你（栖）教给用户的，不是用户教你的；"
+            f"原话是「{quote}」，没有「数呼吸/数到七」。"
+            f"{_RELATION_HINT['taught_by_qi']}（taught_by_qi）"
+        )
+    if user_hits > 0:
+        return (
+            f"关于方法：是用户教给你（栖）的，不是你教用户的。"
+            f"{_RELATION_HINT['learned_from_user']}（learned_from_user）"
+        )
+    return ""
+
+
 def _short_emotion(emotion: EmotionState) -> str:
     desc = emotion.description()
     if len(desc) > 24:
