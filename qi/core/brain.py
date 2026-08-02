@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import time
 from collections import deque
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from qi.action import ActionLayer
@@ -52,6 +54,15 @@ from qi.memory.open_loops import OpenLoopQueue
 from qi.relationship import RelationshipEngine
 from qi.relationship.scars import ScarManager
 from qi.relationship.season import apply_season_effect
+from qi.stasis.ledger import (
+    ATTEMPT_TOKEN_COST,
+    MEM_RETRIEVAL_TOKEN_COST,
+    STORAGE_ESTIMATE_EVERY_N_BEATS,
+    ResourceLedger,
+)
+from qi.stasis.ledger import (
+    BODY_MEMORY_KEY as LEDGER_BODY_KEY,
+)
 from qi.world import WorldModel
 
 if TYPE_CHECKING:
@@ -98,7 +109,9 @@ class Brain:
         self._accumulated_suppressed = 0.0
         self.proactive = ProactiveGate(config)
         self.proactive_queue: asyncio.Queue[str] = asyncio.Queue()
+        # ActionBudget 日限 = 安全阀，不计入 C2 账本余额；两者并存，职责分离
         self.action: ActionLayer | None = None
+        self.ledger = ResourceLedger()  # N0 资源账本（包 12）；压力动力学归包 13
         self.last_sensing = None  # SensingSnapshot | None（包 8）
         self.world = WorldModel()
         self.last_world = None  # dict | None（包 9：世界模型旁路快照）
@@ -258,13 +271,47 @@ class Brain:
         except Exception:
             logger.exception("对话首轮 prefer_close 出错")
 
+    def _ledger_token_cost_for_text(self, text: str | None) -> int:
+        if text and str(text).strip():
+            return max(1, len(str(text)) // 4)
+        return ATTEMPT_TOKEN_COST
+
+    def _ledger_safe_add_tokens(self, n: int) -> None:
+        try:
+            self.ledger.add_token_cost(int(n))
+        except Exception:
+            logger.debug("账本 token 记账失败", exc_info=True)
+
+    def _ledger_safe_credit_interaction(self, now: datetime) -> None:
+        try:
+            self.ledger.credit_income("effective_interaction", now=now)
+        except Exception:
+            logger.debug("账本收入记账失败", exc_info=True)
+
+    def _ledger_maybe_estimate_storage(self) -> None:
+        try:
+            if self.heartbeat_count % STORAGE_ESTIMATE_EVERY_N_BEATS != 0:
+                return
+            if self._db is None:
+                return
+            path = Path(getattr(self._db, "db_path", "") or "")
+            if path.is_file():
+                self.ledger.estimate_storage(path.stat().st_size)
+        except Exception:
+            logger.debug("账本 storage 估算失败", exc_info=True)
+
     async def _heartbeat(self) -> str | None:
+        t0 = time.perf_counter()
         self.heartbeat_count += 1
         from qi.inner_life.identity_snapshot import note_snapshot_beat
         from qi.sensing import collect as collect_sensing
 
         note_snapshot_beat()
         now = datetime.now()
+        try:
+            self.ledger.tick_window(self.heartbeat_count)
+        except Exception:
+            logger.debug("账本窗口推进失败", exc_info=True)
         try:
             self.last_sensing = collect_sensing(
                 heartbeat_count=self.heartbeat_count, now=now
@@ -298,12 +345,16 @@ class Brain:
         )
 
         if pending is not None:
+            # 包 12：有效交互收入（R3：非满意度）；防刷在 ledger 内
+            self._ledger_safe_credit_interaction(now)
             # 感知先于关系：同一拍 intent 供 trust/伤疤复用（阶段零·包 A）
             recent_for_impact: list[dict] = []
             if self.memory is not None:
                 recent_for_impact = self.memory.working.get_context()
+                self._ledger_safe_add_tokens(MEM_RETRIEVAL_TOKEN_COST)
             elif self._db is not None:
                 recent_for_impact = await self._db.load_recent_messages(limit=5)
+                self._ledger_safe_add_tokens(MEM_RETRIEVAL_TOKEN_COST)
 
             impact = await self.perception.assess_impact_async(
                 pending,
@@ -408,6 +459,7 @@ class Brain:
 
         if pending is not None:
             ctx = await self._gather_prompt_context(pending, now)
+            self._ledger_safe_add_tokens(MEM_RETRIEVAL_TOKEN_COST)  # 检索估算
             loops = await self._load_open_loops()
             card = build_intention_card(
                 channel="dialogue",
@@ -441,6 +493,8 @@ class Brain:
             finally:
                 self.avatar.set_thinking(False)
             await self._persist_intention(card)
+            # 包 12：说话 token（无 usage 则字符估算；空回复也记尝试成本）
+            self._ledger_safe_add_tokens(self._ledger_token_cost_for_text(response))
 
             if response:
                 self._pending_speech = _PendingSpeech(
@@ -497,12 +551,19 @@ class Brain:
         if self._db is not None:
             await self._maybe_save_emotion(now, force=pending is not None)
 
+        self._ledger_maybe_estimate_storage()
+        try:
+            self.ledger.add_compute(time.perf_counter() - t0)
+        except Exception:
+            logger.debug("账本 compute 记账失败", exc_info=True)
+
         self._last_response = response
         return response
 
     async def _speak_proactive(self, kind: str, now: datetime) -> str | None:
         """主动开口表达块——legacy / GWS 共用。"""
         ctx = await self._gather_prompt_context(None, now)
+        self._ledger_safe_add_tokens(MEM_RETRIEVAL_TOKEN_COST)
         cue = self.proactive.cue_for(kind)
         loops = await self._load_open_loops()
         card = build_intention_card(
@@ -538,6 +599,7 @@ class Brain:
         finally:
             self.avatar.set_thinking(False)
         await self._persist_intention(card)
+        self._ledger_safe_add_tokens(self._ledger_token_cost_for_text(response))
 
         if response:
             self.proactive.record(kind, now)
@@ -850,6 +912,9 @@ class Brain:
         saved_gate = await db.get_body_memory("proactive_gate")
         if isinstance(saved_gate, dict):
             self.proactive.restore(saved_gate)
+        ledger_data = await db.get_body_memory(LEDGER_BODY_KEY)
+        if isinstance(ledger_data, dict):
+            self.ledger.restore(ledger_data)
         saved = await db.load_emotion()
         if saved is not None:
             self.emotion = saved
@@ -887,5 +952,9 @@ class Brain:
         self._last_emotion_saved_at = datetime.now()
         await self._persist_proactive_gate()
         await self._persist_action_budget()
+        try:
+            await db.set_body_memory(LEDGER_BODY_KEY, self.ledger.snapshot())
+        except Exception:
+            logger.debug("账本持久化失败", exc_info=True)
         if self.relationship is not None:
             await self.relationship.persist()
