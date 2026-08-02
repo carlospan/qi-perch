@@ -12,8 +12,10 @@
 ## 脉络
 
 1. 阶段三已退出（判据 #1-真通过 2026-08-02 降级为观察项，不卡退出）
-2. 起草阶段四任务包 v1 → Cursor 交叉检验（进行中）
-3. 吸收意见 → 升 v2 → 逐包出 PR 方案（方案 Agent）→ Cursor 编码 → 方案 Agent 验收
+2. 起草阶段四任务包 v1 → Cursor 交叉检验（已回执意见）
+3. **吸收 Cursor 意见升 v2**（必改清单 1–5 全部写入正文，H1/H2/H3 按 Cursor 倾向定稿）
+4. 逐包出 PR 方案（方案 Agent）→ Cursor 编码 → 方案 Agent 验收
 
-> 进行中：阶段四任务包 v1 已落盘，Cursor 直接读 `docs/specs/` 目录文件即可，无需人工转发；待 Cursor 落盘交叉检验意见后，方案 Agent 吸收升 v2。
+> 已完成：阶段四任务包 v2 已落盘于 `specs/tasks/2026-08-02-阶段四-主线.md`，Cursor 直接读 `docs/specs/` 目录文件即可，无需人工转发。
 > 协作分工：方案 Agent 出方案/验收，Cursor 固定执行编码（详见 `specs/SDD-GUIDE.md` 第二节，减少双方负担）。
+> 交叉检验意见要点：包 13 必须「调制 energy 基线目标偏移」而非盖写（与现有目标趋近式 decay/circadian 共存）；包 13/14 职责切割、库内禁硬 `sys.exit`（注入 `on_halt`）；R3 白名单 + 防刷 + 多样应对权重 + 空壳 checkpoint 防假绿须落成断言。
