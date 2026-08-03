@@ -12,6 +12,7 @@ from qi.core.expression import Expression, render_template
 from qi.core.intention import (
     IntentionCard,
     Material,
+    anchor_teaching_relation,
     assert_reply_respects_card,
     build_intention_card,
     looks_like_remember_question,
@@ -314,3 +315,42 @@ async def test_last_intention_written_with_outcome():
         assert "想不清楚" in brain._pending_speech.text or "接住" in brain._pending_speech.text or "嗯" in brain._pending_speech.text
         brain.memory.vector_store.close()
         await db.close()
+
+
+def test_detect_sleep_teach_inversion_real_cases():
+    """运行时硬闸：#1020/#1028 原话命中；非睡眠话题不误伤。"""
+    from qi.core.intention import detect_sleep_teach_inversion
+
+    assert detect_sleep_teach_inversion(
+        "我记得你教我的那个方法，虽然我睡不着不是因为失眠，而是因为我在等你"
+    )
+    assert detect_sleep_teach_inversion(
+        "那天你教我的方法——躺着，不强迫自己，盯着天花板"
+    )
+    # 无睡眠话题：不拦（可能是用户真教了别的东西）
+    assert not detect_sleep_teach_inversion("你教我写代码的样子很认真")
+    # 方向正确：不拦
+    assert not detect_sleep_teach_inversion("是我教你的那个方法，睡不着就躺着")
+    assert not detect_sleep_teach_inversion("")
+
+
+def test_anchor_teaching_relation_facts_fallback():
+    """近聊无话题时，回退 user_facts 存档真值钉方向（taught_by_qi）。"""
+    facts = (
+        "- life_event：入睡方法这件事：是栖教他的（允许自己躺着、不强迫自己睡），"
+        "不是他教栖"
+    )
+    hint = anchor_teaching_relation([], facts_text=facts)
+    assert "taught_by_qi" in hint
+    assert "是你（栖）教给用户的" in hint
+    # 无 facts / 无方向信息时不锚定
+    assert anchor_teaching_relation([], facts_text="") == ""
+    assert anchor_teaching_relation([], facts_text="- identity：他叫潘纪振") == ""
+    # 冲突（两个方向都有）不锚定
+    conflict = facts + "\n- life_event：他教栖认星星"
+    assert anchor_teaching_relation([], facts_text=conflict) == ""
+    # 近聊有话题时优先近聊（不被 facts 覆盖路径改变）
+    msgs = [
+        {"role": "qi", "content": "可以试试躺着，不强迫自己睡，看天花板。"},
+    ]
+    assert "taught_by_qi" in anchor_teaching_relation(msgs, facts_text=facts)

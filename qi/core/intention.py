@@ -190,16 +190,71 @@ _SLEEP_ADVICE_RE = re.compile(r"躺着|不强迫|看天花板|允许自己")
 _USER_TEACHES_QI_RE = re.compile(r"我教你|我教了你|教你一个|教给你|跟我学")
 # 用户承认「你（栖）教了我」——佐证 taught_by_qi，不是 learned_from_user
 _USER_ACK_QI_TAUGHT_RE = re.compile(r"你教了我|你教过我|你教的(?:那个)?方法")
+# 运行时硬闸：回复同时含反转句式 + 入睡/方法话题才拦（避免误伤其他真实请教）
+_SLEEP_TOPIC_RE = re.compile(r"入睡|睡不着|失眠|睡")
+_INVERT_TOPIC_RE = re.compile(r"入睡|睡不着|失眠|睡|方法")
+# facts 兜底：存档真值的方向匹配（「不是他教栖」的否定式须排除；
+# 紧邻式匹配避免跨句误伤，如「栖教他的（…），不是他教栖」中的前一个「他」）
+_FACT_QI_TEACH_RE = re.compile(r"栖[^。\n]{0,16}教")
+_FACT_USER_TEACH_RE = re.compile(r"(?<!不是)他教栖|(?<!不是)用户教栖")
+
+
+def detect_sleep_teach_inversion(text: str) -> bool:
+    """回复里把入睡方法的施教方向说反了吗？
+
+    真值（7-26 #72/74）：栖教用户。栖视角说「你教我的方法」+入睡/方法
+    话题同现 → 反转。实证复现：#1020（含「睡不着」）/#1028（仅含「方法」）。
+    """
+    t = str(text or "")
+    if not t:
+        return False
+    return bool(_INVERT_TAUGHT_BY_QI_RE.search(t) and _INVERT_TOPIC_RE.search(t))
 
 
 def _is_qi_role(role: str) -> bool:
     return role in ("qi", "assistant")
 
 
-def anchor_teaching_relation(messages: list[dict]) -> str:
-    """从真实对话（含 role 的 messages）推断助眠/施教方向，返回一句话锚定。
+def anchor_teaching_relation(
+    messages: list[dict], facts_text: str = ""
+) -> str:
+    """推断助眠/施教方向，返回一句话锚定。
 
-    只读 messages，不写库。无相关话题返回空串。
+    优先从真实对话（含 role 的 messages）推断；近聊无话题时回退 user_facts
+    存档真值（如 tools/repair_teaching_fact.py 写入的方向事实）。
+    只读不写库。无相关话题返回空串。
+    """
+    hint = _anchor_from_messages(messages)
+    if hint:
+        return hint
+    return _anchor_from_facts(facts_text)
+
+
+def _anchor_from_facts(facts_text: str) -> str:
+    """facts 兜底：free_talk 突然提到入睡时，近聊无话题可扫，靠存档真值钉方向。"""
+    text = str(facts_text or "")
+    if not text:
+        return ""
+    qi_teach = _FACT_QI_TEACH_RE.search(text)
+    user_teach = _FACT_USER_TEACH_RE.search(text)
+    if qi_teach and user_teach:
+        return ""
+    if qi_teach and _SLEEP_TOPIC_RE.search(text):
+        return (
+            f"关于入睡方法：是你（栖）教给用户的，不是用户教你的。"
+            f"{_RELATION_HINT['taught_by_qi']}（taught_by_qi）"
+        )
+    if user_teach:
+        return (
+            f"关于方法：是用户教给你（栖）的，不是你教用户的。"
+            f"{_RELATION_HINT['learned_from_user']}（learned_from_user）"
+        )
+    return ""
+
+
+def _anchor_from_messages(messages: list[dict]) -> str:
+    """从真实对话（含 role 的 messages）推断助眠/施教方向。
+
     - 扫含「教/方法/入睡/睡不着/呼吸/睡」的 user/assistant 消息；
     - assistant/qi（栖）对用户说助眠建议（躺着/不强迫/看天花板/允许自己）→ taught_by_qi；
     - user 说「我教你/教给你」且栖发言有话题佐证 → learned_from_user；

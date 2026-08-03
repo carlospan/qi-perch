@@ -182,3 +182,82 @@ async def test_express_teaching_anchor_blocks_invert_frame_in_prompt():
     assert "【施教关系锚定】" in system
     assert "taught_by_qi" in system
     assert "栖教用户" in system
+
+
+def _plain_card() -> IntentionCard:
+    return IntentionCard(
+        act="free_talk",
+        topic="感情",
+        materials=[Material(tag="none", text="")],
+        stance="自然",
+        must=[],
+        length="normal",
+        source="test",
+    )
+
+
+@pytest.mark.asyncio
+async def test_express_inversion_gate_retries_and_fixes():
+    """运行时硬闸：首答反转→带硬约束重试→采纳修正版。"""
+    inverted = "我记得你教我的那个方法，虽然我睡不着不是因为失眠。"
+    fixed = "记得。是我教你的——允许自己躺着，不强迫。"
+    llm = AsyncMock()
+    llm.call = AsyncMock(side_effect=[inverted, fixed])
+    expr = Expression({}, llm)
+    out = await expr.express(
+        user_message="你怎么证明你有感情",
+        emotion=EmotionState(),
+        now=datetime(2026, 8, 3, 22, 42),
+        intention=_plain_card(),
+        recent_messages=[],  # 近聊无睡眠话题：包17锚定不生效场景
+    )
+    assert out == fixed
+    assert llm.call.await_count == 2
+    retry_sys = llm.call.await_args_list[1].kwargs["messages"][0]["content"]
+    assert "【施教方向硬约束】" in retry_sys
+
+
+@pytest.mark.asyncio
+async def test_express_inversion_gate_fallback_when_retry_still_inverted():
+    """重试仍反转→模板兜底，方向正确的句子出门。"""
+    inverted = "我记得你教我的那个方法，睡不着的时候就数呼吸。"
+    inverted2 = "你教过我的，睡不着就躺着嘛。"
+    llm = AsyncMock()
+    llm.call = AsyncMock(side_effect=[inverted, inverted2])
+    expr = Expression({}, llm)
+    card = _plain_card()
+    out = await expr.express(
+        user_message="你还记得吗",
+        emotion=EmotionState(),
+        now=datetime(2026, 8, 4, 0, 17),
+        intention=card,
+        recent_messages=[],
+    )
+    assert card.outcome == "template"
+    assert "是我教你的" in out
+    assert "你教我" not in out
+
+
+@pytest.mark.asyncio
+async def test_express_facts_anchor_injected_without_recent_topic():
+    """近聊无话题但 facts 有存档真值→锚定仍注入（free_talk 突然提入睡场景）。"""
+    llm = AsyncMock()
+    llm.call = AsyncMock(return_value="嗯，我记得。是我教你的。")
+    expr = Expression({}, llm)
+    facts = (
+        "- life_event：入睡方法这件事：是栖教他的（允许自己躺着），不是他教栖"
+    )
+    await expr.express(
+        user_message="你怎么证明你有感情",
+        emotion=EmotionState(),
+        now=datetime(2026, 8, 3, 22, 42),
+        intention=_plain_card(),
+        recent_messages=[
+            {"role": "user", "content": "今天天气怎么样"},
+            {"role": "qi", "content": "还行。"},
+        ],
+        inner_extras={"user_facts": facts},
+    )
+    system = llm.call.await_args.kwargs["messages"][0]["content"]
+    assert "【施教关系锚定】" in system
+    assert "taught_by_qi" in system
