@@ -13,7 +13,7 @@
 - **语言/运行时**：Python 3.12+（后端意识体）、Node.js 18+（具身前端）、Rust + MSVC（Tauri 桌面壳）
 - **形态**：单进程异步 agent loop（心跳）+ 可选 WebSocket 具身通道 + Live2D 前端
 - **认知来源**：OpenAI 兼容协议的远程 LLM（DeepSeek / Agnes / SenseNova），按 `purpose` 路由
-- **持久化**：SQLite（`data/qi.db`，19+ 张表）+ ChromaDB（`data/chroma/`，BGE 语义向量）
+- **持久化**：SQLite（`data/qi.db`，17 张表）+ ChromaDB（`data/chroma/`，BGE 语义向量）
 - **测试规模**：约 405 条 pytest（2026-08-02 阶段四退出时实测）
 - **协议**：MIT
 
@@ -48,7 +48,7 @@ qi/                 唯一顶层 Python 包（意识体本体）
   memory/           记忆（工作/叙事/身体/事实/向量/情景/第一次/open_loops）
   action/           行动层（预算/意志/分享·打理·探索/自操作/权限）
   inner_life/       意识流、梦、创作、自我模型、身份快照
-  relationship/     关系（阶段/信任/伤疤/季节/漂移/文化）
+  relationship/     关系（阶段/信任/伤疤/季节/漂移/文化/引擎）
   embodiment/       具身（WebSocket 服务 + avatar + voice + desktop 前端）
   llm/              LLM 网关与 prompt 组装
   prompts/          运行时 LLM 模板（随包打包）
@@ -57,12 +57,13 @@ qi/                 唯一顶层 Python 包（意识体本体）
   motivation/       好奇心（学习进度）
   stasis/           资源账本 / 内稳态压力 / 状态封存
   world/            世界模型（在线节律 / 情绪轨迹）
+  learning/         经验学习（corpus 语料 / replay 回放 / drift_check 漂移）
   sensing.py        进程传感（在线时长/内存/心跳/墙钟）
 docs/               契约、进度、层文档、设计原文、specs、how-to
 tests/              pytest 测试集
 tools/              CI 工具（文档死链 / 规格追溯 / 包验收 / 漂移检查）
 data/               运行时（gitignore）：qi.db、chroma/、backup-*/、settings.yaml
-main.py / run.py    兼容入口（推荐用 qi / qi-desktop 命令）
+main.py / run.py    兼容入口（仅转发到 `qi.cli.main()`；模式选择见 cli.py，推荐用 qi / qi-desktop 命令）
 pyproject.toml      包定义 + 脚本 + 依赖
 requirements.lock   锁定版本（CI 用）
 ```
@@ -143,7 +144,7 @@ requirements.lock   锁定版本（CI 用）
 | [brain_delivery.py](../../qi/core/brain_delivery.py) | 话语推送、avatar 同步、journal 广播、first_time 通知、行动结果投递 |
 | [brain_persist.py](../../qi/core/brain_persist.py) | 情绪落盘节流、proactive gate / action budget 持久化 |
 | [brain_trace.py](../../qi/core/brain_trace.py) | 心跳决策痕迹记录（`broadcast_traces` 表），供 `/why` 排障，不进 prompt |
-| [brain_types.py](../../qi/core/brain_types.py) | 共享类型与常量：`PromptContext` / `_PendingSpeech` / `PENDING_QUEUE_MAX=8` 等 |
+| [brain_types.py](../../qi/core/brain_types.py) | 共享类型与常量：`PromptContext` / `_PendingSpeech` / `PENDING_QUEUE_MAX=8`（待处理队列上限）。注意：共振阈值/前瞻窗口等节奏参数不在本文件，而在 `rhythm.py` / `proactive.py` 的实现中 |
 | [emotion.py](../../qi/core/emotion.py) | **情绪动力学**——`EmotionState`(6 维 + mode)、衰减/耦合/天气/节律/阶段锚/nudge/夹紧 |
 | [expression.py](../../qi/core/expression.py) | **表达层**——意向卡 → LLM 措辞；失败/空走 `render_template` 模板降级 |
 | [perception.py](../../qi/core/perception.py) | **感知层**——冲击评估（LLM JSON 主路径 + 关键词回退 + 短路）、intent 调制、安全感 hint |
@@ -180,7 +181,7 @@ requirements.lock   锁定版本（CI 用）
 | 文件 | 职责 |
 |---|---|
 | [layer.py](../../qi/action/layer.py) | **ActionLayer**——`tick`（独处一拍，至多一个自主行动）/ `execute_kind`（GWS 分发指定 kind） |
-| [budget.py](../../qi/action/budget.py) | **ActionBudget**——自主行动日限（默认 20，安全阀）+ 季节缩放 |
+| [budget.py](../../qi/action/budget.py) | **ActionBudget**——自主行动日限（`AUTONOMOUS_ACTION_DAILY_LIMIT=20`）+ 各意向权重（`DEFAULT_KIND_WEIGHTS` / `WEIGHT_MIN` / `WEIGHT_MAX`）；季节缩放见 `layer.py` 的 `SEASON_ACTION_SCALE` |
 | [volition.py](../../qi/action/volition.py) | `action_intentions`——形成意图列表（share/tend/explore/self_ops） |
 | [permission.py](../../qi/action/permission.py) | 权限门控（can_share/can_tend/can_explore/can_archive/can_budget_tune/can_journal/can_irreversible/can_read_user_file/can_write_user_file） |
 | [share.py](../../qi/action/share.py) | 分享创作（递出未分享的 creation） |
@@ -188,7 +189,7 @@ requirements.lock   锁定版本（CI 用）
 | [explore.py](../../qi/action/explore.py) | 探索（真读沙箱文件，记 closed_loop） |
 | [self_ops.py](../../qi/action/self_ops.py) | 自操作（archive 归档/ budget_tune 调预算/ journal 内在日记） |
 
-**季节缩放**（`SEASON_ACTION_SCALE`）：spring 1.0 / summer 0.8 / autumn 0.5 / winter 0.2——冬天几乎不动手。
+**季节缩放**（`SEASON_ACTION_SCALE`，定义于 `qi/action/layer.py`）：spring 1.0 / summer 0.8 / autumn 0.5 / winter 0.2——冬天几乎不动手。可由 `config.action.season_scale` 覆盖（`resolve_season_scale`）。
 
 ### 3.4 `qi/inner_life/` — 内在生命（L4 / N2·N3）
 
@@ -219,7 +220,7 @@ requirements.lock   锁定版本（CI 用）
 | [culture.py](../../qi/relationship/culture.py) | 共享文化检测（共同语词/梗） |
 | [drift.py](../../qi/relationship/drift.py) | 用户漂移检测 |
 
-**关系阶段锚**（`STAGE_BASELINES`，仅 security/attachment）：stranger(0.5/0.3) → bonded(0.72/0.62)。
+**关系阶段阈值**（`STAGE_THRESHOLDS`，定义于 `qi/relationship/stages.py`，为升档所需的安全感/依恋二维阈值）：acquaintance(0.3/0.4) → friend(0.6/0.6) → bonded(0.85/0.8)。阶段**只升不降**（升档后锁定，永不回退）。另有 `STAGE_TEMPERATURE_COMFORT`（engine.py）给出各阶段温度舒适区（stranger 0.45 / acquaintance 0.55 / friend 0.70 / bonded 0.80，代码中未实证校准）。
 
 **交互信号**（`assess_interaction`）：规则启发式打分 self_disclosure / emotional_vulnerability / shared_experience / creator_disclosure；`merge_impact_assessment` 用感知层 intent 覆盖正负判定（调侃不进负面信任/伤疤路径）。
 
@@ -280,9 +281,10 @@ requirements.lock   锁定版本（CI 用）
 | 模块 | 职责 |
 |---|---|
 | [qi/config/](../../qi/config/) | 配置加载（`load_config`）+ `${ENV_VAR}` 占位符解析 + `.env` 轻量加载 |
-| [qi/storage/database.py](../../qi/storage/database.py) | **Database**——SQLite 持久化，19+ 张表（见 §六） |
+| [qi/storage/database.py](../../qi/storage/database.py) | **Database**——SQLite 持久化，17 张表（见 §六） |
 | [qi/prompts/](../../qi/prompts/) | 运行时 LLM 模板（conversation.txt / perception.txt / consciousness_stream.txt / dream.txt / creation.txt / self_reflection.txt / story_weaving.txt / fact_noticing.txt） |
 | [qi/motivation/curiosity.py](../../qi/motivation/curiosity.py) | 好奇心（learning progress）——`CuriositySignal.update` |
+| [qi/learning/](../../qi/learning/) | 经验学习——`CorpusStore`（corpus.py，经验回放语料）/ `ReplayBuffer`（replay.py）/ `drift_check.py`（漂移检查）；导出见 `qi/learning/__init__.py` |
 | [qi/sensing.py](../../qi/sensing.py) | 进程传感——`collect` 返回 `SensingSnapshot`（uptime/rss/heartbeat/wall_clock/period），零 LLM |
 
 ---
@@ -302,8 +304,8 @@ requirements.lock   锁定版本（CI 用）
 | `_heartbeat_gws_idle()` | GWS 启用时的 idle 路径——`collect_contenders` → `arbitrate` → 按 winner.kind 分发（proactive:/action:/close_loop/report） |
 | `_heartbeat_legacy_idle()` | 旧路径——`action.tick` → `pick_proactive_kind` → `_speak_proactive` |
 | `_speak_proactive(kind, now)` | 主动开口表达块——legacy/GWS 共用；建意向卡 → expression.express |
-| `restore_state(db)` | 醒来恢复——memory/inner_life/relationship/first_times/scars/action/proactive_gate/ledger/emotion；`_maybe_mark_waking` 标记醒来回溯 |
-| `save_state(db)` | 落盘——emotion/proactive_gate/action_budget/ledger/relationship |
+| `restore_state(db)` | 醒来恢复——memory/inner_life/relationship/first_times/scars/action/ProactiveGate（`qi/core/proactive.py`）/ledger/emotion；`_maybe_mark_waking` 标记醒来回溯 |
+| `save_state(db)` | 落盘——emotion/ProactiveGate/action_budget/ledger/relationship |
 | `attach_embodiment(server)` | 接上身体——之后说话会推到前端 |
 | `restore_from_checkpoint(dir)` | 从封存恢复内存态（独立于 restore_state） |
 
@@ -481,7 +483,7 @@ desktop/
 
 ### 6.1 SQLite 表（[qi/storage/database.py](../../qi/storage/database.py)）
 
-`data/qi.db`，19+ 张表：
+`data/qi.db`，17 张表（下方清单为全部表）：
 
 | 表 | 用途 |
 |---|---|
@@ -551,8 +553,9 @@ brain ──► core.* / memory.manager / inner_life / relationship / action /
           stasis.ledger / world / motivation.curiosity / sensing
 memory.manager ──► working / narrative / vector_store / body_memory / facts
 inner_life ──► consciousness / dream / creativity / self_model / identity_snapshot
-relationship ──► stages / trust / scars / season / culture / drift
+relationship ──► stages / trust / scars / season / culture / drift / engine
 action ──► budget / volition / permission / share / tend / explore / self_ops
+learning ──► corpus / replay / drift_check（brain 包 10 好奇进度引用）
 embodiment.server ──► brain / avatar.controller / voice.tts
 llm.gateway ──► providers.openai_compat
 ```
