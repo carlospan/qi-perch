@@ -22,9 +22,6 @@ venv/
 dist/
 build/
 .pytest_cache/
-# pytest 临时目录（pyproject 固化 --basetemp=.pytest-tmp，规避 Windows 误报）
-.pytest-tmp/
-.pytest-tmp*/
 
 # 前端（Vue / Vite / Tauri）
 node_modules/

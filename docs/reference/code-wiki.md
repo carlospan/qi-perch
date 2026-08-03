@@ -640,7 +640,7 @@ voice:
 ```bash
 python -m pytest -q
 ```
-pytest 配置：`asyncio_mode = "auto"`、`testpaths = ["tests"]`、禁用缓存、临时目录 `.pytest-tmp`（规避 Windows 系统临时区 PermissionError）。
+pytest 配置：`asyncio_mode = "auto"`、`testpaths = ["tests"]`、禁用缓存；basetemp 由 `verify_package` 指向系统临时区 `qi-pytest`（包 18，规避仓库内 `.pytest-tmp` Windows ACL 损坏）。
 
 ### 8.7 清库验收（带日期备份）
 

@@ -3,8 +3,7 @@
 
 设计目标（对齐阶段四包验收节奏）：
 - 纯标准库 + subprocess，零新依赖，融入现有 Python CI。
-- 固化 Windows 下 pytest 临时目录 PermissionError 误报的规避（--basetemp 指向仓库内
-  .pytest-tmp），不再依赖人肉每次敲 --basetemp。
+- basetemp 使用系统临时区子目录（包 18），规避仓库内 .pytest-tmp 的 Windows ACL 损坏。
 - 结构化报告：每项给出 ✅/❌ + 证据；任一不符即非零退出，便于 CI 门禁。
 - git diff 核查：列出本次改动文件，便于确认「未越界改不该改的文件」。
 - 可配置 grep 审计：用 --audit-grep "pattern:label" 复用「无 sys.exit / 无 energy 盖写」
@@ -29,14 +28,22 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+
+# Windows GBK 控制台打印 ✅/❌ 会崩（包 18）
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # ---------------------------------------------------------------------------
 # 配置
 # ---------------------------------------------------------------------------
 
 DEFAULT_RUFF_SCOPE = ["qi", "tests"]
-BASETEMP_DIRNAME = ".pytest-tmp"  # 仓库内临时目录，规避 Windows 系统临时区权限坑
+# 系统临时区子目录，规避仓库内 .pytest-tmp 的 Windows ACL 损坏（包 18）
+BASETEMP_DIRNAME = Path(tempfile.gettempdir()) / "qi-pytest"
 
 # 默认红线审计（可在命令行用 --audit-grep 追加或 --no-default-audit 关闭）
 # 每个审计项格式：(pattern, label, exclude_funcs, exclude_paths)
@@ -70,7 +77,8 @@ def _run(cmd: list[str], cwd: Path) -> tuple[int, str, str]:
 
 def verify_tests(test_paths: list[str], full: bool, repo_root: Path) -> tuple[bool, str]:
     """跑 pytest。full 时跑全量；否则跑指定测试文件。返回 (通过, 证据文本)。"""
-    basetemp = repo_root / BASETEMP_DIRNAME
+    basetemp = BASETEMP_DIRNAME
+    basetemp.mkdir(parents=True, exist_ok=True)
     cmd = [
         sys.executable, "-m", "pytest", "-q",
         "-p", "no:cacheprovider",
@@ -83,30 +91,43 @@ def verify_tests(test_paths: list[str], full: bool, repo_root: Path) -> tuple[bo
         cmd.extend(test_paths)
 
     code, out, err = _run(cmd, repo_root)
-    # pytest 在 [100%] 之后若因 Windows 临时目录清理报 PermissionError，会非零退出，
-    # 但测试结果其实已打印。这里抓 "passed" / "failed" 关键词判定真实结果。
     combined = out + err
     passed = re.search(r"(\d+)\s+passed", combined)
     failed = re.search(r"(\d+)\s+failed", combined)
     n_pass = int(passed.group(1)) if passed else 0
     n_fail = int(failed.group(1)) if failed else 0
 
-    # 真实结论：有 failed 或 0 passed 视为不通过；权限误报但全 passed 仍算过
-    ok = (code == 0) or (n_fail == 0 and n_pass > 0 and "PermissionError" in combined)
-    evidence = f"[{label}] passed={n_pass} failed={n_fail} rc={code}\n"
+    # 包18：系统临时区后以进程退出码为准，不再特判 PermissionError
+    ok = code == 0
+    evidence = (
+        f"[{label}] passed={n_pass} failed={n_fail} rc={code} basetemp={basetemp}\n"
+    )
     if not full and n_pass == 0 and n_fail == 0:
         evidence += "  (未匹配到 passed/failed，可能测试路径有误)\n"
-    # 摘录尾部，便于快速看失败点
     tail = combined.strip().splitlines()[-15:]
     evidence += "  " + "\n  ".join(tail)
     return ok, evidence
 
 
 def verify_ruff(scope: list[str], repo_root: Path) -> tuple[bool, str]:
-    """跑 ruff check。返回 (通过, 证据文本)。"""
-    if shutil.which("ruff") is None:
-        return True, "(ruff 未安装，跳过；CI 环境应确保 ruff 可用)"
-    cmd = [shutil.which("ruff"), "check", *scope]
+    """跑 ruff check。返回 (通过, 证据文本)。
+
+    优先 PATH 里的 ruff；Windows 上 pip 装的 ruff.exe 可能不在 PATH，
+    回退 `python -m ruff`，避免静默跳过检查。
+    """
+    ruff_bin = shutil.which("ruff")
+    if ruff_bin is not None:
+        cmd: list[str] = [ruff_bin, "check", *scope]
+    else:
+        try:
+            code, _, _ = _run(
+                [sys.executable, "-m", "ruff", "--version"], repo_root
+            )
+        except Exception:
+            code = 1
+        if code != 0:
+            return True, "(ruff 未安装，跳过；CI 环境应确保 ruff 可用)"
+        cmd = [sys.executable, "-m", "ruff", "check", *scope]
     code, out, _ = _run(cmd, repo_root)
     ok = code == 0
     evidence = out.strip() if out.strip() else "(no issues found)"

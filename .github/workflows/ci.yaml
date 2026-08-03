@@ -7,7 +7,11 @@ on:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,20 +21,26 @@ jobs:
         with:
           python-version: "3.12"
 
-      # 用 requirements.lock 锁定版本（与本地一致），但剥离自引用与本地绝对路径两行，
-      # 否则 CI 会尝试 clone 自身 / 访问不存在的本地路径而失败。
+      # 用 requirements.lock 锁定版本；剥离自引用与本地绝对路径。
+      # shell: bash 保证 windows-latest 也有 grep /tmp。
       - name: Install dependencies (from lock, sanitized)
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           grep -vE "^-e git\+https://github.com/carlospan/qi-perch" requirements.lock \
-            | grep -vE "^-e d:\\\\" > /tmp/ci-requirements.txt
+            | grep -vE "^-e [dD]:\\\\" \
+            | grep -vE "^-e [dD]:/" > /tmp/ci-requirements.txt
           pip install -r /tmp/ci-requirements.txt
+
+      - name: Ruff
+        run: python -m ruff check qi tests
+
+      # pytest 仅经 verify_package（含 basetemp=系统临时区 + ruff + 红线审计）
+      - name: 包验收自动化（测试+ruff+diff+红线审计）
+        run: python tools/verify_package.py --full
 
       - name: 文档死链检查
         run: python tools/check_doc_links.py
 
-      - name: 包验收自动化（测试 + ruff + diff + 红线审计）
-        run: python tools/verify_package.py --full
-
-      - name: 规格可追溯性检查（已验收包须有验收记录）
+      - name: 规格可追溯性检查
         run: python tools/check_spec_traceability.py

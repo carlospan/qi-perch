@@ -26,6 +26,12 @@ import re
 import sys
 from pathlib import Path
 
+# Windows GBK 控制台打印 ✅/❌ 会 UnicodeEncodeError；统一 UTF-8（errors=replace）
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # 主线文件匹配：docs/specs/tasks/*-主线.md
 TASKS_GLOB = "*-主线.md"
 # 包标题行：## 包 12：...  （允许「包 12」或「包 9b」）
@@ -92,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
 
     accepted = find_accepted_packages(tasks_dir)
     if not accepted:
-        print(f"[spec-trace] OK — 未发现已验收（✅）的包，无需校验。")
+        print("[spec-trace] OK — 未发现已验收（✅）的包，无需校验。")
         return 0
 
     missing: list[tuple[str, str, str]] = []
@@ -105,9 +111,9 @@ def main(argv: list[str] | None = None) -> int:
 
     print("=" * 64)
     print(f"[spec-trace] 已验收包 {len(accepted)} 个，溯源校验：")
-    for pkg_no, title in ok_list:
+    for pkg_no, _title in ok_list:
         print(f"  ✅ 包 {pkg_no}：验收记录存在")
-    for pkg_no, title, src in missing:
+    for pkg_no, _title, src in missing:
         print(f"  ❌ 包 {pkg_no}：缺验收记录（主线 {src} 标 ✅，但 archive 下无 "
               f"包{pkg_no}-PR方案-CodeBuddy验收记录.md）")
     print("=" * 64)
