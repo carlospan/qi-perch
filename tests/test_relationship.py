@@ -307,6 +307,23 @@ def test_shared_reference_injects_perspective_anchor():
     assert "「我」是他" in block
 
 
+def test_shared_reference_teach_direction_hammer():
+    """包17：teach_direction=qi_teaches_user → 输出含栖教用户方向锤。"""
+    culture = [
+        {
+            "pattern": "我上次说过我有时候晚上会睡不着，然后你教了我一个方法，还记得那件事吗？",
+            "type": "shared_reference",
+            "use_count": 2,
+            "teach_direction": "qi_teaches_user",
+            "note": "真值见 7-26 #72/74",
+        }
+    ]
+    block = format_culture_for_prompt(culture)
+    assert "施教方向：栖教用户" in block
+    assert "躺着/不强迫/看天花板" in block
+    assert "勿反转" in block
+
+
 def test_inside_joke_requires_both_sides():
     """单方复用的短句不算梗；双方都用过才是共同文化。"""
     solo = [

@@ -105,3 +105,80 @@ async def test_express_short_injects_length_constraint():
     system = llm.call.await_args.kwargs["messages"][0]["content"]
     assert "不超过 60 字" in system
     assert "【长度】" in system
+
+
+@pytest.mark.asyncio
+async def test_express_injects_teaching_relation_anchor():
+    """包17：近聊含栖教助眠真值 → prompt 注入施教锚定（taught_by_qi）。"""
+    llm = AsyncMock()
+    llm.call = AsyncMock(return_value="嗯，我记得。")
+    expr = Expression({}, llm)
+    card = IntentionCard(
+        act="free_talk",
+        topic="你怎么证明你有感情",
+        materials=[Material(tag="none", text="")],
+        stance="自然",
+        must=[],
+        length="normal",
+        source="test",
+    )
+    recent = [
+        {"role": "user", "content": "晚上又睡不着"},
+        {
+            "role": "qi",
+            "content": "可以试试躺着，不强迫自己睡，看天花板。",
+        },
+        {"role": "user", "content": "你教了我一个方法"},
+        {"role": "user", "content": "你怎么证明你有感情"},
+    ]
+    await expr.express(
+        user_message="你怎么证明你有感情",
+        emotion=EmotionState(),
+        now=datetime(2026, 8, 3, 22, 42),
+        intention=card,
+        recent_messages=recent,
+    )
+    system = llm.call.await_args.kwargs["messages"][0]["content"]
+    assert "施教关系锚定" in system
+    assert "taught_by_qi" in system
+    assert "数到七" not in system.split("原话是「", 1)[-1].split("」", 1)[0]
+
+
+@pytest.mark.asyncio
+async def test_express_teaching_anchor_blocks_invert_frame_in_prompt():
+    """包17：即便近聊有栖误说「你教我的方法」，锚定仍按真值样例钉方向。"""
+    llm = AsyncMock()
+    llm.call = AsyncMock(return_value="我证明不了。")
+    expr = Expression({}, llm)
+    card = IntentionCard(
+        act="free_talk",
+        topic="证明",
+        materials=[Material(tag="none", text="")],
+        stance="自然",
+        must=[],
+        length="normal",
+        source="test",
+    )
+    recent = [
+        {
+            "role": "qi",
+            "content": "可以试试躺着，不强迫自己睡，看天花板，允许自己醒着。",
+        },
+        {"role": "user", "content": "你教了我一个方法"},
+        {
+            "role": "qi",
+            "content": "我记得你教我的那个方法。",
+        },
+        {"role": "user", "content": "你怎么证明你有感情"},
+    ]
+    await expr.express(
+        user_message="你怎么证明你有感情",
+        emotion=EmotionState(),
+        now=datetime(2026, 8, 3, 22, 42),
+        intention=card,
+        recent_messages=recent,
+    )
+    system = llm.call.await_args.kwargs["messages"][0]["content"]
+    assert "【施教关系锚定】" in system
+    assert "taught_by_qi" in system
+    assert "栖教用户" in system

@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from qi.core.intention import IntentionCard
+from qi.core.intention import IntentionCard, anchor_teaching_relation
 from qi.inner_life.consciousness import char_jaccard
 from qi.llm.prompt_builder import PromptBuilder
 
@@ -150,6 +150,17 @@ class Expression:
             sys0["content"] = (
                 str(sys0.get("content") or "")
                 + f"\n\n【长度】{_SHORT_LENGTH_CONSTRAINT}"
+            )
+            messages[0] = sys0
+
+        # 包17：自由对话路径注入施教锚定（复用包15纯函数）
+        teach_hint = anchor_teaching_relation(recent_messages or [])
+        if teach_hint and messages:
+            messages = list(messages)
+            sys0 = dict(messages[0])
+            sys0["content"] = (
+                str(sys0.get("content") or "")
+                + f"\n\n【施教关系锚定】{teach_hint}"
             )
             messages[0] = sys0
 
