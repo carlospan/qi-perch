@@ -302,6 +302,16 @@ def _length_for(emotion: EmotionState, stage: str, act: str) -> str:
     return "normal"
 
 
+_SHORT_FEEDBACK_RE = re.compile(
+    r"直接一点|简短|别绕|长话短说|说重点|简单点"
+)
+
+
+def looks_like_short_feedback(text: str) -> bool:
+    """用户要求简短/直接——表达层应压长度。"""
+    return bool(_SHORT_FEEDBACK_RE.search(text or ""))
+
+
 def _base_must(
     act: str,
     *,
@@ -458,6 +468,12 @@ def build_intention_card(
         must = [m for m in must if "以卡内 relation 为准" not in m]
 
     length = _length_for(emotion, relationship_stage, act)
+    if channel == "dialogue" and looks_like_short_feedback(text):
+        length = "short"
+        must = list(must)
+        if "用 1-2 句、克制长度，不超过 60 字" not in must:
+            must.append("用 1-2 句、克制长度，不超过 60 字")
+        source_parts.append("short_feedback")
     stance = _stance_for(emotion, relationship_stage, act)
     source_parts.append(f"act={act}")
     source_parts.append(f"stage={relationship_stage}")

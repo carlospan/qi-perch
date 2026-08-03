@@ -7,13 +7,60 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from qi.core.intention import IntentionCard
+from qi.inner_life.consciousness import char_jaccard
 from qi.llm.prompt_builder import PromptBuilder
 
 if TYPE_CHECKING:
     from qi.core.emotion import EmotionState
     from qi.llm.gateway import LLMGateway
+    from qi.storage.database import Database
 
 logger = logging.getLogger("qi.expression")
+
+REPLY_DEDUP_THRESHOLD = 0.85
+REPLY_DEDUP_WINDOW = 5
+_SHORT_LENGTH_CONSTRAINT = "用 1-2 句、克制长度，不超过 60 字。"
+_DEDUP_REGEN_CONSTRAINT = "不要重复刚才说过的话，换个说法回应。"
+
+
+def recent_qi_replies_from_messages(
+    messages: list[dict] | None, limit: int = REPLY_DEDUP_WINDOW
+) -> list[str]:
+    """从近聊（旧→新）抽出最近 N 条栖回复文本。"""
+    out: list[str] = []
+    for m in messages or []:
+        if not isinstance(m, dict):
+            continue
+        if m.get("role") != "qi":
+            continue
+        text = str(m.get("content") or "").strip()
+        if text:
+            out.append(text)
+    if limit <= 0:
+        return []
+    return out[-limit:]
+
+
+async def recent_qi_replies(db: Database, limit: int = REPLY_DEDUP_WINDOW) -> list[str]:
+    """读库取最近 N 条栖回复（旧→新）。多取若干条以覆盖夹杂的用户消息。"""
+    fetch = max(limit * 3, limit + 8)
+    msgs = await db.load_recent_messages(limit=fetch)
+    return recent_qi_replies_from_messages(msgs, limit=limit)
+
+
+def is_duplicate_reply(
+    text: str,
+    history: list[str],
+    *,
+    threshold: float = REPLY_DEDUP_THRESHOLD,
+) -> bool:
+    t = (text or "").strip()
+    if not t:
+        return False
+    for prev in history:
+        if prev and char_jaccard(t, prev) > threshold:
+            return True
+    return False
 
 
 def render_template(card: IntentionCard) -> str:
@@ -97,6 +144,19 @@ class Expression:
             proactive_kind=proactive_kind,
             intention=intention,
         )
+        if intention.length == "short" and messages:
+            messages = list(messages)
+            sys0 = dict(messages[0])
+            sys0["content"] = (
+                str(sys0.get("content") or "")
+                + f"\n\n【长度】{_SHORT_LENGTH_CONSTRAINT}"
+            )
+            messages[0] = sys0
+
+        hist = recent_qi_replies_from_messages(
+            recent_messages, limit=REPLY_DEDUP_WINDOW
+        )
+
         text = ""
         try:
             text = await self.llm.call(purpose="conversation", messages=messages)
@@ -104,9 +164,38 @@ class Expression:
             logger.debug("表达 LLM 异常，走模板", exc_info=True)
             text = ""
 
-        if text and str(text).strip():
-            intention.outcome = "llm"
-            return str(text).strip()
+        text = str(text or "").strip()
+        if text:
+            if not is_duplicate_reply(text, hist):
+                intention.outcome = "llm"
+                return text
+            # 跨轮复读：轻量重生成一次
+            regen_messages = list(messages)
+            if regen_messages:
+                sys0 = dict(regen_messages[0])
+                sys0["content"] = (
+                    str(sys0.get("content") or "")
+                    + f"\n\n【去重】{_DEDUP_REGEN_CONSTRAINT}"
+                )
+                regen_messages[0] = sys0
+            try:
+                again = await self.llm.call(
+                    purpose="conversation", messages=regen_messages
+                )
+            except Exception:
+                logger.debug("去重重生成异常，走模板", exc_info=True)
+                again = ""
+            again = str(again or "").strip()
+            if again and not is_duplicate_reply(again, hist):
+                intention.outcome = "llm"
+                return again
+            # 仍重复 → 模板降级（acknowledge/share_state 简版路径）
+            templated = render_template(intention)
+            if templated:
+                intention.outcome = "template"
+                return templated
+            intention.outcome = "empty"
+            return ""
 
         # UNREACHABLE / EMPTY：一律模板开口（契约演进）
         templated = render_template(intention)

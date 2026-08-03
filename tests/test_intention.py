@@ -41,6 +41,19 @@ def test_hurt_maps_to_honest_hurt():
     assert card.length == "short"
 
 
+def test_short_feedback_sets_length_short():
+    """包16：你可以直接一点吗 → length=short。"""
+    card = build_intention_card(
+        channel="dialogue",
+        user_message="你可以直接一点吗",
+        emotion=EmotionState(energy=0.8),
+        relationship_stage="bonded",
+        assessment=ImpactAssessment(impact=0.1, intent="request"),
+    )
+    assert card.length == "short"
+    assert any("60 字" in m for m in card.must)
+
+
 def test_request_with_memory_is_recall():
     card = build_intention_card(
         channel="dialogue",

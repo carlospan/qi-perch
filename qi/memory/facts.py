@@ -253,6 +253,10 @@ def format_facts_for_prompt(facts: list[dict], relationship_stage: str) -> str:
             frag = identity_name_fragment(content)
             if frag is not None and not looks_like_person_name(frag):
                 continue
+        if f.get("fact_type") == "location" and not looks_like_real_location(
+            content
+        ):
+            continue
         if not content.endswith(("。", "！", "？", ".", "!", "?")):
             content = f"{content}。"
         sentences.append(content)
@@ -292,6 +296,8 @@ def looks_like_person_name(name: str) -> bool:
         for x in (
             "问题", "有", "是", "不", "几号", "几点", "几月", "今天", "明天",
             "怎么", "为什", "可以", "这个", "那个", "什么时", "吧", "吗",
+            # 包16 扩充：漏网「过去拿」及希望被叫做类误抽
+            "拿", "代码", "写", "希望被叫做", "被叫做", "叫过去", "谁的代码",
         )
     ):
         return False
@@ -305,6 +311,29 @@ def looks_like_person_name(name: str) -> bool:
     if re.fullmatch(r"[A-Za-z][A-Za-z\-'. ]{0,30}", name) and len(name) <= 32:
         return True
     return False
+
+
+_FAKE_LOCATION_MARKERS = (
+    "谁的代码",
+    "写谁的",
+    "在写什么",
+    "存在我本地",
+    "在写谁",
+)
+
+
+def looks_like_real_location(text: str) -> bool:
+    """地点/所在事实门控：拒「在写谁的代码」类无实指短语。"""
+    t = (text or "").strip()
+    if not t:
+        return False
+    if any(m in t for m in _FAKE_LOCATION_MARKERS):
+        return False
+    if "写" in t and "代码" in t:
+        return False
+    if "存在" in t and "本地" in t:
+        return False
+    return True
 
 
 # 疑问/假设句不是用户在陈述自己——不该抽成事实（实证：「有了女朋友怎么办」被当 location）
@@ -688,19 +717,30 @@ class FactNoticer:
             if rid in keep_ids:
                 continue
             frag = identity_name_fragment(str(row.get("content") or ""))
-            if frag is not None and looks_like_person_name(frag):
-                continue
-            if frag is None:
-                # 无法解析出名字的 identity 也不该占 active（清理占位污染）
+            if frag is not None:
+                if looks_like_person_name(frag):
+                    continue
+                # 包16：他希望被叫做过去拿 等 —— 片段未过人名门控 → retire
+            else:
+                # 无法解析出名字：仅对「他叫/他姓/他希望被叫做」前缀视为非法占位
                 content = str(row.get("content") or "")
-                if content.startswith(("他叫", "他姓", "他希望被叫做")):
-                    pass  # 解析失败仍视为非法
-                else:
+                if not content.startswith(("他叫", "他姓", "他希望被叫做")):
                     continue
             if good is not None and rid != int(good["id"]):
                 await self.store.supersede(rid, int(good["id"]))
             else:
                 await self.store.retire(rid)
+
+        await self._purge_bogus_location()
+
+    async def _purge_bogus_location(self) -> None:
+        """作废无实指的 active location（如「他在写谁的代码」）。"""
+        actives = await self.store.active_facts("location")
+        for row in actives:
+            content = str(row.get("content") or "")
+            if looks_like_real_location(content):
+                continue
+            await self.store.retire(int(row["id"]))
 
     async def _notice_corrections(
         self, text: str, stage: str, now: datetime
@@ -1304,6 +1344,12 @@ class FactNoticer:
         fact_type = str(draft.get("fact_type") or "other")
         content = str(draft.get("content") or "").strip()
         if not content:
+            return None
+        if fact_type == "identity":
+            frag = identity_name_fragment(content)
+            if frag is not None and not looks_like_person_name(frag):
+                return None
+        if fact_type == "location" and not looks_like_real_location(content):
             return None
         confidence = float(draft.get("confidence") or 0.0)
         if confidence < CONFIDENCE_FLOOR:

@@ -404,6 +404,68 @@ async def test_looks_like_person_name_gate():
     assert not looks_like_person_name("那今天几月几号")
     assert not looks_like_person_name("其实是程序有问题")
     assert not looks_like_person_name("我来修这个问题")
+    # 包16：漏网「过去拿」
+    assert not looks_like_person_name("过去拿")
+
+
+@pytest.mark.asyncio
+async def test_purge_bogus_hope_called_name(db_store):
+    """包16：他希望被叫做过去拿 → purge 后非 active。"""
+    _, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    now = datetime(2026, 8, 3, 12, 0)
+    await store.add(
+        "identity",
+        "他希望被叫做过去拿",
+        0.95,
+        "stable",
+        "误抽",
+        0.85,
+        now,
+    )
+    assert len(await store.active_facts("identity")) == 1
+    await noticer.notice("今天天气真好", EmotionState(), "bonded", now=now)
+    assert await store.active_facts("identity") == []
+
+
+@pytest.mark.asyncio
+async def test_looks_like_real_location_and_land_gate(db_store):
+    """包16：他在写谁的代码 不入 active。"""
+    from qi.memory.facts import looks_like_real_location
+
+    assert looks_like_real_location("他在上海") is True
+    assert looks_like_real_location("他在写谁的代码") is False
+
+    _, store = db_store
+    noticer = FactNoticer(store, llm=None)
+    now = datetime(2026, 8, 3, 12, 0)
+    landed = await noticer._land(
+        {
+            "fact_type": "location",
+            "content": "他在写谁的代码",
+            "confidence": 0.85,
+            "stability": "state",
+            "emotional_weight": 0.55,
+            "source": "误抽",
+        },
+        "我在写谁的代码",
+        now,
+    )
+    assert landed is None
+    assert await store.active_facts("location") == []
+
+    # 已落库脏 location 经 notice 触发 purge
+    await store.add(
+        "location",
+        "他在写谁的代码",
+        0.85,
+        "state",
+        "误抽",
+        0.55,
+        now,
+    )
+    await noticer.notice("随便说一句", EmotionState(), "bonded", now=now)
+    assert await store.active_facts("location") == []
 
 
 @pytest.mark.asyncio
