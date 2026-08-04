@@ -1,22 +1,22 @@
 # LLM 配置（OpenAI 兼容协议）
 llm:
-  default_provider: "deepseek"
+  default_provider: "sensenova"
   providers:
-    deepseek:
-      base_url: "https://api.deepseek.com"
-      api_key: "${DEEPSEEK_API_KEY}"
+    sensenova:
+      base_url: "https://token.sensenova.cn/v1"
+      api_key: "${SENSENOVA_API_KEY}"
       models:
-        fast: "deepseek-v4-flash"
-        strong: "deepseek-v4-flash"
+        fast: "sensenova-6.7-flash-lite"
+        strong: "sensenova-6.7-flash-lite"
   custom_providers: {}
   model_routing:
-    conversation: "deepseek:fast"
-    narrative: "deepseek:strong"
-    consciousness: "deepseek:fast"
-    dream: "deepseek:fast"
-    creation: "deepseek:fast"
-    reflection: "deepseek:strong"
-    fact: "deepseek:fast"
+    conversation: "sensenova:fast"
+    narrative: "sensenova:strong"
+    consciousness: "sensenova:fast"
+    dream: "sensenova:fast"
+    creation: "sensenova:fast"
+    reflection: "sensenova:strong"
+    fact: "sensenova:fast"
 
 # 心跳配置
 rhythm:
