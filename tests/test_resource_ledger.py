@@ -15,7 +15,10 @@ from qi.stasis.ledger import (
     INCOME_MIN_INTERVAL_SEC,
     INCOME_SOURCES_REJECTED,
     MEM_RETRIEVAL_TOKEN_COST,
+    ONLINE_PRESENCE_AMOUNT,
+    ONLINE_PRESENCE_MIN_INTERVAL_SEC,
     STORAGE_ESTIMATE_EVERY_N_BEATS,
+    TOKEN_SPEND_SCALE,
     ResourceLedger,
 )
 from qi.storage.database import Database
@@ -56,7 +59,7 @@ def test_add_token_cost_and_attempt():
     assert led.token_budget == MEM_RETRIEVAL_TOKEN_COST
     before = led.spend_window
     led.add_token_cost(10)  # 失败尝试成本
-    assert led.spend_window == before + 10
+    assert led.spend_window == pytest.approx(before + 10 * TOKEN_SPEND_SCALE)
 
 
 def test_estimate_storage_not_every_beat_semantics():
@@ -207,6 +210,94 @@ async def test_brain_heartbeat_ledger_no_llm_dependency():
             brain.ledger.compute_seconds
         )
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_idle_heartbeat_credits_online_presence():
+    """空闲且 user_online 时记 online_presence。"""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        brain = Brain(
+            {
+                "tts": {"enabled": False},
+                "memory": {"chroma_path": str(Path(tmp) / "c")},
+                "stasis": {
+                    "presence_income": 2.0,
+                    "presence_min_interval_sec": 0.0,
+                },
+            },
+            _StubLLM(),  # type: ignore[arg-type]
+        )
+        brain.action = None
+        brain.inner_life = None
+        brain.first_times = None
+        brain.relationship = None
+        brain.memory = None
+        brain.user_online = True
+        before = brain.ledger.income
+        await brain._heartbeat()
+        assert brain.ledger.income == pytest.approx(before + ONLINE_PRESENCE_AMOUNT)
+
+
+@pytest.mark.asyncio
+async def test_offline_idle_skips_presence_income():
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        brain = Brain(
+            {
+                "tts": {"enabled": False},
+                "memory": {"chroma_path": str(Path(tmp) / "c")},
+                "stasis": {"presence_min_interval_sec": 0.0},
+            },
+            _StubLLM(),  # type: ignore[arg-type]
+        )
+        brain.action = None
+        brain.inner_life = None
+        brain.first_times = None
+        brain.relationship = None
+        brain.memory = None
+        brain.user_online = False
+        before = brain.ledger.income
+        await brain._heartbeat()
+        assert brain.ledger.income == pytest.approx(before)
+
+
+def test_interaction_income_covers_typical_reply_tokens():
+    """标定：一次有效交互收入 ≈ 覆盖约 500 token 折算支出。"""
+    led = ResourceLedger()
+    led.tick_window(1)
+    led.credit_income(
+        "effective_interaction",
+        amount=25.0,
+        now=datetime(2026, 8, 5, 12, 0, 0),
+    )
+    led.add_token_cost(500)
+    assert led.balance == pytest.approx(0.0)
+
+
+def test_presence_min_interval_override():
+    led = ResourceLedger()
+    led.tick_window(1)
+    t0 = datetime(2026, 8, 5, 12, 0, 0)
+    assert led.credit_income(
+        "online_presence",
+        amount=2.0,
+        now=t0,
+        min_interval_sec=ONLINE_PRESENCE_MIN_INTERVAL_SEC,
+    )
+    assert (
+        led.credit_income(
+            "online_presence",
+            amount=2.0,
+            now=t0 + timedelta(seconds=10),
+            min_interval_sec=ONLINE_PRESENCE_MIN_INTERVAL_SEC,
+        )
+        is False
+    )
+    assert led.credit_income(
+        "online_presence",
+        amount=2.0,
+        now=t0 + timedelta(seconds=ONLINE_PRESENCE_MIN_INTERVAL_SEC + 0.1),
+        min_interval_sec=ONLINE_PRESENCE_MIN_INTERVAL_SEC,
+    )
 
 
 @pytest.mark.asyncio

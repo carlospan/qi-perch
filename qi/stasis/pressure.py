@@ -14,7 +14,7 @@ from typing import Any
 logger = logging.getLogger("qi.stasis.pressure")
 
 STASIS_INTENTS_KEY = "stasis_intents"
-STARVE_BEATS = 30  # 连续 balance<=0 拍数阈值（可配置）
+STARVE_BEATS = 45  # 连续 balance<=0 拍数阈值（第 3 批略放宽，配合收支标定）
 DEFAULT_PRESSURE_SENSITIVITY = 1.0
 
 

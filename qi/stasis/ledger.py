@@ -21,11 +21,16 @@ INCOME_SOURCES_REJECTED: frozenset[str] = frozenset(
 
 INCOME_MIN_INTERVAL_SEC = 5.0
 INCOME_DAILY_CAP = 200
+# 第 3 批标定：单次收入量（事件次数仍受日帽）；支出按比例折算进 balance
+EFFECTIVE_INTERACTION_AMOUNT = 25.0
+ONLINE_PRESENCE_AMOUNT = 2.0
+ONLINE_PRESENCE_MIN_INTERVAL_SEC = 30.0
+TOKEN_SPEND_SCALE = 0.05  # 500 token 回复 ≈ 25 支出，约等于一次有效交互收入
 STORAGE_ESTIMATE_EVERY_N_BEATS = 50
 WINDOW_BEATS = 1000
 MEM_RETRIEVAL_TOKEN_COST = 20
 ATTEMPT_TOKEN_COST = 10  # 说话失败/空回复仍记尝试成本
-COMPUTE_SPEND_PER_SEC = 1.0  # 1 秒认知 ≈ 1 支出单位
+COMPUTE_SPEND_PER_SEC = 0.1  # 认知秒 → 支出（原 1.0 易被 LLM 耗时打穿）
 
 
 class ResourceLedger:
@@ -80,7 +85,8 @@ class ResourceLedger:
     def add_token_cost(self, n: int) -> None:
         cost = max(0, int(n))
         self.token_budget += float(cost)
-        self.record_spend(float(cost))
+        # token_budget 记原始用量；balance 用折算支出（Q4 标定）
+        self.record_spend(float(cost) * TOKEN_SPEND_SCALE)
 
     def record_spend(self, amount: float) -> None:
         a = float(amount)
@@ -100,7 +106,14 @@ class ResourceLedger:
             self.income_day = day
             self.income_day_count = 0
 
-    def credit_income(self, source: str, amount: float = 1.0, *, now: datetime | None = None) -> bool:
+    def credit_income(
+        self,
+        source: str,
+        amount: float = 1.0,
+        *,
+        now: datetime | None = None,
+        min_interval_sec: float | None = None,
+    ) -> bool:
         """仅白名单源；拒绝讨好源；防刷（间隔+日帽）。"""
         src = str(source or "")
         if src in INCOME_SOURCES_REJECTED or src not in INCOME_SOURCES_WHITELIST:
@@ -112,9 +125,14 @@ class ResourceLedger:
         self._reset_income_day(now)
         if self.income_day_count >= INCOME_DAILY_CAP:
             return False
+        gap_need = (
+            float(min_interval_sec)
+            if min_interval_sec is not None
+            else INCOME_MIN_INTERVAL_SEC
+        )
         if self.last_interaction_credit_at is not None:
             gap = (now - self.last_interaction_credit_at).total_seconds()
-            if gap < INCOME_MIN_INTERVAL_SEC:
+            if gap < gap_need:
                 return False
         if self._forced_balance is not None:
             self._forced_balance = None

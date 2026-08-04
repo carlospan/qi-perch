@@ -12,6 +12,7 @@ export type EmotionSnapshot = {
   curiosity?: number;
   attachment?: number;
   mode?: string;
+  stasis?: boolean;
   description?: string;
   stage?: string;
 };
@@ -24,14 +25,23 @@ export type SpeechPayload = {
 
 export type ServerMessage =
   | { type: "speech"; payload: SpeechPayload }
-  | { type: "state"; payload: { avatar_state: AvatarState } }
+  | {
+      type: "state";
+      payload: {
+        avatar_state: AvatarState;
+        season?: string;
+        mode?: string;
+        stasis?: boolean;
+      };
+    }
   | { type: "typing"; payload: Record<string, never> }
   | { type: "emotion_update"; payload: EmotionSnapshot }
   | { type: "ping"; payload: { ts: number } }
   | { type: "audio"; payload: { data: string; mime?: string } }
   | { type: "history"; payload: { messages: TalkMessage[] } }
   | { type: "journal"; payload: { entries: JournalEntry[] } }
-  | { type: "journal_entry"; payload: JournalEntry };
+  | { type: "journal_entry"; payload: JournalEntry }
+  | { type: "wake_result"; payload: { ok: boolean; reason?: string; mode?: string } };
 
 export type ClientMessage =
   | { type: "user_message"; payload: { text: string } }

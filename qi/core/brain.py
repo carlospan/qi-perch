@@ -8,7 +8,7 @@ import random
 import time
 from collections import deque
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -57,13 +57,17 @@ from qi.relationship.scars import ScarManager
 from qi.relationship.season import apply_season_effect
 from qi.stasis.ledger import (
     ATTEMPT_TOKEN_COST,
+    EFFECTIVE_INTERACTION_AMOUNT,
     MEM_RETRIEVAL_TOKEN_COST,
+    ONLINE_PRESENCE_AMOUNT,
+    ONLINE_PRESENCE_MIN_INTERVAL_SEC,
     STORAGE_ESTIMATE_EVERY_N_BEATS,
     ResourceLedger,
 )
 from qi.stasis.ledger import (
     BODY_MEMORY_KEY as LEDGER_BODY_KEY,
 )
+from qi.stasis.pressure import STARVE_BEATS as DEFAULT_STARVE_BEATS
 from qi.world import WorldModel
 
 if TYPE_CHECKING:
@@ -121,12 +125,147 @@ class Brain:
         from qi.stasis.checkpoint import default_checkpoint_dir
 
         self.checkpoint_dir: Path = default_checkpoint_dir()
+        # 蛰伏（STASIS）：断粮后停主心跳；通道可留，但拒绝业务对话（第 1 批）
+        self.in_stasis: bool = False
+        self._stasis_checkpoint_written: bool = False
+        self._stasis_wake: asyncio.Event | None = None
         self._drift_signals: list[str] = []
         self._last_avatar_payload: dict | None = None
+        self._last_state_packet: dict | None = None
         self._traces: deque[dict] = deque(maxlen=20)
         self._trace_day: str | None = None
         # 本会话首条用户消息：deliver 之后 prefer_close open loop（不污染当轮）
         self._prefer_close_after_deliver = False
+
+    # 蛰伏时对用户的固定提示（非 LLM；唤醒走控制面）
+    STASIS_USER_NOTICE = "……我先封存休息了。等你唤醒我。"
+    STASIS_WAKE_NOTICE = "……嗯。我回来了。"
+    # 唤醒后赠予的滚动余额下限，避免瞬间再次断粮（滞回）
+    STASIS_WAKE_BALANCE_FLOOR = 10.0
+
+    def public_mode(self) -> str:
+        """前端可见模式：蛰伏时覆盖 emotion.mode，避免假「醒着」。"""
+        if self.in_stasis:
+            return "stasis"
+        return self.emotion.mode.value
+
+    def _wake_event(self) -> asyncio.Event:
+        if self._stasis_wake is None:
+            self._stasis_wake = asyncio.Event()
+        return self._stasis_wake
+
+    def request_shutdown(self) -> None:
+        """进程收尾：结束蛰伏等候并退出 start()。"""
+        self.alive = False
+        self.in_stasis = False
+        self._wake_event().set()
+
+    async def start(self) -> None:
+        """主循环；蛰伏时停代谢并原地等候唤醒（不退出任务）。"""
+        try:
+            while True:
+                if self.in_stasis and not self.alive:
+                    await self._park_stasis()
+                    if not self.alive:
+                        break
+                    continue
+
+                self._background.start()
+                try:
+                    while self.alive:
+                        async with self._heartbeat_lock:
+                            await self._heartbeat()
+                            speech = self._take_pending_speech()
+                        if speech is not None:
+                            await self._deliver_qi_message(
+                                speech.text,
+                                speech.now,
+                                proactive=speech.proactive,
+                            )
+                            await self._maybe_prefer_close_after_deliver()
+                        if not self.alive:
+                            break
+                        interval = next_interval(self.emotion, self.config)
+                        await asyncio.sleep(interval)
+                finally:
+                    await self._background.stop()
+
+                if self.in_stasis:
+                    await self._park_stasis()
+                    if not self.alive:
+                        break
+                    continue
+                break
+        finally:
+            await self._background.stop()
+            if self.on_halt is not None:
+                try:
+                    self.on_halt()
+                except Exception:
+                    logger.debug("on_halt 回调失败", exc_info=True)
+
+    async def _park_stasis(self) -> None:
+        """蛰伏等候：不跑后台代谢，直到 resume / shutdown。"""
+        logger.info("蛰伏中，等候唤醒")
+        ev = self._wake_event()
+        ev.clear()
+        await ev.wait()
+
+    async def resume_from_stasis(self) -> dict:
+        """控制面唤醒：清断粮标记、滞回余额、重启主循环。"""
+        if not self.in_stasis:
+            return {"ok": False, "reason": "not_in_stasis"}
+
+        from qi.stasis.pressure import reset_low_balance_streak
+
+        now = datetime.now()
+        reset_low_balance_streak()
+        self.ledger.starving = False
+        try:
+            stasis_cfg = self.config.get("stasis") or {}
+            amount = float(
+                stasis_cfg.get("presence_income", ONLINE_PRESENCE_AMOUNT)
+            )
+            self.ledger.credit_income(
+                "online_presence", amount=amount, now=now
+            )
+        except Exception:
+            logger.debug("唤醒在场收入失败", exc_info=True)
+        if self.ledger.balance <= 0:
+            self.ledger.force_balance(self.STASIS_WAKE_BALANCE_FLOOR)
+
+        self.in_stasis = False
+        self._stasis_checkpoint_written = False
+        self.alive = True
+        # 空闲起步 → ambient，避免冻在 awake
+        self.last_interaction = now - timedelta(seconds=60)
+        self.emotion.mode = determine_mode(
+            self.last_interaction,
+            self.user_online,
+            now,
+            interacting=False,
+        )
+
+        if self._db is not None:
+            try:
+                await self._db.set_body_memory(
+                    LEDGER_BODY_KEY, self.ledger.snapshot()
+                )
+            except Exception:
+                logger.debug("唤醒后账本持久化失败", exc_info=True)
+
+        try:
+            await self._sync_avatar(now, force=True)
+        except Exception:
+            logger.debug("唤醒状态推送失败", exc_info=True)
+        try:
+            await self._emit_speech(self.STASIS_WAKE_NOTICE)
+        except Exception:
+            logger.debug("唤醒提示推送失败", exc_info=True)
+
+        self._wake_event().set()
+        logger.info("已从蛰伏唤醒 mode=%s", self.public_mode())
+        return {"ok": True, "mode": self.public_mode()}
 
     def attach_embodiment(self, server: EmbodimentServer) -> None:
         """接上身体——之后说话会推到前端。"""
@@ -157,32 +296,6 @@ class Brain:
 
     async def _push_proactive_text(self, text: str) -> None:
         await _brain_delivery.push_proactive_text(self, text)
-
-    async def start(self) -> None:
-        self._background.start()
-        try:
-            while self.alive:
-                async with self._heartbeat_lock:
-                    await self._heartbeat()
-                    speech = self._take_pending_speech()
-                if speech is not None:
-                    # 主动开口：出锁后推送，不再人工停顿（用户回复才「想了想」）
-                    await self._deliver_qi_message(
-                        speech.text, speech.now, proactive=speech.proactive
-                    )
-                    await self._maybe_prefer_close_after_deliver()
-                if not self.alive:
-                    break
-                interval = next_interval(self.emotion, self.config)
-                await asyncio.sleep(interval)
-        finally:
-            await self._background.stop()
-            # 包 14：优雅停钩子（测试注入伪实现；CLI 可绑定进程退出）
-            if self.on_halt is not None:
-                try:
-                    self.on_halt()
-                except Exception:
-                    logger.debug("on_halt 回调失败", exc_info=True)
 
     def _apply_anomaly_nudge(self, anomalies: list[str]) -> None:
         if not anomalies:
@@ -296,9 +409,38 @@ class Brain:
 
     def _ledger_safe_credit_interaction(self, now: datetime) -> None:
         try:
-            self.ledger.credit_income("effective_interaction", now=now)
+            stasis_cfg = self.config.get("stasis") or {}
+            amount = float(
+                stasis_cfg.get("interaction_income", EFFECTIVE_INTERACTION_AMOUNT)
+            )
+            self.ledger.credit_income(
+                "effective_interaction", amount=amount, now=now
+            )
         except Exception:
             logger.debug("账本收入记账失败", exc_info=True)
+
+    def _ledger_safe_credit_presence(self, now: datetime) -> None:
+        """窗口在线时的钝感在场收入（白名单 online_presence）。"""
+        if not self.user_online or self.in_stasis:
+            return
+        try:
+            stasis_cfg = self.config.get("stasis") or {}
+            amount = float(
+                stasis_cfg.get("presence_income", ONLINE_PRESENCE_AMOUNT)
+            )
+            interval = float(
+                stasis_cfg.get(
+                    "presence_min_interval_sec", ONLINE_PRESENCE_MIN_INTERVAL_SEC
+                )
+            )
+            self.ledger.credit_income(
+                "online_presence",
+                amount=amount,
+                now=now,
+                min_interval_sec=interval,
+            )
+        except Exception:
+            logger.debug("在场收入记账失败", exc_info=True)
 
     def _ledger_maybe_estimate_storage(self) -> None:
         try:
@@ -465,7 +607,9 @@ class Brain:
                 (self.config.get("stasis") or {}).get("pressure_sensitivity", 1.0)
             )
             starve_beats = int(
-                (self.config.get("stasis") or {}).get("starve_beats", 30)
+                (self.config.get("stasis") or {}).get(
+                    "starve_beats", DEFAULT_STARVE_BEATS
+                )
             )
             resp = compute_pressure(
                 self.ledger, self.emotion, sensitivity=sens
@@ -494,15 +638,9 @@ class Brain:
         except Exception:
             logger.debug("内稳态压力更新失败", exc_info=True)
 
-        # 包 14：断粮 → 封存 → 优雅停（库内不 sys.exit）
+        # 包 14 / 蛰伏第 1 批：断粮 → 单次封存 → STASIS → 停主心跳（库内不 sys.exit）
         if getattr(self.ledger, "starving", False):
-            try:
-                from qi.stasis.checkpoint import write_checkpoint
-
-                await write_checkpoint(self, self.checkpoint_dir)
-            except Exception:
-                logger.exception("断粮封存失败，仍将停心跳")
-            self.alive = False
+            await self._enter_stasis()
 
         # 包 10：learning-progress 好奇（情绪步进之后、内在生命/GWS 之前）
         try:
@@ -625,6 +763,8 @@ class Brain:
             await self._maybe_save_emotion(now, force=pending is not None)
 
         self._ledger_maybe_estimate_storage()
+        if pending is None:
+            self._ledger_safe_credit_presence(now)
         try:
             self.ledger.add_compute(time.perf_counter() - t0)
         except Exception:
@@ -883,11 +1023,44 @@ class Brain:
         """空心跳节流落盘；有用户消息或强制时立即写。"""
         await _brain_persist.maybe_save_emotion(self, now, force=force)
 
+    async def _enter_stasis(self) -> None:
+        """进入蛰伏：每周期至多写一次 checkpoint，停主循环，通知前端。"""
+        if not self.in_stasis:
+            self.in_stasis = True
+            if not self._stasis_checkpoint_written:
+                try:
+                    from qi.stasis.checkpoint import write_checkpoint
+
+                    await write_checkpoint(self, self.checkpoint_dir)
+                    self._stasis_checkpoint_written = True
+                except Exception:
+                    logger.exception("断粮封存失败，仍将进入蛰伏")
+            logger.info("进入蛰伏（STASIS）：主心跳将停止")
+            try:
+                await self._sync_avatar(force=True)
+            except Exception:
+                logger.debug("蛰伏状态推送失败", exc_info=True)
+        self.alive = False
+
+    async def _reply_stasis_notice(self) -> str:
+        """蛰伏中拒绝业务拍；推送固定提示。"""
+        notice = self.STASIS_USER_NOTICE
+        try:
+            await self._emit_speech(notice)
+        except Exception:
+            logger.debug("蛰伏提示推送失败", exc_info=True)
+        return notice
+
     async def receive_user_message(self, message: str) -> str | None:
         text = (message or "").strip()
         if not text:
             return None
+        # 蛰伏：禁止「按一下跳一下」的假活业务心跳
+        if self.in_stasis:
+            return await self._reply_stasis_notice()
         async with self._heartbeat_lock:
+            if self.in_stasis:
+                return await self._reply_stasis_notice()
             if len(self._pending_queue) >= PENDING_QUEUE_MAX:
                 dropped = self._pending_queue.popleft()
                 logger.warning(
@@ -897,6 +1070,8 @@ class Brain:
             self._pending_queue.append(text)
             await self._heartbeat()
             speech = self._take_pending_speech()
+        if self.in_stasis and speech is None:
+            return await self._reply_stasis_notice()
         if speech is None:
             return None
         # 生成已在锁内完成；出锁后再「想了想」，再推送——不堵心跳
@@ -996,6 +1171,12 @@ class Brain:
                 self.inner_life._prev_valence = saved.valence
                 self.inner_life._prev_arousal = saved.arousal
             logger.info("恢复情绪：%s", self.emotion.description())
+        # 账本仍断粮：直接进入蛰伏，避免半死假 OPERATIONAL
+        if self.ledger.starving:
+            self.in_stasis = True
+            self._stasis_checkpoint_written = True
+            self.alive = False
+            logger.info("恢复时已断粮：进入蛰伏，主心跳不启动")
         # 醒来回溯：如果上次对话有实质内容，标记重启后第一拍触发意识流
         await self._maybe_mark_waking(db)
 

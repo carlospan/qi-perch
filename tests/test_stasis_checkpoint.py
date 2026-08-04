@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -59,6 +60,12 @@ def _minimal_brain(tmp: str, llm=None) -> Brain:
             "tts": {"enabled": False},
             "memory": {"chroma_path": str(Path(tmp) / "c")},
             "stasis": {"starve_beats": 3, "pressure_sensitivity": 1.0},
+            "rhythm": {
+                "awake_interval": 0.05,
+                "ambient_interval": 0.05,
+                "solitary_interval": 0.05,
+                "dreaming_interval": 0.05,
+            },
         },
         llm or _StubLLM(),  # type: ignore[arg-type]
     )
@@ -161,6 +168,7 @@ async def test_starve_e2e_chain_and_on_halt():
         brain.action = None
         ck_dir = Path(tmp) / "checkpoint"
         brain.checkpoint_dir = ck_dir
+        brain.user_online = False  # 断粮测试关闭在场收入，避免冲销
         halted: list[str] = []
         brain.on_halt = lambda: halted.append("halt")
 
@@ -183,6 +191,7 @@ async def test_starve_e2e_chain_and_on_halt():
 
         assert brain.ledger.starving is True
         assert brain.alive is False
+        assert brain.in_stasis is True
         assert latest_checkpoint(ck_dir) is not None
         # on_halt 在 start() finally；单拍路径直接断言封存已发生
         # 模拟 start finally
@@ -197,6 +206,118 @@ async def test_starve_e2e_chain_and_on_halt():
         assert ok is True
         assert brain3.ledger.starving is True
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_stasis_checkpoint_written_once_per_epoch():
+    """同一次蛰伏周期内多次心跳不得连刷 checkpoint。"""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        brain = _minimal_brain(tmp, llm=_FailLLM())
+        brain._db = db
+        ck_dir = Path(tmp) / "checkpoint"
+        brain.checkpoint_dir = ck_dir
+        brain.user_online = False
+        brain.ledger.force_balance(0.0)
+        brain.emotion = EmotionState(energy=0.35, attachment=0.7, security=0.2)
+
+        for _ in range(8):
+            if not brain.alive:
+                # 模拟半死旧路径：强行再调心跳（应被门控/幂等挡住写盘）
+                brain.alive = True
+            await brain._heartbeat()
+            if brain.in_stasis:
+                brain.alive = False
+
+        files = list(ck_dir.glob("checkpoint_*.json"))
+        assert brain.in_stasis is True
+        assert len(files) == 1
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_stasis_rejects_business_chat_without_llm():
+    """蛰伏中发消息：固定提示，不跑业务心跳 / 不调 LLM。"""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        calls: list[str] = []
+
+        class _CountingLLM(_FailLLM):
+            async def call(self, purpose, messages, temperature=None):
+                calls.append(purpose)
+                return ""
+
+        brain = _minimal_brain(tmp, llm=_CountingLLM())
+        brain.in_stasis = True
+        brain.alive = False
+        brain.ledger.starving = True
+
+        reply = await brain.receive_user_message("还在吗")
+        assert reply == Brain.STASIS_USER_NOTICE
+        assert calls == []
+        assert brain.heartbeat_count == 0
+
+
+@pytest.mark.asyncio
+async def test_restore_starving_enters_stasis_without_loop():
+    """恢复时 ledger.starving → 直接蛰伏，alive=False。"""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        brain = _minimal_brain(tmp)
+        brain.ledger.starving = True
+        await db.set_body_memory("resource_ledger", brain.ledger.snapshot())
+
+        brain2 = _minimal_brain(tmp + "_2")
+        await brain2.restore_state(db)
+        assert brain2.ledger.starving is True
+        assert brain2.in_stasis is True
+        assert brain2.alive is False
+        assert brain2.public_mode() == "stasis"
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_resume_from_stasis_restarts_heartbeat():
+    """蛰伏原地等候 → 唤醒后主循环继续跳。"""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        brain = _minimal_brain(tmp, llm=_FailLLM())
+        brain._db = db
+        brain.checkpoint_dir = Path(tmp) / "checkpoint"
+        brain.in_stasis = True
+        brain.alive = False
+        brain.ledger.starving = True
+        brain.ledger.force_balance(0.0)
+
+        task = asyncio.create_task(brain.start())
+        await asyncio.sleep(0.05)
+        assert not task.done()
+        assert brain.heartbeat_count == 0
+
+        result = await brain.resume_from_stasis()
+        assert result["ok"] is True
+        assert brain.in_stasis is False
+        assert brain.alive is True
+        assert brain.public_mode() == "ambient"
+
+        await asyncio.sleep(0.35)
+        assert brain.heartbeat_count >= 1
+
+        brain.request_shutdown()
+        await asyncio.wait_for(task, timeout=3)
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_resume_when_not_stasis_is_noop():
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        brain = _minimal_brain(tmp)
+        brain.in_stasis = False
+        result = await brain.resume_from_stasis()
+        assert result["ok"] is False
+        assert result["reason"] == "not_in_stasis"
 
 
 @pytest.mark.asyncio

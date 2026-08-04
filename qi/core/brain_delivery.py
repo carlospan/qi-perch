@@ -18,25 +18,33 @@ async def sync_avatar(
     brain: Brain, now: datetime | None = None, force: bool = False
 ) -> None:
     now = now or datetime.now()
+    ui_mode = brain.public_mode()
     state = brain.avatar.map_state(
         brain.emotion,
-        brain.emotion.mode.value,
+        ui_mode if ui_mode != "stasis" else "solitary",
         season=brain._current_season(),
         now=now,
     )
     payload = state.to_dict()
-    if not force and payload == brain._last_avatar_payload:
+    state_packet = {
+        "avatar_state": payload,
+        "season": brain._current_season(),
+        "mode": ui_mode,
+        "stasis": bool(getattr(brain, "in_stasis", False)),
+    }
+    if (
+        not force
+        and payload == brain._last_avatar_payload
+        and getattr(brain, "_last_state_packet", None) == state_packet
+    ):
         return
     brain._last_avatar_payload = payload
+    brain._last_state_packet = state_packet
     if brain.embodiment is not None:
         await brain.embodiment.broadcast(
             {
                 "type": "state",
-                "payload": {
-                    "avatar_state": payload,
-                    "season": brain._current_season(),
-                    "mode": brain.emotion.mode.value,
-                },
+                "payload": state_packet,
             }
         )
 

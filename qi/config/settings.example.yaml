@@ -98,3 +98,11 @@ voice:
 embodiment:
   host: "127.0.0.1"
   port: 9527
+
+# 内稳态 / 资源账本（阶段四；第 3 批标定）
+stasis:
+  starve_beats: 45
+  interaction_income: 25.0       # 有效交互单次收入
+  presence_income: 2.0           # 在场钝感收入
+  presence_min_interval_sec: 30  # 在场入账最短间隔
+  pressure_sensitivity: 1.0

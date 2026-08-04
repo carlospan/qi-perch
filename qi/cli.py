@@ -20,8 +20,11 @@ console = Console()
 
 def _format_state(brain: Brain) -> str:
     e = brain.emotion
+    mode = brain.public_mode() if hasattr(brain, "public_mode") else e.mode.value
+    stasis = "是" if getattr(brain, "in_stasis", False) else "否"
     return (
-        f"模式：{e.mode.value}\n"
+        f"模式：{mode}\n"
+        f"蛰伏：{stasis}\n"
         f"描述：{e.description()}\n"
         f"energy={e.energy:.2f}  valence={e.valence:.2f}  arousal={e.arousal:.2f}\n"
         f"security={e.security:.2f}  curiosity={e.curiosity:.2f}  attachment={e.attachment:.2f}\n"
@@ -65,7 +68,7 @@ async def run_terminal() -> None:
     proactive_task = asyncio.create_task(_drain_proactive())
     loop = asyncio.get_running_loop()
     try:
-        while brain.alive:
+        while brain.alive or brain.in_stasis:
             user_input = await loop.run_in_executor(None, console.input, "[bold blue]你：[/bold blue]")
             user_input = user_input.strip()
 
@@ -77,11 +80,23 @@ async def run_terminal() -> None:
             if user_input == "/state":
                 console.print(Panel(_format_state(brain), title="内在状态", border_style="cyan"))
                 continue
+            if user_input == "/wake":
+                result = await brain.resume_from_stasis()
+                if result.get("ok"):
+                    console.print("\n[dim]栖：……嗯。我回来了。[/dim]\n")
+                else:
+                    console.print("\n[dim]现在不是蛰伏状态。[/dim]\n")
+                continue
             if user_input == "/why":
                 console.print(
                     Panel(await brain.format_why(), title="心跳痕迹", border_style="magenta")
                 )
                 continue
+
+            if brain.in_stasis:
+                console.print(
+                    "\n[dim]栖在蛰伏。输入 /wake 唤醒，或继续发消息会收到封存提示。[/dim]\n"
+                )
 
             response = await brain.receive_user_message(user_input)
             if response:
@@ -92,7 +107,7 @@ async def run_terminal() -> None:
     except (KeyboardInterrupt, EOFError):
         console.print("\n[dim]栖安静下来了。[/dim]")
     finally:
-        brain.alive = False
+        brain.request_shutdown()
         proactive_task.cancel()
         try:
             await proactive_task
@@ -139,20 +154,25 @@ async def run_desktop() -> None:
     console.print(
         "\n[dim]栖在等你打开窗口。Ctrl+C 结束。终端模式仍可用：qi 或 python -m qi[/dim]\n"
     )
+    if brain.in_stasis:
+        console.print(
+            "\n[yellow]栖正处于蛰伏。前端点「唤醒」，或发命令 /wake。[/yellow]\n"
+        )
 
     try:
         await asyncio.gather(brain_task, server_task)
     except asyncio.CancelledError:
         pass
     finally:
-        brain.alive = False
+        brain.request_shutdown()
         await server.stop()
         for task in (brain_task, server_task):
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
         await brain.save_state(db)
         await db.close()
         console.print("\n[dim]栖安静下来了。[/dim]")

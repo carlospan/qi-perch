@@ -55,26 +55,8 @@ class EmbodimentServer:
     async def _handler(self, websocket) -> None:
         self.clients.add(websocket)
         try:
-            avatar = (
-                self.brain.avatar.current_state.to_dict()
-                if getattr(self.brain, "avatar", None)
-                else {"posture": "idle", "expression": "neutral", "effect": "none"}
-            )
-            season = "spring"
-            mode = "awake"
-            if getattr(self.brain, "relationship", None) is not None:
-                season = self.brain.relationship.state.season
-            if getattr(self.brain, "emotion", None) is not None:
-                mode = self.brain.emotion.mode.value
-            await self.broadcast(
-                {
-                    "type": "state",
-                    "payload": {
-                        "avatar_state": avatar,
-                        "season": season,
-                        "mode": mode,
-                    },
-                }
+            await websocket.send(
+                json.dumps(self._state_packet(), ensure_ascii=False)
             )
             async for raw in websocket:
                 try:
@@ -87,12 +69,40 @@ class EmbodimentServer:
         finally:
             self.clients.discard(websocket)
 
+    def _state_packet(self) -> dict:
+        avatar = (
+            self.brain.avatar.current_state.to_dict()
+            if getattr(self.brain, "avatar", None)
+            else {"posture": "idle", "expression": "neutral", "effect": "none"}
+        )
+        season = "spring"
+        if getattr(self.brain, "relationship", None) is not None:
+            season = self.brain.relationship.state.season
+        mode = "awake"
+        if hasattr(self.brain, "public_mode"):
+            mode = self.brain.public_mode()
+        elif getattr(self.brain, "emotion", None) is not None:
+            mode = self.brain.emotion.mode.value
+        stasis = bool(getattr(self.brain, "in_stasis", False))
+        return {
+            "type": "state",
+            "payload": {
+                "avatar_state": avatar,
+                "season": season,
+                "mode": mode,
+                "stasis": stasis,
+            },
+        }
+
     async def _handle_client_message(self, msg: dict, websocket: Any = None) -> None:
         msg_type = msg.get("type")
         payload = msg.get("payload") or {}
         if msg_type == "user_message":
             text = (payload.get("text") or "").strip()
             if not text:
+                return
+            if getattr(self.brain, "in_stasis", False):
+                await self.brain.receive_user_message(text)
                 return
             await self.send_typing()
             response = await self.brain.receive_user_message(text)
@@ -118,6 +128,11 @@ class EmbodimentServer:
             cmd = (payload.get("text") or "").strip()
             if cmd == "/state":
                 e = self.brain.emotion
+                mode = (
+                    self.brain.public_mode()
+                    if hasattr(self.brain, "public_mode")
+                    else e.mode.value
+                )
                 await self.broadcast(
                     {
                         "type": "emotion_update",
@@ -128,7 +143,8 @@ class EmbodimentServer:
                             "security": e.security,
                             "curiosity": e.curiosity,
                             "attachment": e.attachment,
-                            "mode": e.mode.value,
+                            "mode": mode,
+                            "stasis": bool(getattr(self.brain, "in_stasis", False)),
                             "description": e.description(),
                             "stage": self.brain.relationship_stage,
                         },
@@ -138,6 +154,16 @@ class EmbodimentServer:
                 await self._send_history(websocket)
             elif cmd == "/journal":
                 await self._send_journal(websocket)
+            elif cmd == "/wake":
+                result = await self.brain.resume_from_stasis()
+                await self.broadcast(
+                    {
+                        "type": "wake_result",
+                        "payload": result,
+                    }
+                )
+                if result.get("ok"):
+                    await self.broadcast(self._state_packet())
 
     async def _send_history(self, websocket: Any | None) -> None:
         """把 SQLite 里全部对话推给请求方（本机单用户；无 websocket 则广播）。"""

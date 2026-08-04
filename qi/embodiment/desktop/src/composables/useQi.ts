@@ -76,9 +76,12 @@ function createQi() {
   /** 内在日记（启动后由 /journal 灌入；库空则保持空） */
   const journal = ref<JournalEntry[]>([]);
 
-  const mode = computed(
-    () => emotion.value.mode || avatar.value.posture || "awake"
-  );
+  const mode = computed(() => {
+    if (emotion.value.stasis || emotion.value.mode === "stasis") {
+      return "stasis";
+    }
+    return emotion.value.mode || avatar.value.posture || "awake";
+  });
 
   const talkByDay = computed<TalkDayGroup[]>(() => {
     const groups = new Map<string, TalkDayGroup>();
@@ -187,6 +190,11 @@ function createQi() {
     qiWs.send({ type: "command", payload: { text: "/journal" } });
   }
 
+  function requestWake() {
+    if (!connected.value) return;
+    qiWs.send({ type: "command", payload: { text: "/wake" } });
+  }
+
   function onVis() {
     qiWs.setPresence(document.visibilityState === "visible");
   }
@@ -221,11 +229,17 @@ function createQi() {
           avatar_state: AvatarState;
           season?: string;
           mode?: string;
+          stasis?: boolean;
         }) => {
           avatar.value = payload.avatar_state;
           if (payload.season) season.value = payload.season;
-          if (payload.mode) {
-            emotion.value = { ...emotion.value, mode: payload.mode };
+          const stasis = Boolean(payload.stasis) || payload.mode === "stasis";
+          if (payload.mode || stasis) {
+            emotion.value = {
+              ...emotion.value,
+              mode: stasis ? "stasis" : payload.mode,
+              stasis,
+            };
             if (emotion.value.energy != null) {
               onEmotionUpdate(emotion.value);
             }
@@ -233,9 +247,27 @@ function createQi() {
         }
       );
       qiWs.on("emotion_update", (payload: EmotionSnapshot) => {
-        emotion.value = payload;
-        onEmotionUpdate(payload);
+        const stasis =
+          Boolean(payload.stasis) || payload.mode === "stasis" || false;
+        emotion.value = {
+          ...payload,
+          mode: stasis ? "stasis" : payload.mode,
+          stasis,
+        };
+        onEmotionUpdate(emotion.value);
       });
+      qiWs.on(
+        "wake_result",
+        (payload: { ok?: boolean; mode?: string; reason?: string }) => {
+          if (!payload?.ok) return;
+          emotion.value = {
+            ...emotion.value,
+            stasis: false,
+            mode: payload.mode || "ambient",
+          };
+          requestEmotionSnapshot();
+        }
+      );
       qiWs.on("audio", (payload: { data: string; mime?: string }) => {
         playAudio(payload.data, payload.mime);
       });
@@ -280,6 +312,10 @@ function createQi() {
     requestHistory();
   }
 
+  const inStasis = computed(
+    () => mode.value === "stasis" || Boolean(emotion.value.stasis)
+  );
+
   return {
     view,
     connected,
@@ -291,6 +327,7 @@ function createQi() {
     emotion,
     avatar,
     mode,
+    inStasis,
     talk,
     talkByDay,
     journal,
@@ -299,6 +336,7 @@ function createQi() {
     connect,
     disconnect,
     refreshHistory,
+    requestWake,
   };
 }
 

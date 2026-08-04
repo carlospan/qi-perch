@@ -455,9 +455,9 @@ export function createLive2D(container: HTMLElement): Live2DController {
 
   function scheduleIdleRotate() {
     clearIdleTimer();
-    if (mode === "dreaming" || mode === "solitary") return;
+    if (mode === "dreaming" || mode === "solitary" || mode === "stasis") return;
     idleTimer = window.setTimeout(() => {
-      if (destroyed || mode === "dreaming") return;
+      if (destroyed || mode === "dreaming" || mode === "stasis") return;
       const pick = IDLE_AWAKE[Math.floor(Math.random() * IDLE_AWAKE.length)];
       safeMotion(pick);
       scheduleIdleRotate();
@@ -475,11 +475,16 @@ export function createLive2D(container: HTMLElement): Live2DController {
       return;
     }
 
+    if (next === "stasis") {
+      safeMotion(IDLE_SOLITARY);
+      return;
+    }
+
     if (prev === "dreaming" && next !== "dreaming") {
       safeMotion(WAKE);
       window.setTimeout(() => {
         if (destroyed || mode === "dreaming") return;
-        if (mode === "solitary") safeMotion(IDLE_SOLITARY);
+        if (mode === "solitary" || mode === "stasis") safeMotion(IDLE_SOLITARY);
         else safeMotion(IDLE_AWAKE[0]);
         scheduleIdleRotate();
       }, 2200);

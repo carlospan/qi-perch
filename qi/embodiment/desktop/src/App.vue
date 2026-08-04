@@ -22,10 +22,12 @@ const {
   season,
   emotion,
   mode,
+  inStasis,
   avatar,
   talkByDay,
   journal,
   send,
+  requestWake,
   connect,
   disconnect,
 } = useQi();
@@ -96,7 +98,16 @@ onUnmounted(() => disconnect());
 
       <footer>
         <ViewTabs v-model="view" />
-        <InputBox @send="send" />
+        <button
+          v-if="inStasis"
+          type="button"
+          class="wake-btn"
+          :disabled="!connected"
+          @click="requestWake"
+        >
+          唤醒
+        </button>
+        <InputBox v-else @send="send" />
       </footer>
     </div>
   </div>
@@ -302,5 +313,27 @@ footer {
 }
 .shell.booted footer {
   animation: brand-in-title 0.45s var(--ease-view) 0.85s forwards;
+}
+
+.wake-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--ink-dim) 35%, transparent);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--serif, Georgia, serif);
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+.wake-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.wake-btn:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--ember) 50%, transparent);
+  color: var(--ember);
 }
 </style>

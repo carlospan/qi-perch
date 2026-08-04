@@ -18,6 +18,7 @@ const modeLabel: Record<string, string> = {
   solitary: "自己待着",
   dreaming: "在梦里",
   interacting: "在听你",
+  stasis: "已封存休息",
 };
 </script>
 
