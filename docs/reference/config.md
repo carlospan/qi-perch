@@ -10,7 +10,7 @@
 
 | 键 | 默认值 | 语义 |
 |----|--------|------|
-| `llm.default_provider` | `sensenova` | 默认供应商 |
+| `llm.default_provider` | `deepseek` | 默认供应商 |
 | `llm.providers.*.base_url` / `api_key` | — | 端点与密钥（密钥走 env，不落库） |
 | `llm.providers.*.models.fast` / `strong` | 见 yaml | 快/强模型名 |
 | `llm.custom_providers` | `{}` | 自定义端点 |

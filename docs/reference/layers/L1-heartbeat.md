@@ -105,7 +105,7 @@ llm:
     reflection: "deepseek:strong"
     fact: "deepseek:fast"
     # <!-- 回写(2026-08-01)：补 fact 路由（L2-user-facts 落地时遗漏）；另注意 settings.example.yaml
-    #      的 default_provider 已切换为 sensenova，本块 deepseek 仅为示例，以包内 example 为准。 -->
+    #      的 default_provider 以包内 settings.example.yaml 为准（现行 deepseek-v4-flash）。 -->
 
 rhythm:
   awake_interval: 3

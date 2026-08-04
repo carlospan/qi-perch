@@ -252,7 +252,7 @@ requirements.lock   锁定版本（CI 用）
 
 **用途默认温度**：conversation 0.7 / consciousness 0.85 / dream 1.1 / fact 0.3。
 
-**路由示例**（settings.yaml）：`conversation: "sensenova:fast"`、`narrative: "sensenova:strong"`。
+**路由示例**（settings.yaml）：`conversation: "deepseek:fast"`、`narrative: "deepseek:strong"`。
 
 ### 3.8 `qi/stasis/` — 内稳态与存续（N0 / 阶段四）
 
@@ -673,13 +673,13 @@ push main / PR 触发，ubuntu-latest + Python 3.12：
 
 ```yaml
 llm:
-  default_provider: "sensenova"
+  default_provider: "deepseek"
   providers: { deepseek / agnes-ai / sensenova }   # base_url + api_key(${ENV}) + models{fast,strong}
   model_routing:
-    conversation: "sensenova:fast"
-    narrative: "sensenova:strong"
-    consciousness / dream / creation / fact: "sensenova:fast"
-    reflection: "sensenova:strong"
+    conversation: "deepseek:fast"
+    narrative: "deepseek:strong"
+    consciousness / dream / creation / fact: "deepseek:fast"
+    reflection: "deepseek:strong"
 
 rhythm:                                          # 心跳间隔（秒）
   awake_interval: 3
