@@ -382,7 +382,7 @@ class Brain:
                     assessment=self.perception.last_assessment,
                 )
                 if rel.get("stage_changed") and self.inner_life is not None:
-                    self.inner_life.self_model.mark_major_event()
+                    await self.inner_life.self_model.mark_major_event()
                 allow_commitment = True
                 if (
                     not rel.get("stage_changed")

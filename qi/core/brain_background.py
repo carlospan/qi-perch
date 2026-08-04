@@ -55,11 +55,15 @@ async def narrative_weaving(brain: Brain) -> None:
     backlog_threshold = int(mem_cfg.get("narrative_weave_backlog_threshold", 8))
     backlog_interval = float(mem_cfg.get("narrative_weave_backlog_interval", 900))
     check_period = float(mem_cfg.get("narrative_weave_check_period", 3600))
+    first_pass = True
     while brain.alive:
         pending = await brain._pending_event_count()
         if pending >= backlog_threshold:
-            # 积压够：短周期
-            await asyncio.sleep(backlog_interval)
+            # 积压够：短周期；启动即积压则首轮不睡，直接织（包19）
+            if first_pass:
+                pass
+            else:
+                await asyncio.sleep(backlog_interval)
         else:
             # 积压不够：长睡 interval，但拆成 check_period 小段复查；
             # 积压中途涨够就提前跳出，不再干等满 interval（W4）
@@ -72,6 +76,7 @@ async def narrative_weaving(brain: Brain) -> None:
                     break
         # 睡眠已在分支内完成，这里直接织——不再二次 sleep
         if not brain.alive or brain.memory is None:
+            first_pass = False
             continue
         try:
             if await brain.memory.has_unprocessed_events():
@@ -80,6 +85,7 @@ async def narrative_weaving(brain: Brain) -> None:
                 )
         except Exception:
             logger.exception("叙事编织后台出错")
+        first_pass = False
 
 
 async def pending_event_count(brain: Brain) -> int:
@@ -94,14 +100,20 @@ async def pending_event_count(brain: Brain) -> int:
 
 async def memory_decay(brain: Brain) -> None:
     interval = float(brain.config.get("memory", {}).get("decay_interval", 86400))
+    # 距上次褪色不足周期则补足；超期则短延迟（120s）即跑——不再要求连续挂机 24h
+    await asyncio.sleep(
+        await brain._resume_interval_wait("last_memory_decay", interval, 120.0)
+    )
     while brain.alive:
-        await asyncio.sleep(interval)
         if not brain.alive or brain.memory is None:
+            await asyncio.sleep(min(3600.0, interval))
             continue
         try:
             await brain.memory.narrative.decay()
+            await brain._mark_interval_done("last_memory_decay")
         except Exception:
             logger.exception("记忆褪色后台出错")
+        await asyncio.sleep(interval)
 
 
 async def self_reflection(brain: Brain) -> None:

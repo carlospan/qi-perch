@@ -73,7 +73,7 @@ async def test_weave_quiet_sleeps_full_interval_not_double():
 
 @pytest.mark.asyncio
 async def test_weave_backlog_uses_short_cycle():
-    """积压一开始就 ≥8 → 走短周期 backlog_interval。"""
+    """积压一开始就 ≥8：首轮不睡 backlog_interval，直接织（包19 first_pass）。"""
     counts = [10] * 100
     brain, sleeps, weaves = _make_brain(counts)
 
@@ -81,4 +81,70 @@ async def test_weave_backlog_uses_short_cycle():
         await brain._background_narrative_weaving()
 
     assert len(weaves) == 1
-    assert sleeps == [5]  # 只睡一个短周期
+    assert sleeps == []  # 启动即积压：首轮不睡
+
+
+@pytest.mark.asyncio
+async def test_weave_backlog_second_pass_sleeps_short_cycle():
+    """首轮织完后若仍积压且继续跑：第二轮才睡 backlog_interval。"""
+    counts = [10] * 100
+    brain = Brain(WEAVE_CFG, MagicMock())
+    brain.alive = True
+    memory = MagicMock()
+    memory.unprocessed_event_count = AsyncMock(side_effect=counts)
+    memory.has_unprocessed_events = AsyncMock(return_value=True)
+    sleeps: list[float] = []
+    weaves: list[int] = []
+
+    async def fake_weave(*args, **kwargs):
+        weaves.append(1)
+        if len(weaves) >= 2:
+            brain.alive = False
+
+    memory.weave_narrative = AsyncMock(side_effect=fake_weave)
+    brain.memory = memory
+
+    with patch("qi.core.brain.asyncio.sleep", side_effect=lambda s: sleeps.append(s)):
+        await brain._background_narrative_weaving()
+
+    assert len(weaves) == 2
+    assert sleeps == [5]
+
+
+@pytest.mark.asyncio
+async def test_memory_decay_uses_resume_interval_wait():
+    """包19：memory_decay 首睡走 _resume_interval_wait，不再硬睡满 interval。"""
+    cfg = {"memory": {"decay_interval": 86400}}
+    brain = Brain(cfg, MagicMock())
+    brain.alive = True
+    narrative = MagicMock()
+    decayed: list[int] = []
+
+    async def fake_decay():
+        decayed.append(1)
+        brain.alive = False
+
+    narrative.decay = AsyncMock(side_effect=fake_decay)
+    memory = MagicMock()
+    memory.narrative = narrative
+    brain.memory = memory
+
+    sleeps: list[float] = []
+    resume_calls: list[tuple] = []
+
+    async def fake_resume(key, interval, default_first):
+        resume_calls.append((key, interval, default_first))
+        return 120.0
+
+    brain._resume_interval_wait = AsyncMock(side_effect=fake_resume)
+    brain._mark_interval_done = AsyncMock()
+
+    with patch("qi.core.brain.asyncio.sleep", side_effect=lambda s: sleeps.append(s)):
+        await brain._background_memory_decay()
+
+    assert resume_calls == [("last_memory_decay", 86400.0, 120.0)]
+    assert sleeps[0] == 120.0
+    assert len(decayed) == 1
+    brain._mark_interval_done.assert_awaited_with("last_memory_decay")
+    # decay 后 while 尾部仍会排一次 sleep(interval)，随后因 alive=False 退出
+    assert 86400.0 in sleeps

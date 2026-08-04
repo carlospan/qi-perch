@@ -79,7 +79,7 @@ class InnerLife:
                 self._afterglow_done_for = int(dream["id"])
 
         delta_v = emotion.valence - self._prev_valence
-        self.self_model.note_emotion_surge(delta_v)
+        await self.self_model.note_emotion_surge(delta_v)
         if abs(delta_v) > SNAPSHOT_VALENCE_SURGE:
             await mark_identity_snapshot_stale(self.db)
 

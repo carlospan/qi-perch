@@ -298,6 +298,8 @@ def looks_like_person_name(name: str) -> bool:
             "怎么", "为什", "可以", "这个", "那个", "什么时", "吧", "吗",
             # 包16 扩充：漏网「过去拿」及希望被叫做类误抽
             "拿", "代码", "写", "希望被叫做", "被叫做", "叫过去", "谁的代码",
+            # 包19：口语短语漏网（请再解释一下 / 存在我本地）
+            "请", "再", "解释", "一下", "存在", "本地",
         )
     ):
         return False
@@ -305,8 +307,12 @@ def looks_like_person_name(name: str) -> bool:
         return False
     if len(name) > 12:
         return False
-    # 汉字名（可含 ·）；人名一般 1-4 字，超过 6 字的“名字”大多是短语误判
-    if re.fullmatch(r"[\u4e00-\u9fff·]{1,6}", name):
+    # 包19 主防线：字数形态收紧（实证脏数据全部 ≥5 字短语）
+    # 含「·」少数民族长名：3-12 字
+    if "·" in name:
+        return bool(re.fullmatch(r"[\u4e00-\u9fff·]{3,12}", name))
+    # 纯汉字名：2-4 字（汉语姓名形态上限）
+    if re.fullmatch(r"[\u4e00-\u9fff]{2,4}", name):
         return True
     if re.fullmatch(r"[A-Za-z][A-Za-z\-'. ]{0,30}", name) and len(name) <= 32:
         return True

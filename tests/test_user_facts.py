@@ -406,6 +406,13 @@ async def test_looks_like_person_name_gate():
     assert not looks_like_person_name("我来修这个问题")
     # 包16：漏网「过去拿」
     assert not looks_like_person_name("过去拿")
+    # 包19：字数形态收紧 + 口语黑名单
+    assert not looks_like_person_name("请再解释一下")
+    assert not looks_like_person_name("存在我本地")
+    assert not looks_like_person_name("再解释")
+    assert looks_like_person_name("阿依古丽·买买提")
+    # 5 字无「·」不得再当人名
+    assert not looks_like_person_name("司马相如之")
 
 
 @pytest.mark.asyncio

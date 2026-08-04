@@ -14,6 +14,7 @@ from qi.prompts import read_prompt
 
 SELF_REFLECTION_INTERVAL_SECONDS = 604800
 VALENCE_SURGE_FOR_REFLECT = 0.5
+PENDING_MAJOR_KEY = "self_model_pending_major"
 
 
 class SelfModel:
@@ -28,15 +29,39 @@ class SelfModel:
         )
         self._pending_major = False
 
-    def mark_major_event(self) -> None:
+    async def mark_major_event(self) -> None:
         self._pending_major = True
+        await self.db.set_body_memory(PENDING_MAJOR_KEY, "1")
 
-    def note_emotion_surge(self, delta_valence: float) -> None:
+    async def note_emotion_surge(self, delta_valence: float) -> None:
         if abs(delta_valence) > VALENCE_SURGE_FOR_REFLECT:
             self._pending_major = True
+            await self.db.set_body_memory(PENDING_MAJOR_KEY, "1")
+
+    async def _load_pending_major(self) -> None:
+        """惰性加载：内存未置位时查 body_memory（跨重启存活）。"""
+        if self._pending_major:
+            return
+        try:
+            val = await self.db.get_body_memory(PENDING_MAJOR_KEY)
+        except Exception:
+            return
+        if val in (None, "", 0, False):
+            return
+        # set_body_memory("1") → get 可能经 json.loads 得 int 1
+        if val == "1" or val == 1 or val is True:
+            self._pending_major = True
+
+    async def _clear_pending_major(self) -> None:
+        self._pending_major = False
+        try:
+            await self.db.set_body_memory(PENDING_MAJOR_KEY, "")
+        except Exception:
+            pass
 
     async def should_reflect(self, now: datetime | None = None) -> bool:
         now = now or datetime.now()
+        await self._load_pending_major()
         if self._pending_major:
             return True
         row = await self.db.load_self_model()
@@ -108,7 +133,7 @@ class SelfModel:
             aesthetic_preferences=aesthetic,
             existential_questions=existential,
         )
-        self._pending_major = False
+        await self._clear_pending_major()
         # 失效闭环置位：后台 reflect 成功后必须让快照重建，不能顶着旧自我用一周
         from qi.inner_life.identity_snapshot import mark_identity_snapshot_stale
 
