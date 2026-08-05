@@ -2,6 +2,7 @@
 
 > 本目录归档阶段三（换心：内生认知）任务包相关过程稿。
 > 归档不删（对齐 OpenSpec / GitHub Spec Kit）。
+> 回写(2026-08-06)：原 `specs/tasks/` 阶段三主线/PR 方案已迁入**本桶**；勿当现行施工权威，见 `specs/stages/stage-3.md`。
 
 ## 包含
 

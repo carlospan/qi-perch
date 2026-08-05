@@ -9,7 +9,7 @@
 
 N1 传感/执行器扩展；GWS 仲裁替换 `_pending_queue` 单通道；`_record_trace` 升级为全量广播痕迹。
 
-## 施工内容（详见任务包 `specs/tasks/2026-08-02-阶段二退出.md`）
+## 施工内容（详见任务包 `specs/archive/2026-08-02-stage2-exit/2026-08-02-阶段二退出.md`）
 
 - 包 6：广播痕迹升级 + 显著性评分基础（GWS 数据地基）
 - 包 7：GWS 仲裁替换 `_pending_queue` 单通道（shadow 并行 → 切换）
