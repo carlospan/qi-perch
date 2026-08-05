@@ -48,7 +48,7 @@ class LLMGateway:
     def __init__(self, config: dict):
         self.providers: dict[str, OpenAICompatProvider] = {}
         self.routing: dict = config.get("llm", {}).get("model_routing", {})
-        self._default_provider = config.get("llm", {}).get("default_provider", "deepseek")
+        self._default_provider = config.get("llm", {}).get("default_provider", "tokenrhythm")
         self.last_outcome: LLMCallOutcome = _SUCCESS_IDLE
         self._init_providers(config)
 

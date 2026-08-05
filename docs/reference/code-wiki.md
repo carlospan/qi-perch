@@ -252,7 +252,7 @@ requirements.lock   锁定版本（CI 用）
 
 **用途默认温度**：conversation 0.7 / consciousness 0.85 / dream 1.1 / fact 0.3。
 
-**路由示例**（settings.yaml）：`conversation: "deepseek:fast"`（默认 `deepseek-v4-flash`）。
+**路由示例**（settings.yaml）：`conversation: "tokenrhythm:fast"`（custom `deepseek-v4-flash-0731`；`providers.deepseek` 备用）。
 
 ### 3.8 `qi/stasis/` — 内稳态与存续（N0 / 阶段四）
 
@@ -673,14 +673,14 @@ push main / PR 触发，ubuntu-latest + Python 3.12：
 
 ```yaml
 llm:
-  default_provider: "deepseek"
-  providers: { deepseek }   # base_url + api_key(${ENV}) + models{fast,strong}；换供应商走 custom_providers
+  default_provider: "tokenrhythm"
+  providers: { deepseek }   # 官方备用
+  custom_providers: { tokenrhythm }  # 现行：deepseek-v4-flash-0731
   model_routing:
-    conversation: "deepseek:fast"
-    narrative: "deepseek:strong"
-    consciousness / dream / creation / fact: "deepseek:fast"
-    reflection: "deepseek:strong"
-  # 现行 models: fast/strong = deepseek-v4-flash
+    conversation: "tokenrhythm:fast"
+    narrative: "tokenrhythm:strong"
+    consciousness / dream / creation / fact: "tokenrhythm:fast"
+    reflection: "tokenrhythm:strong"
 
 
 rhythm:                                          # 心跳间隔（秒）
