@@ -161,18 +161,23 @@ async def run_desktop() -> None:
 
     try:
         await asyncio.gather(brain_task, server_task)
-    except asyncio.CancelledError:
+    except (asyncio.CancelledError, KeyboardInterrupt):
         pass
     finally:
         brain.request_shutdown()
-        await server.stop()
+        # 先取消任务，再 stop；否则 wait_closed 会卡在仍存活的 WS handler 上
         for task in (brain_task, server_task):
             if not task.done():
                 task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+        for task in (brain_task, server_task):
+            try:
+                await asyncio.wait_for(task, timeout=5)
+            except (TimeoutError, asyncio.CancelledError):
+                pass
+        try:
+            await asyncio.wait_for(server.stop(), timeout=5)
+        except TimeoutError:
+            console.print("\n[dim]通道关闭超时，强制收尾。[/dim]")
         await brain.save_state(db)
         await db.close()
         console.print("\n[dim]栖安静下来了。[/dim]")

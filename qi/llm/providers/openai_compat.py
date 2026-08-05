@@ -1,4 +1,4 @@
-"""OpenAI 兼容端点的统一 provider。deepseek / agnes-ai / 自定义共用。"""
+"""OpenAI 兼容端点的统一 provider（deepseek / custom_providers 等）。"""
 
 from __future__ import annotations
 

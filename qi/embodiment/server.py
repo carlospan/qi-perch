@@ -40,12 +40,33 @@ class EmbodimentServer:
         await self._server.wait_closed()
 
     async def stop(self) -> None:
+        """关闭监听与已有连接；wait_closed 有超时，避免 Ctrl+C 卡死。"""
         self.running = False
-        if self._ping_task:
+        if self._ping_task is not None:
             self._ping_task.cancel()
-        if self._server:
+            try:
+                await self._ping_task
+            except asyncio.CancelledError:
+                pass
+            self._ping_task = None
+
+        # 先关客户端，否则 wait_closed 会一直等卡在 LLM/收消息里的 handler
+        for ws in list(self.clients):
+            try:
+                await asyncio.wait_for(ws.close(), timeout=1.0)
+            except Exception:
+                pass
+
+        if self._server is not None:
             self._server.close()
-            await self._server.wait_closed()
+            try:
+                await asyncio.wait_for(self._server.wait_closed(), timeout=3.0)
+            except TimeoutError:
+                logger.warning(
+                    "具身通道关闭超时（仍有 %d 个连接）",
+                    len(self.clients),
+                )
+            self._server = None
 
     async def _ping_loop(self) -> None:
         while self.running:

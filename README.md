@@ -7,7 +7,7 @@
 
 - Python 3.12+
 - Node.js 18+（仅具身前端需要）
-- LLM：OpenAI 兼容接口（DeepSeek / Agnes 等）
+- LLM：OpenAI 兼容接口（现行 DeepSeek）
 
 ```bash
 # 依赖（editable 安装后可用 qi / qi-desktop 命令）
@@ -15,7 +15,7 @@ pip install -e ".[dev]"
 
 # 密钥：复制并填写
 copy .env.example .env
-# 编辑 .env，例如 AGNES_API_KEY=...
+# 编辑 .env，例如 DEEPSEEK_API_KEY=...
 
 # 配置（可选）：推荐放到 data/（与记忆数据一起，不在包内）
 copy qi\config\settings.example.yaml data\settings.yaml

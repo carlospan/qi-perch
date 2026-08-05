@@ -28,7 +28,7 @@ qi/core/emotion.py        # 最简情绪（6维度 + 衰减 + 事件冲击）
 qi/core/perception.py     # 感知（接收用户输入 + 检测沉默）
 qi/core/expression.py     # 表达（调 LLM + 语气注入）
 qi/llm/gateway.py         # LLM 路由（"provider:档位" → 具体端点）
-qi/llm/providers/openai_compat.py  # OpenAI 兼容端点统一实现（deepseek/agnes-ai/自定义共用）
+qi/llm/providers/openai_compat.py  # OpenAI 兼容端点统一实现（deepseek / custom_providers）
 qi/llm/prompt_builder.py  # Prompt 组装
 qi/storage/database.py    # SQLite 初始化 + 状态持久化
 qi/cli.py              # 终端 / 具身入口（console scripts: qi / qi-desktop）
@@ -77,8 +77,7 @@ CREATE TABLE IF NOT EXISTS messages (
 
 ```yaml
 # qi/config/settings.example.yaml（权威模板；本地 settings.yaml 不入库）
-# <!-- 回写(2026-07)：与 settings.example.yaml 对齐；memory/inner_life/proactive/
-#      relationship/voice/embodiment 等键在同文件，规格见对应层 -->
+# <!-- 回写(2026-08-05)：仅保留 deepseek；fast/strong = deepseek-v4-flash -->
 
 llm:
   default_provider: "deepseek"
@@ -87,14 +86,8 @@ llm:
       base_url: "https://api.deepseek.com"
       api_key: "${DEEPSEEK_API_KEY}"
       models:
-        fast: "deepseek-chat"
-        strong: "deepseek-reasoner"
-    agnes-ai:
-      base_url: "https://apihub.agnes-ai.com/v1"
-      api_key: "${AGNES_API_KEY}"
-      models:
-        fast: "agnes-2.0-flash"
-        strong: "agnes-2.0-flash"
+        fast: "deepseek-v4-flash"
+        strong: "deepseek-v4-flash"
   custom_providers: {}
   model_routing:
     conversation: "deepseek:fast"
@@ -104,8 +97,6 @@ llm:
     creation: "deepseek:fast"
     reflection: "deepseek:strong"
     fact: "deepseek:fast"
-    # <!-- 回写(2026-08-01)：补 fact 路由（L2-user-facts 落地时遗漏）；另注意 settings.example.yaml
-    #      的 default_provider 以包内 settings.example.yaml 为准（SenseNova 网关 + deepseek-v4-flash）。 -->
 
 rhythm:
   awake_interval: 3
@@ -268,7 +259,7 @@ def clamp_emotion(emotion: EmotionState) -> EmotionState:
 
 ### Step 3：LLM 层 + Prompt
 
-- 建 `qi/llm/providers/openai_compat.py`：OpenAI 兼容端点的统一 provider（deepseek/agnes-ai/自定义模型共用）
+- 建 `qi/llm/providers/openai_compat.py`：OpenAI 兼容端点的统一 provider（deepseek / custom_providers）
 - 建 `qi/llm/gateway.py`：按 `model_routing` 的 "provider:档位" 路由，暴露 `call(purpose, messages, temperature)` 方法
 - 建 `qi/llm/prompt_builder.py`：组装 system prompt（注入情绪描述、时间）
 - 建 `qi/prompts/conversation.txt`：**自己写**。参考 `qi/prompts/conversation.txt` 模板

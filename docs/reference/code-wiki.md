@@ -12,7 +12,7 @@
 
 - **语言/运行时**：Python 3.12+（后端意识体）、Node.js 18+（具身前端）、Rust + MSVC（Tauri 桌面壳）
 - **形态**：单进程异步 agent loop（心跳）+ 可选 WebSocket 具身通道 + Live2D 前端
-- **认知来源**：OpenAI 兼容协议的远程 LLM（DeepSeek / Agnes / SenseNova），按 `purpose` 路由
+- **认知来源**：OpenAI 兼容协议的远程 LLM（现行 DeepSeek / deepseek-v4-flash），按 `purpose` 路由
 - **持久化**：SQLite（`data/qi.db`，17 张表）+ ChromaDB（`data/chroma/`，BGE 语义向量）
 - **测试规模**：约 405 条 pytest（2026-08-02 阶段四退出时实测）
 - **协议**：MIT
@@ -252,7 +252,7 @@ requirements.lock   锁定版本（CI 用）
 
 **用途默认温度**：conversation 0.7 / consciousness 0.85 / dream 1.1 / fact 0.3。
 
-**路由示例**（settings.yaml）：`conversation: "sensenova:fast"`、`narrative: "sensenova:strong"`（模型默认 `deepseek-v4-flash`）。
+**路由示例**（settings.yaml）：`conversation: "deepseek:fast"`（默认 `deepseek-v4-flash`）。
 
 ### 3.8 `qi/stasis/` — 内稳态与存续（N0 / 阶段四）
 
@@ -575,7 +575,7 @@ Vue 3.5 / Tauri API 2.11 / pixi-live2d-display 0.4 / pixi.js 6.5 / Vite 6 / Type
 - Python 3.12+
 - Node.js 18+（仅具身前端）
 - Rust + MSVC（Tauri 桌面壳，仅 Windows 具身）
-- LLM：OpenAI 兼容接口（DeepSeek / Agnes / SenseNova 等）
+- LLM：OpenAI 兼容接口（现行 DeepSeek）
 
 ### 8.2 安装
 
@@ -585,7 +585,7 @@ pip install -e ".[dev]"
 
 # 密钥
 copy .env.example .env
-# 编辑 .env：AGNES_API_KEY=... / DEEPSEEK_API_KEY=... / SENSENOVA_API_KEY=...
+# 编辑 .env：DEEPSEEK_API_KEY=...
 
 # 配置（推荐放 data/，与记忆数据一起，不入库）
 copy qi\config\settings.example.yaml data\settings.yaml
@@ -673,14 +673,14 @@ push main / PR 触发，ubuntu-latest + Python 3.12：
 
 ```yaml
 llm:
-  default_provider: "sensenova"
-  providers: { deepseek / agnes-ai / sensenova }   # base_url + api_key(${ENV}) + models{fast,strong}
+  default_provider: "deepseek"
+  providers: { deepseek }   # base_url + api_key(${ENV}) + models{fast,strong}；换供应商走 custom_providers
   model_routing:
-    conversation: "sensenova:fast"
-    narrative: "sensenova:strong"
-    consciousness / dream / creation / fact: "sensenova:fast"
-    reflection: "sensenova:strong"
-  # 现行 models.fast/strong: deepseek-v4-flash（经 SenseNova 网关）
+    conversation: "deepseek:fast"
+    narrative: "deepseek:strong"
+    consciousness / dream / creation / fact: "deepseek:fast"
+    reflection: "deepseek:strong"
+  # 现行 models: fast/strong = deepseek-v4-flash
 
 
 rhythm:                                          # 心跳间隔（秒）
