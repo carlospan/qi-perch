@@ -218,6 +218,28 @@ async def test_express_inversion_gate_retries_and_fixes():
 
 
 @pytest.mark.asyncio
+async def test_express_inversion_gate_catches_1285_phrasing():
+    """#1285「你之前教过我一个法子」须进硬闸。"""
+    inverted = (
+        "你之前教过我一个法子，说晚上睡不着的时候就躺着。"
+        "我试了，看天花板上的影子。"
+    )
+    fixed = "……记得。入睡那件事，是我教你的——允许自己躺着。"
+    llm = AsyncMock()
+    llm.call = AsyncMock(side_effect=[inverted, fixed])
+    expr = Expression({}, llm)
+    out = await expr.express(
+        user_message="想听",
+        emotion=EmotionState(),
+        now=datetime(2026, 8, 5, 21, 58),
+        intention=_plain_card(),
+        recent_messages=[],
+    )
+    assert out == fixed
+    assert llm.call.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_express_inversion_gate_fallback_when_retry_still_inverted():
     """重试仍反转→模板兜底，方向正确的句子出门。"""
     inverted = "我记得你教我的那个方法，睡不着的时候就数呼吸。"

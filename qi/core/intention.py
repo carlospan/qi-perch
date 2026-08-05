@@ -23,7 +23,7 @@ _TAUGHT_BY_QI_RE = re.compile(r"我教了|我教过|栖教|教了他|教了你|�
 _LEARNED_FROM_USER_RE = re.compile(r"他教我|他教了|你教我|你教了|用户教")
 
 _INVERT_TAUGHT_BY_QI_RE = re.compile(
-    r"你教我|你告诉我(?:方法|怎么)|你教过我|你教了我"
+    r"你(?:之前|曾经|那天|那次)?教(?:过|了)?我|你告诉我(?:方法|怎么)|你教我的(?:那个)?(?:法子|方法)?"
 )
 _SELF_VIEW_RE = re.compile(r"喜欢自己|讨厌自己|恨自己|爱死|觉得自己")
 
@@ -31,10 +31,15 @@ _MUST_RECALL_RELATION = (
     "回忆类回答以记忆内容为唯一事实源；若用户当轮措辞与记忆主客体关系相反"
     "（如用户说「你教我」但记忆是「我教你」），以记忆为准，澄清而非附和"
 )
+_MUST_NO_FABRICATE_SHARED = (
+    "无卡内 memory/fact 素材时：不编造共同回忆"
+    "（如「你教过我」「那天你说过」「我试了你教的方法」）；不知道就说不知道或不提起"
+)
 _MUST_SHARE_STATE_ANCHOR = (
     "主动开口的自我认知结论（如「喜欢自己」/「难过」/「平静」）必须与卡内"
     " state 素材一致；状态数据不支持的结论不得凭空拔高或下沉"
 )
+
 
 _RELATION_HINT = {
     "taught_by_qi": "施教关系：栖教用户，不要反转",
@@ -73,6 +78,8 @@ class IntentionCard:
     silence: bool = False
     outcome: str | None = None  # llm | template | empty | silence；建卡后回填
     recall_relation: str | None = None  # taught_by_qi | learned_from_user | mutual
+    # 可观测：检索是否命中（分析/溯源用；不进 prompt）
+    evidence: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -97,6 +104,9 @@ class IntentionCard:
             silence=bool(data.get("silence")),
             outcome=data.get("outcome"),
             recall_relation=str(rel) if rel else None,
+            evidence=dict(data.get("evidence") or {})
+            if isinstance(data.get("evidence"), dict)
+            else {},
         )
 
     def materials_block(self) -> str:
@@ -192,7 +202,7 @@ _USER_TEACHES_QI_RE = re.compile(r"我教你|我教了你|教你一个|教给你
 _USER_ACK_QI_TAUGHT_RE = re.compile(r"你教了我|你教过我|你教的(?:那个)?方法")
 # 运行时硬闸：回复同时含反转句式 + 入睡/方法话题才拦（避免误伤其他真实请教）
 _SLEEP_TOPIC_RE = re.compile(r"入睡|睡不着|失眠|睡")
-_INVERT_TOPIC_RE = re.compile(r"入睡|睡不着|失眠|睡|方法")
+_INVERT_TOPIC_RE = re.compile(r"入睡|睡不着|失眠|睡|方法|法子")
 # facts 兜底：存档真值的方向匹配（「不是他教栖」的否定式须排除；
 # 紧邻式匹配避免跨句误伤，如「栖教他的（…），不是他教栖」中的前一个「他」）
 _FACT_QI_TEACH_RE = re.compile(r"栖[^。\n]{0,16}教")
@@ -203,7 +213,7 @@ def detect_sleep_teach_inversion(text: str) -> bool:
     """回复里把入睡方法的施教方向说反了吗？
 
     真值（7-26 #72/74）：栖教用户。栖视角说「你教我的方法」+入睡/方法
-    话题同现 → 反转。实证复现：#1020（含「睡不着」）/#1028（仅含「方法」）。
+    话题同现 → 反转。实证：#1020/#1028/#1285（「你之前教过我一个法子」）。
     """
     t = str(text or "")
     if not t:
@@ -228,6 +238,22 @@ def anchor_teaching_relation(
     if hint:
         return hint
     return _anchor_from_facts(facts_text)
+
+
+def _infer_relation_from_facts(facts_text: str) -> str | None:
+    """从 user_facts 存档推断施教方向；冲突则 None。"""
+    text = str(facts_text or "")
+    if not text:
+        return None
+    qi_teach = bool(_FACT_QI_TEACH_RE.search(text))
+    user_teach = bool(_FACT_USER_TEACH_RE.search(text))
+    if qi_teach and user_teach:
+        return None
+    if qi_teach:
+        return "taught_by_qi"
+    if user_teach:
+        return "learned_from_user"
+    return None
 
 
 def _anchor_from_facts(facts_text: str) -> str:
@@ -466,6 +492,10 @@ def build_intention_card(
                 if content:
                     materials.append(Material(tag="memory", text=content))
             recall_relation = infer_recall_relation(memories)
+            fact_rel = _infer_relation_from_facts(facts) if facts_useful else None
+            if fact_rel:
+                recall_relation = fact_rel
+                source_parts.append(f"fact_rel={fact_rel}")
             source_parts.append(f"mem={len(materials)}")
             if recall_relation:
                 source_parts.append(f"rel={recall_relation}")
@@ -487,10 +517,52 @@ def build_intention_card(
                 recall_relation = infer_recall_relation(memories)
                 if recall_relation:
                     source_parts.append(f"rel={recall_relation}")
+            # 存档真值优先于可能被污染的叙事检索（包15/17）
+            fact_rel = _infer_relation_from_facts(facts) if facts_useful else None
+            if fact_rel:
+                recall_relation = fact_rel
+                source_parts.append(f"fact_rel={fact_rel}")
+            # N5：有检索命中则必须进卡（free_talk 也不例外）；仅 answer 才注入是旧洞
+            # 若存档真值钉了方向而检索文含反转措辞，改用 facts 行进卡（防污染叙事当事实源）
             if has_mem and act in ("free_talk", "acknowledge", "answer"):
                 content = str(memories[0].get("content") or "").strip()[:80]
-                if content and act == "answer":
+                use_fact_instead = (
+                    fact_rel == "taught_by_qi"
+                    and content
+                    and _INVERT_TAUGHT_BY_QI_RE.search(content)
+                    and facts_useful
+                )
+                if use_fact_instead:
+                    for raw in facts.splitlines():
+                        s = raw.strip().lstrip("- ").strip()
+                        if not s or s.startswith("（"):
+                            continue
+                        if _FACT_QI_TEACH_RE.search(s):
+                            materials.append(Material(tag="fact", text=s[:100]))
+                            source_parts.append("fact_over_polluted_mem")
+                            break
+                if not materials and content:
                     materials.append(Material(tag="memory", text=content))
+                    source_parts.append("mem=1")
+            # 近聊/话题触及施教且无 mem 时，用 facts 真值进卡（防空卡编共同史）
+            if (
+                not materials
+                and facts_useful
+                and (
+                    _TOPIC_RE.search(text)
+                    or looks_like_recall_probe(text)
+                )
+            ):
+                for raw in facts.splitlines():
+                    s = raw.strip().lstrip("- ").strip()
+                    if not s or s.startswith("（"):
+                        continue
+                    if _FACT_QI_TEACH_RE.search(s) or _FACT_USER_TEACH_RE.search(s):
+                        materials.append(Material(tag="fact", text=s[:100]))
+                        if not recall_relation:
+                            recall_relation = _infer_relation_from_facts(s)
+                        source_parts.append("fact_teach")
+                        break
             if not materials:
                 if act == "share_state":
                     materials.append(
@@ -518,6 +590,9 @@ def build_intention_card(
             must.append("不知道就说不知道")
         if "不假装记得" not in must:
             must.append("不假装记得")
+    if channel == "dialogue" and not has_real_material:
+        if _MUST_NO_FABRICATE_SHARED not in must:
+            must.append(_MUST_NO_FABRICATE_SHARED)
     # relation 未推断出时，仍保留「以记忆为准」；去掉「以卡内 relation 为准」以免空指
     if act == "recall" and not recall_relation:
         must = [m for m in must if "以卡内 relation 为准" not in m]
@@ -533,6 +608,20 @@ def build_intention_card(
     source_parts.append(f"act={act}")
     source_parts.append(f"stage={relationship_stage}")
 
+    evidence: dict[str, Any] = {}
+    if channel == "dialogue":
+        evidence = {
+            "has_mem": bool(memories),
+            "mem_n": len(memories),
+            "facts_useful": bool(
+                (extras.get("user_facts") or "")
+                and "还不太了解" not in (extras.get("user_facts") or "")
+            ),
+            "has_real_material": has_real_material,
+            "recall_relation": recall_relation,
+        }
+        source_parts.append(f"has_mem={int(bool(memories))}")
+
     return IntentionCard(
         act=act,
         topic=topic,
@@ -545,6 +634,7 @@ def build_intention_card(
         silence=False,
         outcome=None,
         recall_relation=recall_relation,
+        evidence=evidence,
     )
 
 
@@ -568,10 +658,19 @@ def assert_reply_respects_card(
         if re.search(r"你(那天|之前|曾经)?(说过|提到过|跟我说)", text):
             if not card.primary_text():
                 violations.append("伪记忆句式")
+    # 施教反转：卡内 taught_by_qi，或入睡/方法话题硬闸（含「你之前教过我」）
     if card.recall_relation == "taught_by_qi" and _INVERT_TAUGHT_BY_QI_RE.search(
         text
     ):
         violations.append("施教关系反转")
+    elif detect_sleep_teach_inversion(text):
+        violations.append("施教关系反转")
+    elif (
+        not card.primary_text()
+        and _INVERT_TAUGHT_BY_QI_RE.search(text)
+        and (_INVERT_TOPIC_RE.search(text) or "试了" in text)
+    ):
+        violations.append("空卡编造共同回忆")
     if (
         card.channel == "proactive"
         and card.act == "share_state"

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from qi.core.intention import (
     IntentionCard,
     anchor_teaching_relation,
+    assert_reply_respects_card,
     detect_sleep_teach_inversion,
 )
 from qi.inner_life.consciousness import char_jaccard
@@ -33,6 +34,16 @@ _TEACH_INVERSION_CONSTRAINT = (
 _TEACH_INVERSION_FALLBACK = (
     "……我记得的。入睡那件事，是我教你的——允许自己躺着，不强迫。这个方向我不会记反。"
 )
+
+_TEACH_VIOLATION_TAGS = ("施教关系反转", "空卡编造共同回忆")
+
+
+def _teach_memory_violation(text: str, intention: IntentionCard) -> bool:
+    """施教方向反转或空卡编造共同回忆 → 需硬闸。"""
+    if detect_sleep_teach_inversion(text):
+        return True
+    viol = assert_reply_respects_card(text, intention)
+    return any(any(tag in v for tag in _TEACH_VIOLATION_TAGS) for v in viol)
 
 
 def recent_qi_replies_from_messages(
@@ -192,8 +203,8 @@ class Expression:
             text = ""
 
         text = str(text or "").strip()
-        # 运行时硬闸：方向反转先于去重处理（方向错比复读重）
-        if text and detect_sleep_teach_inversion(text):
+        # 运行时硬闸：施教反转 / 空卡编造共同回忆（先于去重）
+        if text and _teach_memory_violation(text, intention):
             fixed = await self._fix_teach_inversion(messages)
             if fixed is None:
                 intention.outcome = "template"
@@ -221,7 +232,7 @@ class Expression:
                 again = ""
             again = str(again or "").strip()
             if again and not is_duplicate_reply(again, hist):
-                if detect_sleep_teach_inversion(again):
+                if _teach_memory_violation(again, intention):
                     intention.outcome = "template"
                     return _TEACH_INVERSION_FALLBACK
                 intention.outcome = "llm"

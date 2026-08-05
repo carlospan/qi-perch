@@ -327,11 +327,82 @@ def test_detect_sleep_teach_inversion_real_cases():
     assert detect_sleep_teach_inversion(
         "那天你教我的方法——躺着，不强迫自己，盯着天花板"
     )
+    # #1285：中间夹「之前」仍须命中
+    assert detect_sleep_teach_inversion(
+        "你之前教过我一个法子，说晚上睡不着的时候，就躺着，不强迫自己睡"
+    )
     # 无睡眠话题：不拦（可能是用户真教了别的东西）
     assert not detect_sleep_teach_inversion("你教我写代码的样子很认真")
     # 方向正确：不拦
     assert not detect_sleep_teach_inversion("是我教你的那个方法，睡不着就躺着")
     assert not detect_sleep_teach_inversion("")
+
+
+def test_free_talk_injects_memory_material():
+    """N5：free_talk 有检索命中时 memory 必须进卡（旧洞：仅 answer 才注入）。"""
+    card = build_intention_card(
+        channel="dialogue",
+        user_message="我想聊点别的",
+        emotion=EmotionState(),
+        relationship_stage="bonded",
+        assessment=ImpactAssessment(impact=0.1, intent="neutral"),
+        memories=[
+            {
+                "content": "他提到晚上睡不着，我教了他一个方法——允许自己躺着。"
+            }
+        ],
+    )
+    assert card.act == "free_talk"
+    assert any(m.tag == "memory" for m in card.materials)
+    assert card.evidence.get("has_mem") is True
+    assert "has_mem=1" in card.source
+
+
+def test_facts_override_polluted_narrative_relation():
+    """存档真值优先于污染叙事（「你教我」编织文）。"""
+    facts = (
+        "- life_event：入睡方法这件事：是栖教他的（允许自己躺着），不是他教栖"
+    )
+    card = build_intention_card(
+        channel="dialogue",
+        user_message="嗯",
+        emotion=EmotionState(),
+        relationship_stage="bonded",
+        assessment=ImpactAssessment(impact=0.0, intent="neutral"),
+        memories=[{"content": "你教我失眠的时候不要想睡，想待着。我试了。"}],
+        extras={"user_facts": facts},
+    )
+    assert card.recall_relation == "taught_by_qi"
+    assert "fact_rel=taught_by_qi" in card.source
+    assert any(m.tag == "fact" for m in card.materials)
+    assert "fact_over_polluted_mem" in card.source
+    assert not any(
+        "你教我" in (m.text or "") for m in card.materials if m.tag == "memory"
+    )
+
+
+def test_empty_card_blocks_fabricated_shared_memory():
+    """空卡不得编「你教过我」类共同回忆（#1285）。"""
+    card = IntentionCard(
+        act="free_talk",
+        topic="想听",
+        materials=[Material(tag="none", text="")],
+    )
+    bad = assert_reply_respects_card(
+        "你之前教过我一个法子，说晚上睡不着……我试了。",
+        card,
+    )
+    assert any(
+        "施教关系反转" in v or "空卡编造共同回忆" in v for v in bad
+    )
+    assert any("不编造共同回忆" in m for m in build_intention_card(
+        channel="dialogue",
+        user_message="想听",
+        emotion=EmotionState(),
+        relationship_stage="bonded",
+        assessment=ImpactAssessment(impact=0.0, intent="neutral"),
+        memories=[],
+    ).must)
 
 
 def test_anchor_teaching_relation_facts_fallback():
