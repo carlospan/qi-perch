@@ -1,7 +1,7 @@
 # N5 硬闸扩展——Cursor 交叉审查
 
 > **角色**：Cursor（执行侧交叉审查，本轮**不写码**）  
-> **依据**：`docs/specs/tasks/2026-08-07-N5-硬闸扩展.md`、`docs/specs/archive/2026-08-07-n5-hard-gate/包-N5-硬闸扩展-PR方案.md`  
+> **依据**：同桶 `2026-08-07-N5-硬闸扩展.md`、`包-N5-硬闸扩展-PR方案.md`  
 > **对照代码**：`qi/core/intention.py`（`assert_reply_respects_card`）、`qi/core/expression.py`（出口闸）、`qi/llm/prompt_builder.py`  
 > **病征依据**：活库本场核实（约 `#1309–1358`，硬伤 `#1318/#1326/#1350/#1356/#1358`）  
 > **审查时刻**：2026-08-07  
