@@ -94,6 +94,29 @@ def test_conversation_builds_end_to_end():
     assert messages and messages[0]["role"] == "system"
 
 
+def test_materials_short_quote_boundary():
+    """N5：materials 为原文短引 + 诚实边界，非生动扩写。"""
+    from qi.core.intention import IntentionCard, Material
+
+    builder = PromptBuilder()
+    card = IntentionCard(
+        act="free_talk",
+        topic="测试",
+        materials=[Material(tag="memory", text="躺着不强迫")],
+    )
+    messages = builder.build_conversation_prompt(
+        user_message="你好",
+        emotion=EmotionState(),
+        now=datetime.now(),
+        intention=card,
+    )
+    system = messages[0]["content"]
+    assert "【诚实边界】" in system
+    assert "【你此刻知道的事】" in system
+    assert "躺着不强迫" in system
+    assert "以温暖的第一人称叙述" not in system
+
+
 def test_conversation_requires_emotion_and_now():
     """债B：emotion/now 必填，传 None 应当显式失败。"""
     builder = PromptBuilder()

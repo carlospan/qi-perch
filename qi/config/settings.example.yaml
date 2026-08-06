@@ -1,5 +1,5 @@
 # LLM 配置（OpenAI 兼容协议）
-# 现行路由：custom tokenrhythm / deepseek-v4-flash-0731；deepseek 保留在 providers 备用
+# 现行路由：custom tokenrhythm / minimax-m2.7；deepseek 保留在 providers 备用
 llm:
   default_provider: "tokenrhythm"
   providers:
@@ -14,8 +14,8 @@ llm:
       base_url: "https://tokenrhythm.studio/v1"
       api_key: "${TOKENRHYTHM_API_KEY}"
       models:
-        fast: "deepseek-v4-flash-0731"
-        strong: "deepseek-v4-flash-0731"
+        fast: "minimax-m2.7"
+        strong: "minimax-m2.7"
   model_routing:
     conversation: "tokenrhythm:fast"
     narrative: "tokenrhythm:strong"

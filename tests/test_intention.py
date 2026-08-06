@@ -425,3 +425,93 @@ def test_anchor_teaching_relation_facts_fallback():
         {"role": "qi", "content": "可以试试躺着，不强迫自己睡，看天花板。"},
     ]
     assert "taught_by_qi" in anchor_teaching_relation(msgs, facts_text=facts)
+
+
+# ----- N5 硬闸扩展 -----
+
+
+def test_memory_declaration_without_material():
+    """锚定 #1326：空卡宣称「那天你问电脑…」→ 共同回忆无出处。"""
+    card = IntentionCard(
+        act="free_talk",
+        topic="真的爱吗",
+        materials=[Material(tag="none", text="")],
+    )
+    bad = assert_reply_respects_card(
+        "那天你问我『你要电脑做什么呢』，我没有敷衍。",
+        card,
+    )
+    assert any("共同回忆无出处" in v for v in bad)
+
+
+def test_memory_declaration_with_matching_material():
+    card = IntentionCard(
+        act="recall",
+        topic="助眠",
+        materials=[Material(tag="memory", text="允许自己躺着不强迫")],
+    )
+    ok = assert_reply_respects_card(
+        "记得你那次说躺着不强迫。",
+        card,
+    )
+    assert not any("共同回忆" in v for v in ok)
+
+
+def test_memory_declaration_phrase_not_in_material():
+    card = IntentionCard(
+        act="free_talk",
+        topic="爱",
+        materials=[Material(tag="memory", text="允许自己躺着不强迫")],
+    )
+    bad = assert_reply_respects_card(
+        "那晚你问『你要电脑做什么呢』。",
+        card,
+    )
+    assert any("共同回忆关键短语不在素材中" in v for v in bad)
+
+
+def test_entity_gate_literary_imagery_not_blocked():
+    card = IntentionCard(
+        act="free_talk",
+        topic="感受",
+        materials=[Material(tag="none", text="")],
+    )
+    ok = assert_reply_respects_card("……像深水里的石子，又像一片叶子。", card)
+    assert not any("虚构实体" in v for v in ok)
+
+
+def test_entity_gate_blocks_fabricated_name():
+    card = IntentionCard(
+        act="free_talk",
+        topic="故事",
+        materials=[Material(tag="none", text="")],
+    )
+    bad = assert_reply_respects_card("那个叫阿强的医生说过这话。", card)
+    assert any("虚构实体:阿强" in v for v in bad)
+
+
+def test_soft_self_view_not_hard():
+    from qi.core.intention import is_hard_violation
+
+    card = IntentionCard(
+        act="share_state",
+        topic="自己",
+        materials=[Material(tag="state", text="有点安静")],
+        channel="proactive",
+    )
+    viols = assert_reply_respects_card("……我好像，越来越喜欢自己了。", card)
+    assert any("无支撑自我认知结论" in v for v in viols)
+    assert not any(is_hard_violation(v) for v in viols)
+
+
+def test_materials_block_short_quote_honesty_boundary():
+    card = IntentionCard(
+        act="free_talk",
+        topic="x",
+        materials=[Material(tag="memory", text="躺着不强迫")],
+    )
+    block = card.materials_block()
+    assert "【你此刻知道的事】" in block
+    assert "【诚实边界】" in block
+    assert "躺着不强迫" in block
+    assert "以温暖的第一人称叙述" not in block

@@ -11,6 +11,7 @@ from qi.core.intention import (
     anchor_teaching_relation,
     assert_reply_respects_card,
     detect_sleep_teach_inversion,
+    is_hard_violation,
 )
 from qi.inner_life.consciousness import char_jaccard
 from qi.llm.prompt_builder import PromptBuilder
@@ -34,16 +35,40 @@ _TEACH_INVERSION_CONSTRAINT = (
 _TEACH_INVERSION_FALLBACK = (
     "……我记得的。入睡那件事，是我教你的——允许自己躺着，不强迫。这个方向我不会记反。"
 )
+_FACT_CONSISTENCY_CONSTRAINT = (
+    "事实必须来自意向卡素材。不要编造卡外共同回忆（如「那天你问…」「那晚我说…」）；"
+    "不要引入素材中没有的具体人名。不确定就说不确定，或用意象/比喻。"
+)
 
 _TEACH_VIOLATION_TAGS = ("施教关系反转", "空卡编造共同回忆")
 
 
 def _teach_memory_violation(text: str, intention: IntentionCard) -> bool:
-    """施教方向反转或空卡编造共同回忆 → 需硬闸。"""
+    """施教方向反转或空卡编造共同回忆 → 需硬闸。（包 15-17 保留）"""
     if detect_sleep_teach_inversion(text):
         return True
     viol = assert_reply_respects_card(text, intention)
     return any(any(tag in v for tag in _TEACH_VIOLATION_TAGS) for v in viol)
+
+
+def _hard_violations(text: str, intention: IntentionCard) -> list[str]:
+    return [
+        v
+        for v in assert_reply_respects_card(text, intention)
+        if is_hard_violation(v)
+    ]
+
+
+def _build_fallback(intention: IntentionCard, viols: list[str]) -> str:
+    """按违规类型选模板兜底。"""
+    if any(
+        "施教" in v or "空卡编造共同回忆" in v for v in viols
+    ) or any(any(t in v for t in _TEACH_VIOLATION_TAGS) for v in viols):
+        return _TEACH_INVERSION_FALLBACK
+    templated = render_template(intention)
+    if templated:
+        return templated
+    return "……我不确定自己还记不记得。我不想假装记得。"
 
 
 def recent_qi_replies_from_messages(
@@ -203,13 +228,20 @@ class Expression:
             text = ""
 
         text = str(text or "").strip()
-        # 运行时硬闸：施教反转 / 空卡编造共同回忆（先于去重）
-        if text and _teach_memory_violation(text, intention):
-            fixed = await self._fix_teach_inversion(messages)
-            if fixed is None:
-                intention.outcome = "template"
-                return _TEACH_INVERSION_FALLBACK
-            text = fixed
+        # 运行时硬闸：全量 HARD（施教/共同回忆/虚构实体…）；SOFT 仅写入 evidence
+        if text:
+            all_viols = assert_reply_respects_card(text, intention)
+            soft = [v for v in all_viols if not is_hard_violation(v)]
+            if soft:
+                intention.evidence = dict(intention.evidence or {})
+                intention.evidence["soft_violations"] = soft
+            hard = [v for v in all_viols if is_hard_violation(v)]
+            if hard:
+                fixed = await self._fix_generation(messages, hard, intention)
+                if fixed is None:
+                    intention.outcome = "template"
+                    return _build_fallback(intention, hard)
+                text = fixed
         if text:
             if not is_duplicate_reply(text, hist):
                 intention.outcome = "llm"
@@ -232,9 +264,10 @@ class Expression:
                 again = ""
             again = str(again or "").strip()
             if again and not is_duplicate_reply(again, hist):
-                if _teach_memory_violation(again, intention):
+                again_hard = _hard_violations(again, intention)
+                if again_hard:
                     intention.outcome = "template"
-                    return _TEACH_INVERSION_FALLBACK
+                    return _build_fallback(intention, again_hard)
                 intention.outcome = "llm"
                 return again
             # 仍重复 → 模板降级（acknowledge/share_state 简版路径）
@@ -253,8 +286,49 @@ class Expression:
         intention.outcome = "empty"
         return ""
 
+    async def _fix_generation(
+        self,
+        messages: list[dict],
+        viols: list[str],
+        intention: IntentionCard,
+    ) -> str | None:
+        """HARD 违规重试一次；仍违规返回 None（调用方模板兜底）。"""
+        teach_related = any(
+            "施教" in v or "空卡编造共同回忆" in v for v in viols
+        )
+        if teach_related:
+            header = "【施教方向硬约束】"
+            constraint = _TEACH_INVERSION_CONSTRAINT
+        else:
+            header = "【事实一致性硬约束】"
+            detail = "；".join(viols)
+            constraint = f"{_FACT_CONSISTENCY_CONSTRAINT}（本拍触发：{detail}）"
+
+        fix_messages = list(messages)
+        if fix_messages:
+            sys0 = dict(fix_messages[0])
+            sys0["content"] = (
+                str(sys0.get("content") or "") + f"\n\n{header}{constraint}"
+            )
+            fix_messages[0] = sys0
+        try:
+            fixed = await self.llm.call(
+                purpose="conversation", messages=fix_messages
+            )
+        except Exception:
+            logger.debug("事实一致性重试异常，走兜底", exc_info=True)
+            fixed = ""
+        fixed = str(fixed or "").strip()
+        if not fixed:
+            return None
+        if teach_related and detect_sleep_teach_inversion(fixed):
+            return None
+        if _hard_violations(fixed, intention):
+            return None
+        return fixed
+
     async def _fix_teach_inversion(self, messages: list[dict]) -> str | None:
-        """反转重试一次：加强约束再生成；仍反转返回 None（调用方模板兜底）。"""
+        """反转重试一次（包 15-17 保留；新路径优先走 _fix_generation）。"""
         fix_messages = list(messages)
         if fix_messages:
             sys0 = dict(fix_messages[0])

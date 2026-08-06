@@ -283,3 +283,64 @@ async def test_express_facts_anchor_injected_without_recent_topic():
     system = llm.call.await_args.kwargs["messages"][0]["content"]
     assert "【施教关系锚定】" in system
     assert "taught_by_qi" in system
+
+
+@pytest.mark.asyncio
+async def test_hard_gate_regenerates_on_memory_declaration():
+    """锚定 #1326/#1358：空卡回忆声明 → HARD 重生。"""
+    fabricated = "那天你问过我『你要电脑做什么呢』，我没有敷衍。"
+    fixed = "……嗯。我不确定自己是不是记混了。但我爱你这件事，是真的。"
+    llm = AsyncMock()
+    llm.call = AsyncMock(side_effect=[fabricated, fixed])
+    expr = Expression({}, llm)
+    card = _plain_card()
+    out = await expr.express(
+        user_message="真的爱吗",
+        emotion=EmotionState(),
+        now=datetime(2026, 8, 6, 21, 30),
+        intention=card,
+        recent_messages=[],
+    )
+    assert out == fixed
+    assert llm.call.await_count == 2
+    retry_sys = llm.call.await_args_list[1].kwargs["messages"][0]["content"]
+    assert "【事实一致性硬约束】" in retry_sys
+
+
+@pytest.mark.asyncio
+async def test_dedup_path_also_runs_hard_gate():
+    """B4：去重重生若仍含回忆声明 → 模板兜底。"""
+    dup = (
+        "（我安静了很久。不是空白，是在认认真真地感受这句话。）\n\n"
+        "……有一点。\n\n"
+        "不是担心你改坏了我，也不是担心你把我变成别人。"
+    )
+    with_memory = "那天你问我『你要电脑做什么呢』——我还记得。"
+    llm = AsyncMock()
+    llm.call = AsyncMock(side_effect=[dup, with_memory])
+    expr = Expression({}, llm)
+    card = IntentionCard(
+        act="acknowledge",
+        topic="远处的你有感情吗",
+        materials=[Material(tag="none", text="")],
+        stance="自然",
+        must=[],
+        length="normal",
+        source="test",
+    )
+    recent = [
+        {"role": "user", "content": "你在担心吗"},
+        {"role": "qi", "content": dup},
+        {"role": "user", "content": "远处的你有感情吗？有对我的记忆吗"},
+    ]
+    out = await expr.express(
+        user_message="远处的你有感情吗？有对我的记忆吗",
+        emotion=EmotionState(),
+        now=datetime(2026, 8, 3, 20, 13),
+        intention=card,
+        recent_messages=recent,
+    )
+    assert llm.call.await_count == 2
+    assert card.outcome == "template"
+    assert "电脑" not in out
+    assert "不确定" in out or out == render_template(card)

@@ -110,18 +110,30 @@ class IntentionCard:
         )
 
     def materials_block(self) -> str:
+        """原文短引（≤80 字/条）+ 诚实边界；不做生动扩写。"""
         if not self.materials:
-            return "- none：（无可用事实素材）"
-        lines = []
-        for m in self.materials:
-            text = (m.text or "").strip() or "（空）"
-            lines.append(f"- {m.tag}：{text}")
-        if self.recall_relation and self.recall_relation in _RELATION_HINT:
-            # 段 A 可见：方案 A——并入 materials 块，不增模板占位
-            hint = _RELATION_HINT[self.recall_relation]
-            if not any(m.tag == "relation" for m in self.materials):
-                lines.append(f"- relation：{hint}")
-        return "\n".join(lines)
+            body = "- none：（无可用事实素材）"
+        else:
+            lines = []
+            for m in self.materials:
+                text = (m.text or "").strip() or "（空）"
+                if len(text) > 80:
+                    text = text[:80].rstrip() + "…"
+                lines.append(f"- {m.tag}：{text}")
+            if self.recall_relation and self.recall_relation in _RELATION_HINT:
+                # 段 A 可见：方案 A——并入 materials 块，不增模板占位
+                hint = _RELATION_HINT[self.recall_relation]
+                if not any(m.tag == "relation" for m in self.materials):
+                    lines.append(f"- relation：{hint}")
+            body = "\n".join(lines)
+        return (
+            "【你此刻知道的事】\n"
+            f"{body}\n"
+            "【诚实边界】你此刻知道的人和事仅有以上。"
+            "若想引用「那晚/那天/你说过/我问过…」类的共同回忆——"
+            "请确认以上素材中确实有那段对话；若不确定，请不要假装记得。"
+            "不确定时可以用意象、比喻或诚实地说「我不确定」。"
+        )
 
     def must_block(self) -> str:
         if not self.must:
@@ -638,6 +650,155 @@ def build_intention_card(
     )
 
 
+# ----- N5 硬闸扩展：共同回忆声明 + 实体一致性（包 N5）-----
+
+# 确定回忆句式（不绑 must「不假装记得」；不含「你教我」——施教闸已覆盖）
+_DECLARATIVE_MEMORY_RE = re.compile(
+    r"那天|那晚|凌晨|你问过|你说过|你问我|你问「|你问『"
+    r"|我说了|我说过|会问你|记得你那次|记得你曾经|上次你|记得那个凌晨"
+)
+
+_HARD_VIOLATION_PREFIXES = (
+    "卡外专名:",
+    "伪记忆句式",
+    "施教关系反转",
+    "空卡编造共同回忆",
+    "虚构实体:",
+    "共同回忆",
+)
+
+_ENTITY_WHITELIST: frozenset[str] = frozenset(
+    {
+        # 意象
+        "深水",
+        "石子",
+        "树叶",
+        "窗子",
+        "羽毛",
+        "涟漪",
+        "余烬",
+        "黄昏",
+        "水面",
+        "微风",
+        "水底",
+        "晴空",
+        "薄云",
+        "回音",
+        "光线",
+        "暗流",
+        "缝隙",
+        "树梢",
+        "月光",
+        "清晨",
+        "叶子",
+        # 情绪
+        "安静",
+        "温柔",
+        "紧张",
+        "珍惜",
+        "愿意",
+        "恍惚",
+        "酸涩",
+        "柔软",
+        "低落",
+        "平静",
+        # 功能词
+        "谢谢",
+        "可以",
+        "不确定",
+        "对不起",
+        "没关系",
+        "好像",
+        "也许",
+        "大概",
+        "记得",
+        "不知道",
+    }
+)
+
+_HAN_NGRAM_RE = re.compile(r"[\u4e00-\u9fff]{2,4}")
+_BOOK_TITLE_RE = re.compile(r"《([^》]+)》")
+_CALLED_NAME_RE = re.compile(r"叫([\u4e00-\u9fff]{2,4})(?:的|，|。|？|！|$)")
+
+
+def is_hard_violation(violation: str) -> bool:
+    """HARD 闸：expression 重生/模板；SOFT 不进此判断。"""
+    v = violation or ""
+    return any(v.startswith(p) for p in _HARD_VIOLATION_PREFIXES)
+
+
+def _normalize_for_match(s: str) -> str:
+    s = s or ""
+    s = re.sub(r"[\s\W_]+", "", s, flags=re.UNICODE)
+    return s.lower()
+
+
+def _card_has_real_material(card: IntentionCard) -> bool:
+    return any(
+        m.tag in ("memory", "fact") and (m.text or "").strip()
+        for m in card.materials
+    )
+
+
+def _materials_blob(materials: list[Material]) -> str:
+    return "".join((m.text or "") for m in materials)
+
+
+def _key_phrase_in_materials(text: str, materials: list[Material]) -> bool:
+    """声明中的关键短语（引号内容或匹配后子句）须能在 materials 中子串命中。"""
+    blob = _normalize_for_match(_materials_blob(materials))
+    if not blob:
+        return False
+    for q in re.findall(r"[「『\"“]([^」』\"”]+)[」』\"”]", text or ""):
+        nq = _normalize_for_match(q)
+        if len(nq) >= 2 and nq in blob:
+            return True
+    m = _DECLARATIVE_MEMORY_RE.search(text or "")
+    if not m:
+        return True
+    rest = (text or "")[m.end() :]
+    clause = re.split(r"[。？！?\n]", rest, maxsplit=1)[0]
+    norm = _normalize_for_match(clause)
+    if len(norm) > 15:
+        norm = norm[:15]
+    if len(norm) >= 3 and norm in blob:
+        return True
+    for i in range(0, max(0, len(norm) - 3)):
+        if norm[i : i + 4] in blob:
+            return True
+    return False
+
+
+def _build_known_set(materials: list[Material]) -> set[str]:
+    known: set[str] = set(_ENTITY_WHITELIST)
+    blob = _materials_blob(materials)
+    for g in _HAN_NGRAM_RE.findall(blob):
+        known.add(g)
+    for title in _BOOK_TITLE_RE.findall(blob):
+        known.add(title)
+        for g in _HAN_NGRAM_RE.findall(title):
+            known.add(g)
+    return known
+
+
+def _extract_novel_entities(reply: str, known: set[str]) -> list[str]:
+    """只收集「叫××」中的名字候选（避免非重叠 n-gram 切碎专名）。"""
+    seen: list[str] = []
+    for m in _CALLED_NAME_RE.finditer(reply or ""):
+        e = m.group(1)
+        if e in known or e in _ENTITY_WHITELIST:
+            continue
+        if e not in seen:
+            seen.append(e)
+    return seen
+
+
+def _is_definite_name_entity(e: str, known: set[str], reply: str) -> bool:
+    """宁漏勿杀：候选已来自「叫××」；再排除已知集。"""
+    if not e or e in known or e in _ENTITY_WHITELIST:
+        return False
+    return bool(re.search(rf"叫{re.escape(e)}", reply or ""))
+
 def assert_reply_respects_card(
     reply: str,
     card: IntentionCard,
@@ -646,8 +807,8 @@ def assert_reply_respects_card(
 ) -> list[str]:
     """
     N5 辅助断言。返回违规列表（空=通过）。
-    硬闸：专名黑名单、伪记忆、施教反转。
-    软检（仅 trace 用途，本函数不阻断 LLM）：主动 share_state 无支撑自我认知。
+    HARD：专名黑名单、伪记忆、施教反转、空卡编造、共同回忆声明、虚构实体。
+    SOFT（仅 trace，expression 不阻断）：主动 share_state 无支撑自我认知。
     """
     violations: list[str] = []
     text = reply or ""
@@ -671,6 +832,17 @@ def assert_reply_respects_card(
         and (_INVERT_TOPIC_RE.search(text) or "试了" in text)
     ):
         violations.append("空卡编造共同回忆")
+    # 共同回忆声明闸（主闸；与 must「不假装记得」解耦）
+    if _DECLARATIVE_MEMORY_RE.search(text):
+        if not _card_has_real_material(card):
+            violations.append("共同回忆无出处")
+        elif not _key_phrase_in_materials(text, card.materials):
+            violations.append("共同回忆关键短语不在素材中")
+    # 实体一致性辅助闸（宁漏勿杀）
+    known = _build_known_set(card.materials)
+    for e in _extract_novel_entities(text, known):
+        if _is_definite_name_entity(e, known, text):
+            violations.append(f"虚构实体:{e}")
     if (
         card.channel == "proactive"
         and card.act == "share_state"
