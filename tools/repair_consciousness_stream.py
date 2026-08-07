@@ -30,6 +30,12 @@ import sqlite3
 import sys
 from pathlib import Path
 
+# Windows CI 默认 cp1252：中文 print 会 UnicodeEncodeError
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 DEFAULT_DB = "data/qi.db"
 
 # 施教关系反转 + 虚构助眠细节的关键词。命中任一即视为污染记录。

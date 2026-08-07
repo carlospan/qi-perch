@@ -76,9 +76,15 @@ def _empty_user_facts_db(path: Path) -> None:
 
 
 def test_repair_scripts_dry_run_on_temp_db(tmp_path: Path):
-    """repair_* 默认预演：空库 exit 0，且不要求 --apply。"""
+    """repair_* 默认预演：空库 exit 0，且不要求 --apply。
+
+    额外用 PYTHONIOENCODING=cp1252 模拟 GitHub Windows runner，防中文 print 炸编码。
+    """
     db = tmp_path / "qi.db"
     _empty_user_facts_db(db)
+
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "cp1252"
 
     scripts = [
         "repair_dirty_facts.py",
@@ -86,12 +92,13 @@ def test_repair_scripts_dry_run_on_temp_db(tmp_path: Path):
         "repair_teaching_fact.py",
     ]
     for name in scripts:
-        proc = _run_tool(str(REPO / "tools" / name), "--db", str(db))
+        proc = _run_tool(str(REPO / "tools" / name), "--db", str(db), env=env)
         assert proc.returncode == 0, (
             f"{name} rc={proc.returncode}\n"
             f"stdout={proc.stdout[-600:]}\nstderr={proc.stderr[-600:]}"
         )
         blob = (proc.stdout or "") + (proc.stderr or "")
+        assert "UnicodeEncodeError" not in blob
         # 预演不得声称已写入；空库常见「未发现」/「OK」
         assert "已 retire" not in blob
         assert "已具体化" not in blob
