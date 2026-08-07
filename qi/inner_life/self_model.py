@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -11,6 +12,8 @@ if TYPE_CHECKING:
     from qi.storage.database import Database
 
 from qi.prompts import read_prompt
+
+logger = logging.getLogger("qi.inner_life.self_model")
 
 SELF_REFLECTION_INTERVAL_SECONDS = 604800
 VALENCE_SURGE_FOR_REFLECT = 0.5
@@ -57,7 +60,10 @@ class SelfModel:
         try:
             await self.db.set_body_memory(PENDING_MAJOR_KEY, "")
         except Exception:
-            pass
+            logger.warning(
+                "清除 pending_major 落盘失败（内存已清，重启后可能再触发反思）",
+                exc_info=True,
+            )
 
     async def should_reflect(self, now: datetime | None = None) -> bool:
         now = now or datetime.now()

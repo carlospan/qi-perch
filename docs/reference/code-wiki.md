@@ -14,9 +14,9 @@
 
 - **语言/运行时**：Python 3.12+（后端意识体）、Node.js 18+（具身前端）、Rust + MSVC（Tauri 桌面壳）
 - **形态**：单进程异步 agent loop（心跳）+ 可选 WebSocket 具身通道 + Live2D 前端
-- **认知来源**：OpenAI 兼容协议的远程 LLM（现行 DeepSeek / deepseek-v4-flash），按 `purpose` 路由
+- **认知来源**：OpenAI 兼容协议的远程 LLM（现行 **tokenrhythm / minimax-m2.7**；`providers.deepseek` 备用），按 `purpose` 路由
 - **持久化**：SQLite（`data/qi.db`，17 张表）+ ChromaDB（`data/chroma/`，BGE 语义向量）
-- **测试规模**：约 405 条 pytest（2026-08-02 阶段四退出时实测）
+- **测试规模**：约 **462** 条 pytest（`pytest --collect-only`，2026-08-08；阶段四退出时曾约 405）
 - **协议**：MIT
 
 项目当前处于"阶段四退出"状态（架构方案 §五 的阶段零~四中，阶段零~四工程判据已过，72h 无人测试作为后台稳定性观察继续累积）。详细进度见 [docs/progress.md](../progress.md)。
@@ -140,7 +140,7 @@ requirements.lock   锁定版本（CI 用）
 
 | 文件 | 职责 |
 |---|---|
-| [brain.py](../../qi/core/brain.py) | **Brain 类**——栖的意识核心。心跳主循环、用户消息接收、状态恢复/保存。约 1042 行，协调所有子系统 |
+| [brain.py](../../qi/core/brain.py) | **Brain 类**——栖的意识核心。心跳主循环、用户消息接收、状态恢复/保存。约 **1223** 行（编排面；薄委托 `brain_*.py`），协调所有子系统 |
 | [brain_background.py](../../qi/core/brain_background.py) | `BackgroundTasks`——与心跳并行的后台任务（编织/衰减/反思/梦衰减/文化/季节/伤疤/漂移） |
 | [brain_context.py](../../qi/core/brain_context.py) | `gather_prompt_context`——组装对话 prompt 上下文（recent/messages/memories/extras/loops/hints） |
 | [brain_delivery.py](../../qi/core/brain_delivery.py) | 话语推送、avatar 同步、journal 广播、first_time 通知、行动结果投递 |
@@ -577,7 +577,7 @@ Vue 3.5 / Tauri API 2.11 / pixi-live2d-display 0.4 / pixi.js 6.5 / Vite 6 / Type
 - Python 3.12+
 - Node.js 18+（仅具身前端）
 - Rust + MSVC（Tauri 桌面壳，仅 Windows 具身）
-- LLM：OpenAI 兼容接口（现行 DeepSeek）
+- LLM：OpenAI 兼容接口（现行 **tokenrhythm**；deepseek 备用）
 
 ### 8.2 安装
 
@@ -587,13 +587,13 @@ pip install -e ".[dev]"
 
 # 密钥
 copy .env.example .env
-# 编辑 .env：DEEPSEEK_API_KEY=...
+# 编辑 .env：TOKENRHYTHM_API_KEY=...（备用可填 DEEPSEEK_API_KEY）
 
 # 配置（推荐放 data/，与记忆数据一起，不入库）
 copy qi\config\settings.example.yaml data\settings.yaml
 ```
 
-**配置查找顺序**（先命中先生效）：`data/settings.yaml` → `~/.qi/settings.yaml` → `qi/config/settings.yaml`（旧） → 包内 `settings.example.yaml`。
+**配置查找顺序**（先命中先生效）：`data/settings.yaml` → `~/.qi/settings.yaml` → `qi/config/settings.yaml`（旧） → `config/settings.yaml`（更旧） → 包内 `settings.example.yaml`。
 
 ### 8.3 终端聊天（最简）
 
@@ -663,11 +663,18 @@ Remove-Item -Recurse -Force data\chroma
 
 ### 8.8 CI（[.github/workflows/ci.yaml](../../.github/workflows/ci.yaml)）
 
-push main / PR 触发，ubuntu-latest + Python 3.12：
-1. 从 `requirements.lock` 安装（剥离自引用与本地路径）
-2. `python tools/check_doc_links.py`（文档死链检查）
-3. `python tools/verify_package.py --full`（测试 + ruff + diff + 红线审计）
-4. `python tools/check_spec_traceability.py`（规格可追溯性）
+push `main` / PR 触发，两个 job：
+
+**`verify`**（矩阵：`ubuntu-latest` + `windows-latest`，Python 3.12）：
+1. 从 `requirements.lock` 安装（剥离自引用 / animus editable / 本地 `D:\` 路径）
+2. `python tools/verify_package.py --full`（pytest + ruff(`qi`/`tests`/`tools`) + diff + 红线审计）
+3. `python tools/check_doc_links.py`
+4. `python tools/check_spec_traceability.py`
+5. `pip-audit`（忽略尚无 Fix 的 `PYSEC-2026-311` / chromadb）
+
+**`frontend`**（ubuntu，Node 22）：`qi/embodiment/desktop` 下 `npm ci` + `npm run build`（Vite；不含全量 Tauri 打包）。
+
+本地对齐见仓库根 [CONTRIBUTING.md](../../CONTRIBUTING.md)。
 
 ---
 
@@ -728,7 +735,14 @@ relationship:
   drift_detection_interval: 259200
 
 voice: { enabled: false, provider: "edge-tts", voice_id: "zh-CN-XiaoyiNeural", auto_play: true }
-embodiment: { host: "127.0.0.1", port: 9527 }
+embodiment: { host: "127.0.0.1", port: 9527 }   # 仅 loopback；非本机地址运行时回退
+
+stasis:                                          # 内稳态 / 资源账本（阶段四）
+  starve_beats: 45
+  interaction_income: 25.0
+  presence_income: 2.0
+  presence_min_interval_sec: 30
+  pressure_sensitivity: 1.0
 ```
 
 ---

@@ -8,6 +8,7 @@ import StatusBar from "./components/StatusBar.vue";
 import TalkView from "./components/TalkView.vue";
 import ViewTabs from "./components/ViewTabs.vue";
 import WhisperView from "./components/WhisperView.vue";
+import WindowControls from "./components/WindowControls.vue";
 import { useQi } from "./composables/useQi";
 
 /* Step 5：动效收尾 + 验收 */
@@ -74,7 +75,10 @@ onUnmounted(() => disconnect());
           <span class="seal">栖</span>
           <h1 data-tauri-drag-region>栖</h1>
         </div>
-        <StatusBar :mode="mode" :season="season" :connected="connected" />
+        <div class="header-right">
+          <StatusBar :mode="mode" :season="season" :connected="connected" />
+          <WindowControls />
+        </div>
       </header>
 
       <div class="stage">
@@ -107,7 +111,7 @@ onUnmounted(() => disconnect());
         >
           唤醒
         </button>
-        <InputBox v-else @send="send" />
+        <InputBox v-else :disabled="!connected" @send="send" />
       </footer>
     </div>
   </div>
@@ -208,6 +212,13 @@ header {
   cursor: grab;
   user-select: none;
   flex-shrink: 0;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
 }
 
 .brand {

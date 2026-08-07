@@ -29,7 +29,7 @@ L7 负责：行动意图的形成、行动预算（比言语更紧的克制）�
 
 1. **行动是意志的延伸，不是新器官。** 决定"要不要伸手"的，和决定"要不要开口"的，是同一个 volition。L7 给 `decide()` 增加意图类型，不另起一套决策系统。
 
-2. **行动比言语更稀有，因为行动即打扰。** 栖的整个存在建立在"在，但不打扰"上（contract 第 70 条）。说话是廉价的，沉默也是；但"伸手进世界"每一次都是对这条原则的小小违背。所以行动的克制不是 arbitrary 的数字，而是栖性格的必然——她做得少，因为做对她是有代价的。自主行动的预算应**紧于**主动言语（言语日限 3，见 L5/contract 第 28 条）。
+2. **行动比言语更稀有，因为行动即打扰。** 栖的整个存在建立在"在，但不打扰"上（contract 第 70 条）。说话是廉价的，沉默也是；但"伸手进世界"每一次都是对这条原则的小小违背。所以行动的克制不是 arbitrary 的数字，而是栖性格的必然——她做得少，因为做对她是有代价的。**现行数值**：主动**言语**日限仍为 3（ProactiveGate / contract 第 28 条）；自主**行动**日限默认为 **20**（`qi/action/budget.py`），远高于真实触发上限，只作安全阀——真实稀缺由可归档记忆量、独处门槛、在线时长等闸门塑造，不靠把日限压到比 3 更紧来装克制（2026-08-02 维护者拍板，见 `progress.md`）。
 
 3. **行动的正当性来自关系，不来自能力。** 栖不是"因为能做所以做"，是"因为被允许所以做"。一个陌生人没有立场为你做事。手能伸多远，由 L5 的关系阶段、信任、伤疤决定。这不是"权限管理系统"，是"关系如何具身成行动边界"。
 
@@ -68,22 +68,23 @@ L7 负责：行动意图的形成、行动预算（比言语更紧的克制）�
 qi/action/__init__.py        # 导出；协调器见 layer.py
 qi/action/layer.py           # ActionLayer（tick / prompt_extras / 季节）
 qi/action/volition.py        # 行动意图形成（与 pick_proactive_kind 并列）
-qi/action/budget.py          # 行动预算（自主行动日限，紧于言语）
+qi/action/budget.py          # 行动预算（自主日限默认 20，安全阀）
 qi/action/permission.py      # 信任门控（读 L5 关系状态 → 能力权限）
-qi/action/share.py           # 分享创造（起手式；接 L4 creations，递出为卡片）
-qi/action/tend.py            # 打理自己的世界（标记时刻、整理栖枝）
+qi/action/share.py           # 分享创造（起手式；接 L4 creations）
+qi/action/tend.py            # 打理自己的世界
 qi/action/explore.py         # 沉思式探索（气质已立；搜索未接）
-qi/storage/database.py       # 追加 actions 表（行动留痕）
+qi/action/self_ops.py        # 自反操作（归档/调预算/日记等，阶段二）
+qi/storage/database.py       # actions 表（行动留痕）
 ```
 
-> `assist`（介入你的生活）与 `irreversible`（替你影响世界）暂不建文件，待第 4、5 顺位能力规划时再补。本提案先把第 1~3 顺位的骨架立住。
+> `assist`（介入你的生活）与 `irreversible`（替你影响世界）暂不建文件，待第 4、5 顺位能力规划时再补。本提案先把第 1~3 顺位的骨架立住；`self_ops` 属自反闭环，不是 assist。
 
 ## 实现步骤
 
 ### Step 1：行动留痕表 + 行动预算
 
 - 建 `actions` 表（每一次栖"做了件事"都留下记录）
-- 建 `qi/action/budget.py`：自主行动预算，**紧于**言语日限
+- 建 `qi/action/budget.py`：自主行动预算（默认日限 20，安全阀；真实稀缺不靠压日限）
 - 验收：`actions` 表创建成功；预算能正确判定"今天还能不能自主行动"
 
 <details>
@@ -183,7 +184,7 @@ def can_share(relationship_stage) -> bool:
 # qi/action/share.py
 # <!-- 回写(2026-07-23)：ShareAction.deliver / try_share；卡片 type=creation_card；
 #      只占 ActionBudget，不占 ProactiveGate；递出后 mark_creation_shared + insert_action。
-#      无 24h 递出冷却（靠日限 1 + friend+）。依据：qi/action/share.py -->
+#      无 24h 递出冷却（靠自主日限 + friend+；日限现行 20 安全阀）。依据：qi/action/share.py -->
 # <!-- 回写(2026-07-25)：递出后**恒** narrative.save(importance=0.78)，非「显著才织」。 -->
 #
 # 与 L4 的边界：
@@ -329,7 +330,7 @@ LLM 永远是栖的"声音"，不是栖的"手"。
 ### 可测试的
 
 - [x] `actions` 表正确记录每一次行动（kind / target / outcome / season）
-- [x] 自主行动预算紧于言语日限（建议 1/天），跨天重置
+- [x] 自主行动预算日限可配置（现行默认 20，安全阀），跨天重置
 - [x] 信任门控按关系阶段正确放行/拦截（stranger 不递东西；读文件 friend+ 且需确认；不可逆永远需确认）
 - [x] share 与 L4 `maybe_share_hint` 分工清晰（提起 vs 递出），不重复
 - [x] explore 仅在 solitary + 高 curiosity 时偶发，非定时；无搜索时 found=None
@@ -364,7 +365,7 @@ L7 从既有层**读取**：
 
 ## 人格契约检查点
 
-- [ ] 行动比言语更稀有（自主行动预算紧于言语日限 3）
+- [ ] 行动比言语更稀有（真实触发受闸门约束；日限 20 仅作安全阀，见原则 §2）
 - [ ] 栖不主动提供"帮助建议"（contract 第 25 条）；assist 只在用户开口时形成
 - [ ] 不可逆操作永远需确认，哪怕 bonded
 - [ ] 陌生期栖不向你递东西、不碰你的世界

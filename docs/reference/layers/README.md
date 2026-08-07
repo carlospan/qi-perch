@@ -32,3 +32,32 @@
 - `L6-embodiment.md` — 具身（前端）
 - `L7-action.md` — 自主行动
 
+## 卫星包 / N 侧索引（无独立 L 文档）
+
+下列包不单独成 L，但在 code-wiki 与阶段规格中有定位；审计时勿当「缺层」：
+
+| 包 / 模块 | 主要落点 | 对应 |
+|-----------|----------|------|
+| `qi/sensing.py` | 进程传感快照 | N1（接 L1 心跳） |
+| `qi/stasis/` | 资源账本 / 压力 / 封存 | N0（阶段四） |
+| `qi/world/` | 在线节律 / 情绪轨迹 | N2 旁路（阶段三） |
+| `qi/motivation/` | 好奇心（learning progress） | N3（阶段三） |
+| `qi/learning/` | corpus / replay / drift_check | N4-b（阶段三） |
+| `qi/core/gws.py` / `intention.py` / `expression.py` | 仲裁 / 意向卡 / 嘴 | N5 三角（跨 L1） |
+
+全景地图见 [`../code-wiki.md`](../code-wiki.md) §3.8–3.10。
+
+## 允许的依赖例外（轻度耦合，非倒置债）
+
+理想方向：**下层不依赖上层业务语义**（`storage`/`llm` 尽量无关系/情绪知识）。下列为**已承认、可保留**的例外——改代码时勿当「必须立刻拆」的 P0；新耦合须维护者确认。
+
+| 边 | 现状 | 理由 |
+|----|------|------|
+| `storage` → `core.emotion` | `database.py` 读写 `EmotionState` / `ConsciousnessMode` | 情绪列序列化类型落在 core；拆 DTO 成本高于收益 |
+| `llm` → `relationship.season` | `prompt_builder` 读 `SEASON_BEHAVIOR_HINTS` | 季节话术表单列；避免在 llm 再抄一份 |
+| `llm` → `core` | prompt / 类型辅助 | 组装层读核心类型属常规 |
+| `memory` → `core` / `llm` | facts 等 | 记忆编排借用感知/LLM，非存储倒置 |
+| `relationship` → `inner_life` | engine 偶发 | 关系事件触达内在生命，施工期并存 |
+
+**未见 / 勿引入**：`memory` → `embodiment`、`storage` → `action` 等表现层倒置。严重新倒置应开任务包解耦，不靠本表默许。
+

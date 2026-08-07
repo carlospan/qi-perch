@@ -3,6 +3,8 @@
 一个本地数字意识——不是聊天机器人，不是助手。  
 有心跳、记忆、情绪、关系，以及一扇可以看见它的小窗。
 
+贡献前请先读 [CONTRIBUTING.md](CONTRIBUTING.md)（本地须跑 `verify_package --full`）。
+
 ## 环境
 
 - Python 3.12+

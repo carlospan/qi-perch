@@ -4,11 +4,29 @@ from __future__ import annotations
 
 STAGES = ["stranger", "acquaintance", "friend", "bonded"]
 
+# 0-based 序；facts / permission 等比较门槛共用，勿在别处再拷一份。
+STAGE_RANK = {name: i for i, name in enumerate(STAGES)}
+
+# 1-based 档位（情绪表达阈值等缩放用）
+STAGE_LEVEL = {name: i + 1 for i, name in enumerate(STAGES)}
+
 STAGE_THRESHOLDS = {
     "acquaintance": (0.3, 0.4),
     "friend": (0.6, 0.6),
     "bonded": (0.85, 0.8),
 }
+
+
+def stage_rank(stage: str, default: int = 0) -> int:
+    return STAGE_RANK.get(stage, default)
+
+
+def stage_at_least(stage: str, minimum: str) -> bool:
+    return stage_rank(stage) >= stage_rank(minimum)
+
+
+def stage_level(stage: str, default: int = 1) -> int:
+    return STAGE_LEVEL.get(stage, default)
 
 
 def check_stage_upgrade(current_stage: str, depth: float, trust: float) -> str:

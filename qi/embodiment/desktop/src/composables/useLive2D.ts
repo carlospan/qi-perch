@@ -160,10 +160,9 @@ export function createLive2D(container: HTMLElement): Live2DController {
   const ready = (async () => {
     try {
       if (!window.Live2DCubismCore) {
-        console.error(
-          "[qi] Live2DCubismCore 未加载，请确认 public/live2dcubismcore.min.js 与 index.html 脚本顺序"
+        throw new Error(
+          "Live2DCubismCore 未加载，请确认 public/live2dcubismcore.min.js 与 index.html 脚本顺序"
         );
-        return;
       }
 
       // 与 pixi-live2d-display 共用同一套 @pixi/*（勿拆成两次无关的动态 import）
@@ -308,6 +307,7 @@ export function createLive2D(container: HTMLElement): Live2DController {
       (container as HTMLElement & { __qiRo?: ResizeObserver }).__qiRo = ro;
     } catch (e) {
       console.error("[qi] Live2D 加载失败（界面其它部分仍应可用）", e);
+      throw e instanceof Error ? e : new Error(String(e));
     }
   })();
 

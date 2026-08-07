@@ -21,21 +21,19 @@ jobs:
         with:
           python-version: "3.12"
 
-      # 用 requirements.lock 锁定版本；剥离自引用与本地绝对路径。
+      # 用 requirements.lock 锁定版本；剥离自引用、无关 editable、本地绝对路径。
       # shell: bash 保证 windows-latest 也有 grep /tmp。
       - name: Install dependencies (from lock, sanitized)
         shell: bash
         run: |
           python -m pip install --upgrade pip
           grep -vE "^-e git\+https://github.com/carlospan/qi-perch" requirements.lock \
+            | grep -vE "^-e git\+https://github.com/carlospan/animus" \
             | grep -vE "^-e [dD]:\\\\" \
             | grep -vE "^-e [dD]:/" > /tmp/ci-requirements.txt
           pip install -r /tmp/ci-requirements.txt
 
-      - name: Ruff
-        run: python -m ruff check qi tests
-
-      # pytest 仅经 verify_package（含 basetemp=系统临时区 + ruff + 红线审计）
+      # pytest + ruff(qi/tests/tools) + diff + 红线；basetemp=系统临时区
       - name: 包验收自动化（测试+ruff+diff+红线审计）
         run: python tools/verify_package.py --full
 
@@ -44,3 +42,33 @@ jobs:
 
       - name: 规格可追溯性检查
         run: python tools/check_spec_traceability.py
+
+      # chromadb PYSEC-2026-311 尚无上游 Fix：忽略该项，其余 CVE 仍失败
+      - name: pip-audit（依赖漏洞）
+        shell: bash
+        run: |
+          python -m pip install -q pip-audit
+          python -m pip_audit -r /tmp/ci-requirements.txt \
+            --ignore-vuln PYSEC-2026-311
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: qi/embodiment/desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: qi/embodiment/desktop/package-lock.json
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Vite build
+        run: npm run build

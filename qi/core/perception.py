@@ -39,6 +39,34 @@ _NEGATIVE = (
 # 明显辱骂/驱逐——带感叹类标点时可短路，不调 LLM
 _STRONG_NEGATIVE = ("滚", "闭嘴", "删掉", "傻逼")
 
+# 纯寒暄/确认——即使命中正向关键词也不值得打感知 LLM（Stage6）
+_TRIVIAL_UTTERANCES = frozenset(
+    {
+        "你好",
+        "您好",
+        "早",
+        "早安",
+        "晚安",
+        "在吗",
+        "在不在",
+        "嗯嗯",
+        "哈哈",
+        "呵呵",
+        "好的",
+        "收到",
+        "ok",
+        "OK",
+        "嗨",
+        "hi",
+        "hello",
+        "嗯",
+        "啊",
+        "哦",
+        "喔",
+    }
+)
+_TRIVIAL_ONLY_RE = re.compile(r"^[\s\.。…!！?？~～哈呵嗯啊哦喔]+$")
+
 _EXCLAIM = ("！", "!", "…", "...", "？", "?")
 _IMPACT_LLM_TIMEOUT = 2.0
 _CONTEXT_DEFAULT = 4
@@ -123,8 +151,23 @@ class Perception:
         return base, pos_hits, neg_hits
 
     def _is_trivial_shortcircuit(self, text: str, pos_hits: int, neg_hits: int) -> bool:
-        """≤2 字且无正负命中——寒暄短路，不调 LLM。"""
-        return len(text) <= 2 and pos_hits == 0 and neg_hits == 0
+        """寒暄/确认短路，不调感知 LLM。
+
+        - 负向命中永不短路
+        - 固定寒暄表（可含「你好」等正向词）
+        - ≤2 字且无情感命中
+        - 纯标点/语气词短串
+        """
+        t = (text or "").strip()
+        if not t or neg_hits > 0:
+            return bool(not t)
+        if t in _TRIVIAL_UTTERANCES:
+            return True
+        if len(t) <= 2 and pos_hits == 0:
+            return True
+        if len(t) <= 6 and _TRIVIAL_ONLY_RE.fullmatch(t):
+            return True
+        return False
 
     def _is_abuse_shortcircuit(self, text: str, neg_hits: int) -> bool:
         """明显负面词 + 感叹类标点 → 关键词直判。"""

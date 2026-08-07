@@ -95,6 +95,14 @@ _CREATE_INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_episodes_dreamed ON episodes(dreamed)",
     "CREATE INDEX IF NOT EXISTS idx_broadcast_traces_beat ON broadcast_traces(beat)",
     "CREATE INDEX IF NOT EXISTS idx_broadcast_traces_ts ON broadcast_traces(timestamp)",
+    # Stage6：热查询表补索引
+    "CREATE INDEX IF NOT EXISTS idx_user_facts_active "
+    "ON user_facts(superseded_by, fact_type)",
+    "CREATE INDEX IF NOT EXISTS idx_narrative_strength ON narrative_memories(strength)",
+    "CREATE INDEX IF NOT EXISTS idx_narrative_archived ON narrative_memories(archived)",
+    "CREATE INDEX IF NOT EXISTS idx_dreams_retention ON dreams(retention)",
+    "CREATE INDEX IF NOT EXISTS idx_dreams_created ON dreams(created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_actions_timestamp ON actions(timestamp)",
 )
 
 _CREATE_DREAMS = """

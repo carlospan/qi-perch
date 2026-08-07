@@ -136,6 +136,18 @@ def test_bge_load_error_message():
         BgeOnnxEmbeddingFunction(model_dir="definitely/missing/path")
 
 
+def test_bge_init_is_lazy_until_embed():
+    """构造不拉 ORT；缺文件仍在 __init__ 失败。有文件时 session 延后到首次嵌入。"""
+    root = Path("data/models/bge-small-zh-v1.5")
+    if not bge_model_files_present(root):
+        pytest.skip("本机无 BGE 模型文件")
+    ef = BgeOnnxEmbeddingFunction(model_dir=root)
+    assert ef._session is None
+    vec = ef(["你好"])[0]
+    assert ef._session is not None
+    assert len(vec) == 512
+
+
 def test_bge_files_helper():
     assert bge_model_files_present("no/such/dir") is False
 

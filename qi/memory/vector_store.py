@@ -111,12 +111,25 @@ class BgeOnnxEmbeddingFunction(EmbeddingFunction):
     """
     BAAI/bge-small-zh-v1.5 的本地 ONNX 嵌入（512 维）。
     池化：官方 CLS；归一化：L2（本 ONNX 的 sentence_embedding 输出已是该结果）。
+
+    构造只校验模型文件存在；ORT session 在首次嵌入时懒加载（Stage6 冷启动）。
     """
 
     def __init__(self, model_dir: Path | str | None = None):
         root = Path(model_dir) if model_dir else DEFAULT_BGE_DIR
         if not bge_model_files_present(root):
             raise BgeLoadError(f"BGE 模型文件缺失：{root}")
+        self.model_dir = root
+        self.dim = 512
+        self._np = None
+        self._tokenizer = None
+        self._session = None
+        self._use_sentence = False
+        self._out_names = ["sentence_embedding"]
+
+    def _ensure_loaded(self) -> None:
+        if self._session is not None:
+            return
         try:
             import numpy as np
             import onnxruntime as ort
@@ -125,14 +138,12 @@ class BgeOnnxEmbeddingFunction(EmbeddingFunction):
             raise BgeLoadError(f"缺少运行依赖：{e}") from e
 
         self._np = np
-        self.model_dir = root
-        self.dim = 512
         try:
-            self._tokenizer = Tokenizer.from_file(str(root / "tokenizer.json"))
+            self._tokenizer = Tokenizer.from_file(str(self.model_dir / "tokenizer.json"))
             self._tokenizer.enable_padding(pad_id=0, pad_token="[PAD]")
             self._tokenizer.enable_truncation(max_length=512)
             self._session = ort.InferenceSession(
-                str(root / "onnx" / "model.onnx"),
+                str(self.model_dir / "onnx" / "model.onnx"),
                 providers=["CPUExecutionProvider"],
             )
         except Exception as e:
@@ -141,9 +152,7 @@ class BgeOnnxEmbeddingFunction(EmbeddingFunction):
         outs = {o.name for o in self._session.get_outputs()}
         self._use_sentence = "sentence_embedding" in outs
         self._out_names = (
-            ["sentence_embedding"]
-            if self._use_sentence
-            else ["last_hidden_state"]
+            ["sentence_embedding"] if self._use_sentence else ["last_hidden_state"]
         )
 
     @staticmethod
@@ -165,9 +174,11 @@ class BgeOnnxEmbeddingFunction(EmbeddingFunction):
         return BgeOnnxEmbeddingFunction(model_dir=config.get("path"))
 
     def __call__(self, input: Documents) -> Embeddings:
+        self._ensure_loaded()
         return [self._embed(text) for text in input]
 
     def _embed(self, text: str) -> list[float]:
+        self._ensure_loaded()
         np = self._np
         enc = self._tokenizer.encode(text or "")
         ids = np.array([enc.ids], dtype=np.int64)
@@ -328,7 +339,11 @@ class VectorStore:
         try:
             self.collection.delete(ids=[str(memory_id)])
         except Exception:
-            pass
+            logger.warning(
+                "向量删除失败 id=%s（SQLite 叙事可能已删，索引或漂移）",
+                memory_id,
+                exc_info=True,
+            )
 
     def reindex_documents(self, rows: list[dict]) -> int:
         """

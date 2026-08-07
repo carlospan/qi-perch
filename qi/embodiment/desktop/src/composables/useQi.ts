@@ -1,6 +1,6 @@
 /**
  * WS 接线 + 消息 / 历史状态（黄昏的枝 §七）。
- * 「谈」：连接后通过 /history 拉取 SQLite 全量记录，本轮继续 append。
+ * 「谈」：连接后通过 /history 拉取最近窗口记录，本轮继续 append。
  * 「忆」：连接后通过 /journal 拉取独白 / 梦 / 第一次；无则诚实空占位。
  */
 
@@ -172,6 +172,7 @@ function createQi() {
   }
 
   function send(text: string) {
+    if (!connected.value) return;
     const value = text.trim();
     if (!value) return;
     touchConsideredForTurn = false;
@@ -307,7 +308,7 @@ function createQi() {
     qiWs.disconnect();
   }
 
-  /** 主动再拉一次全量历史（重连后也会自动拉） */
+  /** 主动再拉一次最近窗口历史（重连后也会自动拉；默认约 200 条） */
   async function refreshHistory() {
     requestHistory();
   }

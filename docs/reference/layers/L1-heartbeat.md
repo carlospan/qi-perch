@@ -23,18 +23,27 @@
 ## 需要创建的文件
 
 ```
-qi/core/brain.py          # 心跳主循环
-qi/core/emotion.py        # 最简情绪（6维度 + 衰减 + 事件冲击）
-qi/core/perception.py     # 感知（接收用户输入 + 检测沉默）
-qi/core/expression.py     # 表达（调 LLM + 语气注入）
-qi/llm/gateway.py         # LLM 路由（"provider:档位" → 具体端点）
-qi/llm/providers/openai_compat.py  # OpenAI 兼容端点统一实现（deepseek / custom_providers）
-qi/llm/prompt_builder.py  # Prompt 组装
-qi/storage/database.py    # SQLite 初始化 + 状态持久化
-qi/cli.py              # 终端 / 具身入口（console scripts: qi / qi-desktop）
-qi/config/settings.yaml   # 配置（provider、API key、心跳频率）
-qi/prompts/conversation.txt  # 对话 prompt（自己写，不让 AI 写）
+qi/core/brain.py                 # 心跳主循环（编排）
+qi/core/brain_*.py               # 拆分：context / persist / delivery / background / trace / types
+qi/core/emotion.py               # 情绪（6 维度 + 衰减 + 事件冲击）
+qi/core/perception.py            # 感知（用户输入 + 沉默）
+qi/core/rhythm.py                # 节律（模式切换等）
+qi/core/intention.py             # N5 决策侧：意向卡（规则引擎，零 LLM）
+qi/core/expression.py            # N5 表达：卡 → 措辞（LLM / 模板）+ HARD 闸
+qi/core/gws.py                   # GWS 仲裁（阶段二）
+qi/core/proactive.py             # 主动开口门控
+qi/core/trace.py                 # 广播痕迹 / contender
+qi/sensing.py                    # N1 传感收集（阶段二）
+qi/llm/gateway.py                # LLM 路由（N5 网关）
+qi/llm/providers/openai_compat.py
+qi/llm/prompt_builder.py         # Prompt 组装
+qi/storage/database.py           # SQLite
+qi/cli.py                        # 终端 / 具身入口
+qi/config/settings.yaml          # 配置（真源优先见 config 候选路径）
+qi/prompts/conversation.txt      # 对话 prompt
 ```
+
+> **N5 三角**：决策在 `intention`，出口约束在 `expression`，远程措辞在 `llm/`。勿把意向卡当成「又一层 L」。
 
 ## 实现步骤
 

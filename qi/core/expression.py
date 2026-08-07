@@ -211,6 +211,8 @@ class Expression:
         hist = recent_qi_replies_from_messages(recent_messages, limit=REPLY_DEDUP_WINDOW)
 
         text = ""
+        # 每拍对话最多 2 次 LLM：主调用 +（HARD 修复 XOR 去重重生）
+        used_retry = False
         try:
             text = await self.llm.call(purpose="conversation", messages=messages)
         except Exception:
@@ -228,6 +230,7 @@ class Expression:
             hard = [v for v in all_viols if is_hard_violation(v)]
             if hard:
                 fixed = await self._fix_generation(messages, hard, intention)
+                used_retry = True
                 if fixed is None:
                     intention.outcome = "template"
                     return _build_fallback(intention, hard)
@@ -236,7 +239,14 @@ class Expression:
             if not is_duplicate_reply(text, hist):
                 intention.outcome = "llm"
                 return text
-            # 跨轮复读：轻量重生成一次
+            # 跨轮复读：若本拍已为 HARD 用过重试预算 → 直接模板，不再打第三次 LLM
+            if used_retry:
+                templated = render_template(intention)
+                if templated:
+                    intention.outcome = "template"
+                    return templated
+                intention.outcome = "empty"
+                return ""
             regen_messages = list(messages)
             if regen_messages:
                 sys0 = dict(regen_messages[0])

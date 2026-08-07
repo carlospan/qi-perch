@@ -1,6 +1,13 @@
-"""brain_context 检索相关门（N5-b）单测。"""
+"""brain_context 检索相关门（N5-b）与 gather_prompt_context 集成测。"""
 
-from qi.core.brain_context import _filter_by_topic_relevance
+from __future__ import annotations
+
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from qi.core.brain_context import _filter_by_topic_relevance, gather_prompt_context
+from qi.core.emotion import EmotionState
 
 
 def test_filter_irrelevant_topic_memory():
@@ -53,3 +60,64 @@ def test_stop_words_do_not_false_pass():
     recent: list[dict] = []
     memories = [{"content": "现在的你我很珍惜"}]
     assert _filter_by_topic_relevance(memories, query, recent) == []
+
+
+def _minimal_brain(*, memories: list[dict], facts_error: bool = False) -> MagicMock:
+    brain = MagicMock()
+    brain.memory = MagicMock()
+    brain.memory.working.get_context.return_value = [
+        {"role": "user", "content": "干拌烤鸭"},
+    ]
+
+    async def retrieve(_query: str, top_k: int = 3) -> list[dict]:
+        return list(memories)[:top_k]
+
+    brain.memory.retrieve_for_prompt = retrieve
+
+    if facts_error:
+
+        async def boom() -> list:
+            raise RuntimeError("facts unavailable")
+
+        brain.memory.active_facts = boom
+    else:
+        brain.memory.active_facts = AsyncMock(return_value=[])
+
+    brain.memory.body_rhythm_hint = AsyncMock(return_value=None)
+    brain.relationship_stage = "friend"
+    brain.relationship = None
+    brain.scars = None
+    brain._db = None
+    brain.inner_life = None
+    brain.action = None
+    brain.first_times = None
+    brain._drift_signals = []
+    brain.emotion = EmotionState()
+    return brain
+
+
+@pytest.mark.asyncio
+async def test_gather_prompt_context_applies_topic_gate():
+    """集成：retrieve 结果经 topic gate；无关「重置」被滤，相关「烤鸭」保留。"""
+    brain = _minimal_brain(
+        memories=[
+            {"content": "你问我记不记得重置的原因"},
+            {"content": "梦里有干拌烤鸭的酱香"},
+        ]
+    )
+    ctx = await gather_prompt_context(
+        brain, "其实只是一个菜名", datetime(2026, 8, 8, 12, 0, 0)
+    )
+    texts = [str(m.get("content") or "") for m in ctx.retrieved_memories]
+    assert not any("重置" in t for t in texts)
+    assert any("烤鸭" in t for t in texts)
+
+
+@pytest.mark.asyncio
+async def test_gather_prompt_context_facts_failure_fallback():
+    """active_facts 抛错时 extras 回落到默认句，不炸上下文。"""
+    brain = _minimal_brain(memories=[], facts_error=True)
+    ctx = await gather_prompt_context(
+        brain, "你好", datetime(2026, 8, 8, 12, 0, 0)
+    )
+    assert ctx.extras.get("user_facts") == "（你还不太了解他）"

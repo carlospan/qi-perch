@@ -46,7 +46,7 @@ npm run dev
 
 ## 语音
 
-在 `qi/config/settings.yaml` 里：
+在 `data/settings.yaml`（推荐；或 `~/.qi/settings.yaml`）里：
 
 ```yaml
 voice:

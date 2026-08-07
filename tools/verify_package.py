@@ -41,7 +41,7 @@ if hasattr(sys.stderr, "reconfigure"):
 # 配置
 # ---------------------------------------------------------------------------
 
-DEFAULT_RUFF_SCOPE = ["qi", "tests"]
+DEFAULT_RUFF_SCOPE = ["qi", "tests", "tools"]
 # 系统临时区子目录，规避仓库内 .pytest-tmp 的 Windows ACL 损坏（包 18）
 BASETEMP_DIRNAME = Path(tempfile.gettempdir()) / "qi-pytest"
 

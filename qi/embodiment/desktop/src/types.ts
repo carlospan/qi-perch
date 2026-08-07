@@ -52,7 +52,7 @@ export type ClientMessage =
 /** 静 / 谈 / 忆 */
 export type QiView = "still" | "talk" | "journal";
 
-/** 「谈」会话消息（来自 SQLite 全量 + 本轮追加） */
+/** 「谈」会话消息（来自 /history 最近约 200 条 + 本轮追加） */
 export type TalkMessage = {
   id: string;
   role: "qi" | "me";

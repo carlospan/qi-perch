@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
 
+const props = defineProps<{
+  disabled?: boolean;
+}>();
+
 const emit = defineEmits<{
   send: [text: string];
 }>();
@@ -22,6 +26,7 @@ function resize() {
 }
 
 async function submit() {
+  if (props.disabled) return;
   const value = text.value.trim();
   if (!value) return;
   emit("send", value);
@@ -45,19 +50,26 @@ watch(text, () => {
 </script>
 
 <template>
-  <form class="composer" @submit.prevent="submit">
+  <form class="composer" :class="{ offline: disabled }" @submit.prevent="submit">
     <textarea
       ref="field"
       v-model="text"
       rows="1"
       maxlength="500"
-      placeholder="说点什么……"
+      :placeholder="disabled ? '通道还没连上……' : '说点什么……'"
+      :disabled="disabled"
       autocomplete="off"
       enterkeyhint="send"
       @keydown="onKeydown"
       @input="resize"
     />
-    <button type="submit" aria-label="发送" :disabled="!text.trim()">说</button>
+    <button
+      type="submit"
+      aria-label="发送"
+      :disabled="disabled || !text.trim()"
+    >
+      说
+    </button>
   </form>
 </template>
 
@@ -132,5 +144,10 @@ button:disabled {
   opacity: 0.4;
   cursor: default;
   box-shadow: none;
+}
+
+.composer.offline textarea {
+  opacity: 0.72;
+  cursor: not-allowed;
 }
 </style>

@@ -27,12 +27,13 @@
 ## 需要创建的文件
 
 ```
-qi/inner_life/__init__.py        # InnerLife 协调器（tick / prompt_extras）
-qi/inner_life/consciousness.py   # 意识流 + 元认知
-qi/inner_life/dream.py           # 梦境引擎
-qi/inner_life/creativity.py      # 创作冲动
-qi/inner_life/self_model.py      # 自我模型与反思
-qi/storage/database.py           # 追加 consciousness_stream、dreams、creations、self_model 表
+qi/inner_life/__init__.py           # InnerLife 协调器（tick / prompt_extras）
+qi/inner_life/consciousness.py      # 意识流 + 元认知
+qi/inner_life/dream.py              # 梦境引擎
+qi/inner_life/creativity.py         # 创作冲动
+qi/inner_life/self_model.py         # 自我模型与反思
+qi/inner_life/identity_snapshot.py  # 身份快照（阶段一过渡脚手架）
+qi/storage/database.py              # consciousness_stream、dreams、creations、self_model 表
 ```
 
 ## 实现步骤

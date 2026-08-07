@@ -14,6 +14,7 @@ const props = defineProps<{
 }>();
 
 const host = ref<HTMLElement | null>(null);
+const loadError = ref<string | null>(null);
 let ctrl: Live2DController | null = null;
 
 onMounted(async () => {
@@ -26,6 +27,10 @@ onMounted(async () => {
     ctrl.setSpeaking(props.speaking);
   } catch (e) {
     console.error("[qi] Live2D 初始化失败", e);
+    loadError.value =
+      e instanceof Error ? e.message : "形象加载失败，其它界面仍可用";
+    ctrl?.destroy();
+    ctrl = null;
   }
 });
 
@@ -56,10 +61,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="live2d-wrap" :class="{ entered }">
+  <div class="live2d-wrap" :class="{ entered, failed: !!loadError }">
     <div class="halo cool" aria-hidden="true" />
     <div class="halo warm" aria-hidden="true" />
-    <div ref="host" class="live2d-host" />
+    <div ref="host" class="live2d-host" :hidden="!!loadError" />
+    <div v-if="loadError" class="placeholder" role="status">
+      <span class="mark">栖</span>
+      <p class="title">形象没能出现</p>
+      <p class="hint">{{ loadError }}</p>
+      <p class="hint soft">对话与状态栏仍可用；换机时请按文档放入 Cubism Core 与模型。</p>
+    </div>
   </div>
 </template>
 
@@ -116,6 +127,10 @@ onUnmounted(() => {
 .live2d-wrap.entered .halo.warm {
   opacity: calc(var(--warm-t) * var(--glow-a));
 }
+.live2d-wrap.failed .halo {
+  opacity: 0.35;
+  animation: none;
+}
 
 @keyframes breathe {
   0%,
@@ -138,5 +153,42 @@ onUnmounted(() => {
   display: block;
   width: 100% !important;
   height: 100% !important;
+}
+
+.placeholder {
+  position: relative;
+  z-index: 2;
+  max-width: 16rem;
+  padding: 1.25rem 1rem;
+  text-align: center;
+  color: var(--ink-muted, var(--ink-dim));
+}
+.placeholder .mark {
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-bottom: 0.75rem;
+  border-radius: 50%;
+  font-family: var(--display, inherit);
+  font-size: 1.25rem;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.placeholder .title {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  color: var(--ink);
+  letter-spacing: 0.06em;
+}
+.placeholder .hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.55;
+  word-break: break-word;
+}
+.placeholder .hint.soft {
+  opacity: 0.75;
 }
 </style>

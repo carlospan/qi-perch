@@ -57,7 +57,7 @@ watch(
   <div class="panel">
     <div class="panel-head">
       <span class="t">谈</span>
-      <span class="sub">你们说过的话</span>
+      <span class="sub">最近约 200 条</span>
     </div>
     <div ref="body" class="panel-body">
       <p v-if="groups.length === 0 && !typing" class="empty">

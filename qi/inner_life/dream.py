@@ -216,7 +216,13 @@ class DreamEngine:
                 trust = float(rel.get("trust") or 0)
                 culture = rel.get("shared_culture")
         except Exception:
-            pass
+            logger.warning(
+                "做梦读关系失败，回退 season=%s stage=%s trust=%s",
+                season,
+                stage,
+                trust,
+                exc_info=True,
+            )
         season_hint = SEASON_BEHAVIOR_HINTS.get(season, SEASON_BEHAVIOR_HINTS["spring"])
 
         from qi.inner_life.identity_snapshot import ensure_identity_snapshot

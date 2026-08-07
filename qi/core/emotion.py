@@ -12,6 +12,11 @@ from enum import Enum
 
 from pydantic import BaseModel
 
+from qi.relationship.stages import STAGE_LEVEL
+
+# 兼容旧名：与 stages.STAGE_LEVEL 同一份（1-based）
+RELATIONSHIP_STAGE_LEVEL = STAGE_LEVEL
+
 
 class ConsciousnessMode(Enum):
     AWAKE = "awake"
@@ -151,13 +156,6 @@ STASIS_APPROACH_RATE = 0.05
 
 EXPRESSION_THRESHOLD = 0.3
 ACCUMULATION_LIMIT = 1.0
-
-RELATIONSHIP_STAGE_LEVEL = {
-    "stranger": 1,
-    "acquaintance": 2,
-    "friend": 3,
-    "bonded": 4,
-}
 
 STAGE_IMPACT_WEIGHT = {
     "stranger": 0.6,

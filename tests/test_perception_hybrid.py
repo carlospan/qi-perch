@@ -35,6 +35,25 @@ async def test_trivial_shortcircuit_skips_llm():
 
 
 @pytest.mark.asyncio
+async def test_greeting_shortcircuit_skips_llm():
+    """寒暄表（含「你好」）短路，不调感知 LLM。"""
+    calls = {"n": 0}
+
+    class _LLM:
+        async def call(self, **kwargs):
+            calls["n"] += 1
+            return "{}"
+
+    p = Perception({}, llm=_LLM())  # type: ignore[arg-type]
+    e = EmotionState()
+    val = await p.assess_impact_async("你好", e)
+    assert calls["n"] == 0
+    assert val == p.assess_impact("你好", e)
+    assert p.last_assessment is not None
+    assert p.last_assessment.source == "short_circuit"
+
+
+@pytest.mark.asyncio
 async def test_abuse_shortcircuit_skips_llm():
     """强伤词 + 感叹 → 不调 LLM。"""
     calls = {"n": 0}

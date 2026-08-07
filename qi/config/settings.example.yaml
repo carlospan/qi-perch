@@ -101,7 +101,7 @@ voice:
   voice_id: "zh-CN-XiaoyiNeural"
   auto_play: true
 
-# 具身通道
+# 具身通道（仅 loopback；非 127.0.0.1/localhost/::1 会被强制回退）
 embodiment:
   host: "127.0.0.1"
   port: 9527

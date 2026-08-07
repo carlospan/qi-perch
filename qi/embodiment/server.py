@@ -12,6 +12,50 @@ logger = logging.getLogger("qi.embodiment")
 
 WS_HOST = "127.0.0.1"
 WS_PORT = 9527
+# 桌面 /history 默认窗口（旧→新中的最近 N 条）；避免库长大后全表推送
+HISTORY_WINDOW = 200
+
+# 仅允许 loopback 绑定；配置里写 0.0.0.0 等会强制回退
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+# 浏览器 / Tauri / Vite 常见 Origin；None = 无 Origin 头（本机非浏览器客户端）
+WS_ALLOWED_ORIGINS: tuple[str | None, ...] = (
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost",
+    "http://127.0.0.1",
+    "https://localhost",
+    "https://127.0.0.1",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+    "tauri://localhost",
+    None,
+)
+
+
+def resolve_bind(
+    host: str | None = None,
+    port: int | str | None = None,
+) -> tuple[str, int]:
+    """解析 embodiment 绑定；非 loopback host 强制回退 127.0.0.1。"""
+    h = (host if host is not None else WS_HOST)
+    h = str(h).strip() or WS_HOST
+    try:
+        p = int(port if port is not None else WS_PORT)
+    except (TypeError, ValueError):
+        p = WS_PORT
+    if h not in LOOPBACK_HOSTS:
+        logger.warning(
+            "embodiment.host=%s 非 loopback，已强制回退 %s（禁止外网暴露）",
+            h,
+            WS_HOST,
+        )
+        h = WS_HOST
+    if not (1 <= p <= 65535):
+        logger.warning("embodiment.port=%s 非法，已回退 %s", port, WS_PORT)
+        p = WS_PORT
+    return h, p
+
 
 if TYPE_CHECKING:
     from qi.core.brain import Brain
@@ -22,8 +66,7 @@ class EmbodimentServer:
 
     def __init__(self, brain: Brain, host: str = WS_HOST, port: int = WS_PORT):
         self.brain = brain
-        self.host = host
-        self.port = port
+        self.host, self.port = resolve_bind(host, port)
         self.clients: set[Any] = set()
         self.running = False
         self._server = None
@@ -33,7 +76,12 @@ class EmbodimentServer:
         import websockets
 
         self.running = True
-        self._server = await websockets.serve(self._handler, self.host, self.port)
+        self._server = await websockets.serve(
+            self._handler,
+            self.host,
+            self.port,
+            origins=list(WS_ALLOWED_ORIGINS),
+        )
         self._ping_task = asyncio.create_task(self._ping_loop())
         logger.info("具身通道已打开 ws://%s:%s", self.host, self.port)
         # stop() 关闭 server 后这里返回，避免永久 Future 只能靠 cancel 收尾
@@ -187,14 +235,14 @@ class EmbodimentServer:
                     await self.broadcast(self._state_packet())
 
     async def _send_history(self, websocket: Any | None) -> None:
-        """把 SQLite 里全部对话推给请求方（本机单用户；无 websocket 则广播）。"""
+        """把最近 HISTORY_WINDOW 条对话推给请求方（本机单用户；无 websocket 则广播）。"""
         from datetime import datetime
 
         db = getattr(self.brain, "_db", None)
         rows: list[dict] = []
         if db is not None:
             try:
-                rows = await db.load_messages(limit=None)
+                rows = await db.load_messages(limit=HISTORY_WINDOW)
             except Exception:
                 logger.exception("拉取对话历史失败")
 

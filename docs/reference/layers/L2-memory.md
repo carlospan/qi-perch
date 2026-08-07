@@ -30,11 +30,13 @@
 qi/memory/manager.py       # 记忆管理器（统一入口）
 qi/memory/working.py       # 工作记忆（最近 N 条对话上下文）
 qi/memory/narrative.py     # 叙事记忆（存储、检索、褪色）
-qi/memory/vector_store.py  # ChromaDB 封装（embedding + 语义搜索）
+qi/memory/episodic.py      # 情节/episodes + role_map（阶段一）
+qi/memory/open_loops.py    # 未闭合念头（阶段一）
+qi/memory/vector_store.py  # ChromaDB 封装（BGE / n-gram 回退）
 qi/memory/body_memory.py   # 身体记忆（习惯、异常）
-qi/memory/first_time.py    # 第一次记忆（与 L5 共用，L2 文件列表补全）
-qi/memory/facts.py         # 用户事实记忆（FactStore / FactNoticer / format_facts_for_prompt；见 L2-memory-user-facts.md）
-qi/storage/database.py     # narrative_memories、body_memory、raw_events、user_facts 等表
+qi/memory/first_time.py    # 第一次记忆（与 L5 共用）
+qi/memory/facts.py         # 用户事实（见 L2-memory-user-facts.md）
+qi/storage/database.py     # narrative_memories、body_memory、raw_events、user_facts、episodes 等表
 ```
 
 > `first_time.py` 实现规格与叙事归 **L5**（`FirstTimeMemory` 由 Brain 直接持有，不经 `MemoryManager`）。本层只列文件归属。

@@ -1,7 +1,7 @@
 # config.md · 配置项参考
 
 > **定位**：所有 `settings` 配置项 + 默认值 + 语义的**技术参考**。
-> **真源**：`qi/config/settings.example.yaml` —— 本文件是**配置快照（索引说明）**，以 yaml 为准，非第二权威（宪法第四节同步纪律；日限 1/3/20 教训）。yaml 改动后须同步本文件对应行；禁止在文档其它处手抄这些值当第二权威。下表默认值抓取于 2026-08-02 的 example，若与 yaml 不符以 yaml 为准。
+> **真源**：`qi/config/settings.example.yaml` —— 本文件是**配置快照（索引说明）**，以 yaml 为准，非第二权威（宪法第四节同步纪律；日限 1/3/20 教训）。yaml 改动后须同步本文件对应行；禁止在文档其它处手抄这些值当第二权威。下表默认值抓取于 2026-08-08 的 example，若与 yaml 不符以 yaml 为准。
 > **现行路径**：`reference/config.md`（2026-08-02 重构新增）。
 
 ---
@@ -11,9 +11,9 @@
 | 键 | 默认值 | 语义 |
 |----|--------|------|
 | `llm.default_provider` | `tokenrhythm` | 默认供应商（OpenAI 兼容；现行走 custom_providers） |
-| `llm.providers.*.base_url` / `api_key` | — | 端点与密钥（密钥走 env，不落库） |
+| `llm.providers.*.base_url` / `api_key` | — | 端点与密钥（密钥走 env，不落库）；`deepseek` 为备用 |
 | `llm.providers.*.models.fast` / `strong` | 见 yaml | 快/强模型名 |
-| `llm.custom_providers` | `{}` | 自定义端点 |
+| `llm.custom_providers` | 见 yaml（example 含 `tokenrhythm` / `minimax-m2.7`） | 自定义 OpenAI 兼容端点；非空对象 |
 | `llm.model_routing.*` | 见 yaml | 各意图（conversation/narrative/consciousness/dream/creation/reflection/fact）路由到 provider:model |
 
 ## rhythm（心跳节律，秒）
@@ -113,8 +113,18 @@
 
 | 键 | 默认值 | 语义 |
 |----|--------|------|
-| `embodiment.host` | `127.0.0.1` | 前端 host |
-| `embodiment.port` | 9527 | 前端 port |
+| `embodiment.host` | `127.0.0.1` | WS 绑定地址；**仅 loopback**（`127.0.0.1` / `localhost` / `::1`），其它值运行时强制回退 |
+| `embodiment.port` | 9527 | WS 端口；前端 `ws.ts` 默认连同端口 |
+
+## stasis（内稳态 / 资源账本，阶段四）
+
+| 键 | 默认值 | 语义 |
+|----|--------|------|
+| `stasis.starve_beats` | 45 | 低余额连续拍数达此阈值 → 断粮/封存路径 |
+| `stasis.interaction_income` | 25.0 | 有效交互单次收入（R3 白名单入账） |
+| `stasis.presence_income` | 2.0 | 在场钝感收入 |
+| `stasis.presence_min_interval_sec` | 30 | 在场入账最短间隔（秒） |
+| `stasis.pressure_sensitivity` | 1.0 | 内稳态压力灵敏度（缩放 throttle/rest） |
 
 ---
 

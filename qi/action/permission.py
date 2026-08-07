@@ -4,19 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-# 阶段序（只用于比较，不另存权限状态）
-_STAGE_RANK = {
-    "stranger": 0,
-    "acquaintance": 1,
-    "friend": 2,
-    "bonded": 3,
-}
+from qi.relationship.stages import stage_at_least
 
 FRIEND_PLUS = ("friend", "bonded")
-
-
-def _stage_at_least(stage: str, minimum: str) -> bool:
-    return _STAGE_RANK.get(stage, 0) >= _STAGE_RANK.get(minimum, 0)
 
 
 def can_share(relationship_stage: str) -> bool:
@@ -73,7 +63,7 @@ def can_read_user_file(
     _ = trust  # 预留：将来可用信任阈值微调
     if scar_blocks_kind("assist", scars):
         return False, True
-    if _stage_at_least(relationship_stage, "friend"):
+    if stage_at_least(relationship_stage, "friend"):
         return True, True
     return False, True
 

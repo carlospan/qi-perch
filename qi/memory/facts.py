@@ -8,6 +8,8 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from qi.relationship.stages import stage_at_least
+
 if TYPE_CHECKING:
     from qi.core.emotion import EmotionState
     from qi.llm.gateway import LLMGateway
@@ -169,13 +171,6 @@ _DEFAULT_STABILITY: dict[str, str] = {
     "other": "stable",
 }
 
-_STAGE_RANK = {
-    "stranger": 0,
-    "acquaintance": 1,
-    "friend": 2,
-    "bonded": 3,
-}
-
 _SIMILARITY_CONFIRM = 0.72
 _SIMILARITY_CONFLICT = 0.35  # 同 type 已有 active 且不够像 → 视为冲突可取代（state）
 
@@ -261,10 +256,6 @@ def format_facts_for_prompt(facts: list[dict], relationship_stage: str) -> str:
             content = f"{content}。"
         sentences.append(content)
     return "".join(sentences) if sentences else "（你还不太了解他）"
-
-
-def stage_at_least(stage: str, minimum: str) -> bool:
-    return _STAGE_RANK.get(stage, 0) >= _STAGE_RANK.get(minimum, 0)
 
 
 def looks_like_person_name(name: str) -> bool:

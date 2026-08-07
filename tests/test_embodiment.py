@@ -1,11 +1,34 @@
-"""Avatar 状态映射测试。"""
+"""Avatar 状态映射 + 具身绑定安全测试。"""
 
 from datetime import datetime
 
 from qi.core.emotion import EmotionState
 from qi.embodiment.avatar.controller import AvatarController
 from qi.embodiment.avatar.states import Effect, Expression, Posture
+from qi.embodiment.server import (
+    WS_ALLOWED_ORIGINS,
+    WS_HOST,
+    WS_PORT,
+    resolve_bind,
+)
 from qi.embodiment.voice.tts import emotion_to_voice_params
+
+
+def test_resolve_bind_defaults_and_loopback():
+    assert resolve_bind(None, None) == (WS_HOST, WS_PORT)
+    assert resolve_bind("localhost", 9527) == ("localhost", 9527)
+    assert resolve_bind("::1", "9528") == ("::1", 9528)
+
+
+def test_resolve_bind_rejects_non_loopback():
+    assert resolve_bind("0.0.0.0", 9527) == (WS_HOST, WS_PORT)
+    assert resolve_bind("192.168.1.10", 80) == (WS_HOST, 80)
+
+
+def test_ws_allowed_origins_cover_dev_and_tauri():
+    assert "http://localhost:5173" in WS_ALLOWED_ORIGINS
+    assert "https://tauri.localhost" in WS_ALLOWED_ORIGINS
+    assert None in WS_ALLOWED_ORIGINS  # 本机非浏览器客户端
 
 
 def test_idle_default():

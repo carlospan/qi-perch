@@ -11,7 +11,7 @@ from rich.panel import Panel
 
 from qi.config import load_config
 from qi.core.brain import Brain
-from qi.embodiment.server import WS_HOST, WS_PORT, EmbodimentServer
+from qi.embodiment.server import EmbodimentServer, resolve_bind
 from qi.llm.gateway import LLMGateway
 from qi.storage.database import Database
 
@@ -127,17 +127,20 @@ async def run_terminal() -> None:
 
 async def run_desktop() -> None:
     """具身模式：Brain + WebSocket。"""
+    config = load_config()
+    emb = config.get("embodiment") or {}
+    ws_host, ws_port = resolve_bind(emb.get("host"), emb.get("port"))
+
     console.print(
         Panel(
             "[dim]身体慢慢醒过来。[/dim]\n"
-            f"[dim]通道：ws://{WS_HOST}:{WS_PORT}[/dim]\n"
+            f"[dim]通道：ws://{ws_host}:{ws_port}[/dim]\n"
             "[dim]打开 qi/embodiment/desktop 的前端，就能看见它。[/dim]",
             title="栖 · 具身",
             border_style="blue",
         )
     )
 
-    config = load_config()
     gateway = LLMGateway(config)
     db = Database(config["database"]["path"])
     await db.initialize()
@@ -145,7 +148,7 @@ async def run_desktop() -> None:
     brain = Brain(config, llm=gateway)
     await brain.restore_state(db)
 
-    server = EmbodimentServer(brain)
+    server = EmbodimentServer(brain, host=ws_host, port=ws_port)
     brain.attach_embodiment(server)
 
     brain_task = asyncio.create_task(brain.start())

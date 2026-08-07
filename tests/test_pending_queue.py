@@ -76,10 +76,13 @@ async def test_queue_drops_oldest_when_full():
 
 @pytest.mark.asyncio
 async def test_background_heartbeat_cannot_steal_uncommitted_message():
-    """锁外写 pending 时后台可能先清空；锁内入队则调用方必能消费到自己的消息。"""
+    """后台占锁时 receive 等待；锁内入队后必消费到自己的消息（无墙钟 sleep 竞态）。"""
     brain = Brain({}, MagicMock())
     processed: list[str | None] = []
     delivered: list[str] = []
+    bg_in_heartbeat = asyncio.Event()
+    release_bg = asyncio.Event()
+    receive_acquire_started = asyncio.Event()
 
     async def fake_heartbeat() -> str | None:
         pending = brain._pending_queue.popleft() if brain._pending_queue else None
@@ -88,7 +91,9 @@ async def test_background_heartbeat_cannot_steal_uncommitted_message():
             brain._pending_speech = _PendingSpeech(
                 pending, datetime(2026, 7, 25, 12, 0, 0), proactive=False
             )
-        await asyncio.sleep(0.02)
+        if pending is None:
+            bg_in_heartbeat.set()
+            await release_bg.wait()
         return pending
 
     async def fake_deliver(text: str, now: datetime, *, proactive: bool = False) -> None:
@@ -97,14 +102,29 @@ async def test_background_heartbeat_cannot_steal_uncommitted_message():
     brain._heartbeat = fake_heartbeat  # type: ignore[method-assign]
     brain._deliver_qi_message = fake_deliver  # type: ignore[method-assign]
 
+    lock = brain._heartbeat_lock
+    orig_acquire = lock.acquire
+
+    async def acquire_tracking(*args, **kwargs):
+        # 后台已进临界区后，下一次 acquire 即 receive 在等锁
+        if bg_in_heartbeat.is_set():
+            receive_acquire_started.set()
+        return await orig_acquire(*args, **kwargs)
+
+    lock.acquire = acquire_tracking  # type: ignore[method-assign]
+
     async def background() -> None:
         async with brain._heartbeat_lock:
             await brain._heartbeat()
 
     bg = asyncio.create_task(background())
-    await asyncio.sleep(0.005)
+    await bg_in_heartbeat.wait()
+
     with patch("qi.core.brain.asyncio.sleep", new_callable=AsyncMock):
-        reply = await brain.receive_user_message("你好")
+        recv = asyncio.create_task(brain.receive_user_message("你好"))
+        await receive_acquire_started.wait()
+        release_bg.set()
+        reply = await recv
     await bg
 
     assert reply == "你好"

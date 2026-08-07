@@ -62,6 +62,9 @@ async def test_database_indexes_created():
         assert "idx_emotion_states_timestamp" in names
         assert "idx_raw_events_processed" in names
         assert "idx_consciousness_stream_timestamp" in names
+        assert "idx_user_facts_active" in names
+        assert "idx_narrative_archived" in names
+        assert "idx_actions_timestamp" in names
         await db.close()
 
 
@@ -120,4 +123,59 @@ async def test_load_journal_entries_merges_kinds():
         assert "轻轻叫" in ft["text"]
         # 倒序：最新在前
         assert entries[0]["at"] >= entries[-1]["at"]
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_user_facts_body_memory_actions_traces_roundtrip():
+    """关键表往返：user_facts / body_memory / actions / broadcast_traces。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        now = datetime(2026, 8, 8, 12, 0, 0)
+
+        fid = await db.insert_user_fact(
+            "identity",
+            "他叫小测。",
+            0.9,
+            "stable",
+            "unit",
+            0.5,
+            now=now,
+        )
+        assert fid > 0
+        facts = await db.list_active_user_facts("identity")
+        assert len(facts) == 1
+        assert facts[0]["content"] == "他叫小测。"
+
+        await db.set_body_memory("unit_key", {"n": 1})
+        assert await db.get_body_memory("unit_key") == {"n": 1}
+
+        aid = await db.insert_action(
+            "tend",
+            "整理了一下栖枝",
+            target="self",
+            outcome="ok",
+            season="spring",
+            now=now,
+        )
+        assert aid > 0
+        actions = await db.list_recent_actions(5)
+        assert actions[0]["kind"] == "tend"
+        assert "栖枝" in actions[0]["summary"]
+
+        tid = await db.insert_broadcast_trace(
+            beat=1,
+            timestamp=now,
+            winner_kind="respond",
+            winner_salience=0.8,
+            candidates=[{"kind": "respond", "salience": 0.8}],
+            motive={"why": "user"},
+            outcome="ok",
+        )
+        assert tid > 0
+        traces = await db.list_recent_broadcast_traces(5)
+        assert traces[0]["winner_kind"] == "respond"
+        assert traces[0]["beat"] == 1
+
         await db.close()

@@ -25,9 +25,12 @@ const modeLabel: Record<string, string> = {
 <template>
   <div class="status">
     <span class="dot" :class="{ on: connected }" />
-    <span>{{ modeLabel[mode] || mode || "……" }}</span>
-    <span class="sep">·</span>
-    <span>{{ seasonLabel[season] || season || "春" }}</span>
+    <span v-if="!connected" class="offline">未连上</span>
+    <template v-else>
+      <span>{{ modeLabel[mode] || mode || "……" }}</span>
+      <span class="sep">·</span>
+      <span>{{ seasonLabel[season] || season || "春" }}</span>
+    </template>
   </div>
 </template>
 
@@ -57,5 +60,10 @@ const modeLabel: Record<string, string> = {
 
 .sep {
   opacity: 0.5;
+}
+
+.offline {
+  color: color-mix(in srgb, var(--ink-dim) 80%, #c45c5c);
+  letter-spacing: 0.06em;
 }
 </style>
