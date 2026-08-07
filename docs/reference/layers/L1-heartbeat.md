@@ -16,8 +16,8 @@
 
 给 Cursor 的上下文（只给这些，不要多）：
 
-- `docs/explanation/栖·意识设计.md` → §一（意识的形状）、§二（感知，只看"沉默也是一种感知"）
-- `docs/explanation/栖·工程手记.md` → §四（Brain Loop 实现）、§三（emotion_states 表、messages 表）
+- `docs/explanation/archive/栖·意识设计.md` → §一（意识的形状）、§二（感知，只看"沉默也是一种感知"）
+- `docs/explanation/archive/栖·工程手记.md` → §四（Brain Loop 实现）、§三（emotion_states 表、messages 表）
 - `docs/reference/contract.md` → 全文（硬规则必须遵守）
 
 ## 需要创建的文件

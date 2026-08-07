@@ -10,7 +10,7 @@
 
 | 目录 | Diátaxis 类型 | 放什么 | 用户需求 |
 |------|---------------|--------|----------|
-| `explanation/` | Explanation（说明） | 为什么/是什么：灵魂书、架构方案、意识设计、工程手记、路线图、thoughts/ | 理解原理与决策理据 |
+| `explanation/` | Explanation（说明） | 为什么/是什么：灵魂书、架构方案、**现行心智导读**、路线图、thoughts/；早期设计在 `explanation/archive/` | 理解原理与决策理据 |
 | `reference/` | Reference（参考） | 与代码严格同步：contract、layers/、config | 查阅精确信息（代码/配置/契约） |
 | `how-to/` | How-to（操作指南） | 怎么做特定任务：换机搭建、运行观测、判据验收、ui/、ide-agent/ | 完成具体任务 |
 | `tutorials/` | Tutorials（教程） | 带初学者入门：授课约定 | 学自己的代码 |
@@ -33,7 +33,7 @@
 | 行为/语气/prompt 越界 | `reference/contract.md` | 硬红线，可判定 bug |
 | 演进/工程纪律（R1–R5） | `specs/stages/_invariants.md` 索引 → 链回架构方案 §七 全文 | **不复制 R 全文进 contract**，避免双源 |
 | 语域拿不准（第一/三人称） | 本宪法“意识话语双轨制”（第三节） | 拿不准按禁止处理 |
-| 代码现在怎么写 | 代码 > `reference/layers/` > `explanation/栖·意识设计.md` > 工程手记 | 机制层以代码为准 |
+| 代码现在怎么写 | 代码 > `reference/layers/` > `explanation/栖·现行心智导读.md` | 机制层以代码为准；`explanation/archive/` 仅为史料 |
 | 阶段退出判据 | `specs/stages/stage-*.md` | 唯一施工权威；架构方案 §五 为摘要+链接 |
 | C1–C5 定义本身 | `explanation/栖·数字生命架构方案.md` §一（全文保留不瘦身） | `specs/acceptance.md` 只操作化+链接 |
 | 开放/未决问题 | `specs/open-questions.md` | 带状态列（开放/已结案/已降级） |

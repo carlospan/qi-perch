@@ -84,7 +84,7 @@ gateway 内部用 qi/llm/providers/openai_compat.py 做协议适配。
 7. 你这次新增/修改的地方，加一行注释标注，格式：
    <!-- 回写(2026-07)：{改了什么}，依据：{对应代码文件:行号或方法名} -->
 8. 不修改任何 .py 代码文件。本次只改 docs/reference/layers/*.md。
-9. 不修改 contract.md / progress.md / 灵魂书 / 意识设计 / 工程手记。
+9. 不修改 contract.md / progress.md / 灵魂书 / 现行心智导读以外的 explanation 大部头（archive 史料、thoughts）除非任务明确要求。
 
 ---
 

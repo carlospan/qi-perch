@@ -57,7 +57,7 @@
 
 ## 引用文档
 
-- `docs/explanation/栖·意识设计.md` → §五（记忆）、§十四（涌现，非赋值）
+- `docs/explanation/archive/栖·意识设计.md` → §五（记忆）、§十四（涌现，非赋值）
 - `docs/reference/layers/L2-memory.md`（记忆层主体；本文是它的第四种记忆）
 - `docs/reference/contract.md` → "记忆引用"硬规则（叙事语气、不每句引用、不假装记得）
 

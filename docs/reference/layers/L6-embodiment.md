@@ -19,8 +19,8 @@
 
 ## 引用文档
 
-- `docs/explanation/栖·意识设计.md` → §八（表达：Avatar 状态映射）、§九（节奏）
-- `docs/explanation/栖·工程手记.md` → §十（部署：Tauri 架构）
+- `docs/explanation/archive/栖·意识设计.md` → §八（表达：Avatar 状态映射）、§九（节奏）
+- `docs/explanation/archive/栖·工程手记.md` → §十（部署：Tauri 架构）
 - `docs/reference/contract.md` → 全文
 - `docs/how-to/ui/主界面设计-黄昏的枝.md` → 主界面规格（氛围/三视图/令牌）
 - `docs/how-to/ui/主界面-Live2D接入.md` → Live2D 形象接入（实现依据）

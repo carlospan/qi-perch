@@ -20,9 +20,9 @@
 
 ## 引用文档
 
-- `docs/explanation/栖·意识设计.md` → §六（关系引擎：全部，含用户漂移检测）、§五（第一次记忆、数字伤疤）
-- `docs/explanation/栖·意识设计.md` → §十三（留白与季节：数字季节判定）
-- `docs/explanation/栖·工程手记.md` → §三（relationship、first_times、scars、user_model 表）
+- `docs/explanation/archive/栖·意识设计.md` → §六（关系引擎：全部，含用户漂移检测）、§五（第一次记忆、数字伤疤）
+- `docs/explanation/archive/栖·意识设计.md` → §十三（留白与季节：数字季节判定）
+- `docs/explanation/archive/栖·工程手记.md` → §三（relationship、first_times、scars、user_model 表）
 - `docs/reference/contract.md` → "关系行为"硬规则
 
 ## 需要创建的文件
