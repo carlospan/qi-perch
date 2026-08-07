@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -15,6 +16,97 @@ if TYPE_CHECKING:
     from qi.core.brain import Brain
 
 logger = logging.getLogger("qi.brain")
+
+# 高频虚词双字；挡假重叠（如「不要」），不挡话题词（如「助眠」「烤鸭」）
+_STOP_WORDS = frozenset(
+    {
+        "知道",
+        "可以",
+        "不要",
+        "没有",
+        "什么",
+        "这个",
+        "那个",
+        "自己",
+        "不是",
+        "已经",
+        "怎么",
+        "因为",
+        "如果",
+        "所以",
+        "然后",
+        "就是",
+        "觉得",
+        "应该",
+        "真的",
+        "还是",
+        "但是",
+        "不过",
+        "可能",
+        "其实",
+        "有点",
+        "一下",
+        "一次",
+        "一直",
+        "一定",
+        "一样",
+        "只是",
+        "不会",
+        "一个",
+        "今天",
+        "现在",
+        "刚才",
+        "上次",
+        "为什么",
+        "放在",
+        "心上",
+    }
+)
+
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+
+
+def _cjk_bigrams(text: str) -> set[str]:
+    """汉字双字滑动窗口（无分词依赖）。"""
+    chars = _CJK_RE.findall(text or "")
+    if len(chars) < 2:
+        return set()
+    return {"".join(chars[i : i + 2]) for i in range(len(chars) - 1)}
+
+
+def _filter_by_topic_relevance(
+    memories: list[dict],
+    query: str,
+    recent_messages: list[dict],
+    *,
+    min_overlap: int = 1,
+) -> list[dict]:
+    """过滤话题无关记忆。话题双字与记忆双字至少重叠 min_overlap 才保留。
+
+    全部不重叠时返回空列表（B1：不塞回错记忆）。
+    """
+    if not memories:
+        return []
+
+    topic_text = query or ""
+    for m in recent_messages[-2:]:
+        topic_text += " " + (m.get("content") or "")
+    topic_words = {w for w in _cjk_bigrams(topic_text) if w not in _STOP_WORDS}
+
+    kept: list[dict] = []
+    for mem in memories:
+        content = str(mem.get("content") or "")
+        mem_words = _cjk_bigrams(content)
+        overlap = topic_words & mem_words
+        if len(overlap) >= min_overlap:
+            kept.append(mem)
+        else:
+            logger.debug(
+                "检索相关门过滤: query_keys=%s mem_keys=%s",
+                sorted(topic_words)[:10],
+                sorted(mem_words)[:10],
+            )
+    return kept
 
 
 async def gather_prompt_context(
@@ -37,11 +129,10 @@ async def gather_prompt_context(
             recent = recent[:-1]
         query = pending or "此刻的心情"
         memories = await brain.memory.retrieve_for_prompt(query, top_k=3)
+        memories = _filter_by_topic_relevance(memories, query, recent)
         try:
             facts = await brain.memory.active_facts()
-            extras["user_facts"] = format_facts_for_prompt(
-                facts, brain.relationship_stage
-            )
+            extras["user_facts"] = format_facts_for_prompt(facts, brain.relationship_stage)
         except Exception:
             logger.exception("组装用户事实 prompt 出错")
             extras["user_facts"] = "（你还不太了解他）"
@@ -68,9 +159,7 @@ async def gather_prompt_context(
     trust = 0.0
     culture_raw: list | str | None = None
     if brain.relationship is not None:
-        shared_culture = format_culture_for_prompt(
-            brain.relationship.state.shared_culture
-        )
+        shared_culture = format_culture_for_prompt(brain.relationship.state.shared_culture)
         relationship_hint = brain.relationship.stage_prompt_hint()
         season_hint = brain.relationship.state.season
         trust = float(brain.relationship.state.trust or 0)
