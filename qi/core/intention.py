@@ -537,15 +537,29 @@ def build_intention_card(
                 recall_relation = infer_recall_relation(memories)
                 if recall_relation:
                     source_parts.append(f"rel={recall_relation}")
-            # 存档真值优先于可能被污染的叙事检索（包15/17）
+            # 存档真值：本轮触及施教/入睡话题，或检索文已含施教反转时才武装
+            # （避免「你在吗」空钉 taught_by_qi；#1379 误武装）
             fact_rel = _infer_relation_from_facts(facts) if facts_useful else None
-            if fact_rel:
+            mem0 = (
+                str(memories[0].get("content") or "") if has_mem and memories else ""
+            )
+            topic_teach = bool(
+                _TOPIC_RE.search(text)
+                or looks_like_recall_probe(text)
+                or looks_like_method_recall(text)
+                or (
+                    mem0
+                    and _INVERT_TAUGHT_BY_QI_RE.search(mem0)
+                    and _TOPIC_RE.search(mem0)
+                )
+            )
+            if fact_rel and topic_teach:
                 recall_relation = fact_rel
                 source_parts.append(f"fact_rel={fact_rel}")
             # N5：有检索命中则必须进卡（free_talk 也不例外）；仅 answer 才注入是旧洞
             # 若存档真值钉了方向而检索文含反转措辞，改用 facts 行进卡（防污染叙事当事实源）
             if has_mem and act in ("free_talk", "acknowledge", "answer"):
-                content = str(memories[0].get("content") or "").strip()[:80]
+                content = mem0.strip()[:80]
                 use_fact_instead = (
                     fact_rel == "taught_by_qi"
                     and content

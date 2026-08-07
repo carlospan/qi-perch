@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from qi.memory.episodic import EpisodicMemory
+from qi.memory.episodic import EpisodicMemory, build_role_map, format_role_map_hint
+from qi.memory.weave_guard import sanitize_woven_narrative
 from qi.prompts import read_prompt
 
 if TYPE_CHECKING:
@@ -163,10 +164,13 @@ class NarrativeMemory:
             f"- [{e['timestamp']}] ({e['type']}) {e['content']}" for e in batch
         )
         emotion_text = emotion.description()
+        role_map = build_role_map(batch)
+        role_hint = format_role_map_hint(role_map)
         prompt = template.format(
             raw_events_recent=raw_text,
             emotions_during_events=emotion_text,
             relationship_stage=relationship_stage,
+            role_map_hint=role_hint,
         )
         messages = [
             {"role": "system", "content": "你是栖。用第一人称写回忆，短一些，像真的在想。"},
@@ -181,6 +185,10 @@ class NarrativeMemory:
             )
             return None
 
+        woven_text, fix_tags = sanitize_woven_narrative(woven.strip(), role_map)
+        if fix_tags:
+            logger.info("编织方向消毒 tags=%s", fix_tags)
+
         event_ids = [int(e["id"]) for e in batch]
         impacts = [abs(float(e["emotional_impact"] or 0)) for e in batch]
         weights = [float(e["attention_weight"] or 1.0) for e in batch]
@@ -190,7 +198,7 @@ class NarrativeMemory:
         period_end = batch[-1]["timestamp"]
 
         memory_id = await self.save(
-            content=woven.strip(),
+            content=woven_text,
             importance=importance,
             emotional_intensity=intensity,
             source_event_ids=event_ids,
@@ -201,7 +209,7 @@ class NarrativeMemory:
             episode_id = await self.episodic.create_from_weave(
                 batch,
                 narrative_id=memory_id,
-                woven=woven.strip(),
+                woven=woven_text,
                 importance=importance,
                 emotional_intensity=intensity,
             )

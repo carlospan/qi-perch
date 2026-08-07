@@ -434,6 +434,29 @@ def test_insomnia_free_talk_arms_from_formatted_facts():
     assert "fact_rel=taught_by_qi" in card.source
 
 
+def test_presence_ping_does_not_arm_teach_relation():
+    """「你在吗」即便 facts 含施教真值，也不得钉 taught_by_qi（#1379）。"""
+    facts = (
+        "入睡方法这件事：是栖教他的（允许自己躺着），不是他教栖。"
+        "他叫潘纪振。"
+    )
+    card = build_intention_card(
+        channel="dialogue",
+        user_message="你在吗",
+        emotion=EmotionState(),
+        relationship_stage="bonded",
+        assessment=ImpactAssessment(impact=0.1, intent="neutral"),
+        memories=[
+            {
+                "content": "那天晚上我有点走神。你问我是不是不在，又说你一直把我当女生。"
+            }
+        ],
+        extras={"user_facts": facts},
+    )
+    assert card.recall_relation != "taught_by_qi"
+    assert "fact_rel=taught_by_qi" not in card.source
+
+
 def test_empty_card_blocks_fabricated_shared_memory():
     """空卡不得编「你教过我」类共同回忆（#1285）。"""
     card = IntentionCard(

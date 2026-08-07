@@ -79,6 +79,7 @@ EXPECTED: dict[str, set[str]] = {
         "raw_events_recent",
         "emotions_during_events",
         "relationship_stage",
+        "role_map_hint",
     },
 }
 
