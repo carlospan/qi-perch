@@ -14,11 +14,31 @@ CULTURE_DETECTION_THRESHOLDS = {
 _GREETING_STARTS = ("早", "早安", "早呀", "你好", "嗨", "嘿", "晚安", "午安")
 
 # 通用礼貌/应答语——谁都天天说，不是「只有你们懂的东西」（实证：「谢谢你」被判成梗）
-_COMMON_PHRASES = frozenset({
-    "谢谢", "谢谢你", "多谢", "不客气", "没事", "没关系",
-    "好", "好的", "好啊", "嗯", "嗯嗯", "哦", "知道了", "收到",
-    "哈哈", "哈哈哈", "再见", "拜拜", "对", "是的", "可以",
-})
+_COMMON_PHRASES = frozenset(
+    {
+        "谢谢",
+        "谢谢你",
+        "多谢",
+        "不客气",
+        "没事",
+        "没关系",
+        "好",
+        "好的",
+        "好啊",
+        "嗯",
+        "嗯嗯",
+        "哦",
+        "知道了",
+        "收到",
+        "哈哈",
+        "哈哈哈",
+        "再见",
+        "拜拜",
+        "对",
+        "是的",
+        "可以",
+    }
+)
 
 
 def _is_greeting(text: str) -> bool:
@@ -28,7 +48,7 @@ def _is_greeting(text: str) -> bool:
     return any(t.startswith(g) or g in t for g in _GREETING_STARTS)
 
 
-_TEACH_TOPIC_MARKERS = ("教", "方法", "睡", "睡不着", "入睡", "呼吸")
+_TEACH_TOPIC_MARKERS = ("教", "方法", "睡", "睡不着", "入睡", "助眠", "法子")
 
 
 def format_culture_for_prompt(shared_culture: list[dict]) -> str:
@@ -49,17 +69,12 @@ def format_culture_for_prompt(shared_culture: list[dict]) -> str:
         elif kind == "shared_reference":
             # pattern 是他的原话（含“你/我”的第二人称）。直接注入会让栖把“你教了我”
             # 读反（实证：栖把自己教用户的方法说成用户教栖）。加视角锤点：这是他反复提起的话，
-            # 里面的“你”指栖自己、“我”指他。
-            line = (
-                f"- 他反复提起过（他口中的「你」是你、「我」是他）：“{pattern}”"
-            )
-            # 包17：施教类 shared_reference 追加方向锤（有 teach_direction 时）
-            if any(m in pattern for m in _TEACH_TOPIC_MARKERS):
-                direction = item.get("teach_direction")
+            # 里面的“你”指栖自己、“我”是他。
+            line = f"- 他反复提起过（他口中的「你」是你、「我」是他）：“{pattern}”"
+            direction = item.get("teach_direction")
+            if direction or any(m in pattern for m in _TEACH_TOPIC_MARKERS):
                 if direction == "qi_teaches_user":
-                    line += (
-                        "（施教方向：栖教用户，原话『躺着/不强迫/看天花板』，勿反转）"
-                    )
+                    line += "（施教方向：栖教用户，勿反转）"
                 elif direction == "user_teaches_qi":
                     line += "（施教方向：用户教栖，勿反转）"
             lines.append(line)
@@ -134,11 +149,7 @@ def detect_shared_culture(
         by_pattern[pattern] = entry
 
     # 「记得」类共同引用
-    refs = [
-        m["content"].strip()[:40]
-        for m in messages
-        if "记得" in m.get("content", "")
-    ]
+    refs = [m["content"].strip()[:40] for m in messages if "记得" in m.get("content", "")]
     for pattern, count in Counter(refs).items():
         if count >= CULTURE_DETECTION_THRESHOLDS["shared_reference"]:
             entry = by_pattern.get(pattern) or {
@@ -158,13 +169,14 @@ def detect_shared_culture(
     today_user = [
         m["content"].strip()
         for m in messages
-        if m.get("role") == "user"
-        and str(m.get("timestamp", "")).startswith(today)
+        if m.get("role") == "user" and str(m.get("timestamp", "")).startswith(today)
     ]
     for entry in by_pattern.values():
         if entry.get("type") == "ritual":
             pattern = entry["pattern"]
-            if today_user and not any(pattern in t or t.startswith(pattern[:2]) for t in today_user):
+            if today_user and not any(
+                pattern in t or t.startswith(pattern[:2]) for t in today_user
+            ):
                 # 仅当今天已有交互却没出现该仪式
                 entry["broken"] = True
 

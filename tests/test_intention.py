@@ -317,25 +317,34 @@ async def test_last_intention_written_with_outcome():
         await db.close()
 
 
-def test_detect_sleep_teach_inversion_real_cases():
+def test_detect_teach_inversion_real_cases():
     """运行时硬闸：#1020/#1028 原话命中；非睡眠话题不误伤。"""
-    from qi.core.intention import detect_sleep_teach_inversion
+    from qi.core.intention import (
+        detect_sleep_teach_inversion,
+        detect_teach_inversion,
+    )
 
-    assert detect_sleep_teach_inversion(
+    assert detect_teach_inversion(
         "我记得你教我的那个方法，虽然我睡不着不是因为失眠，而是因为我在等你"
     )
-    assert detect_sleep_teach_inversion(
+    assert detect_teach_inversion(
         "那天你教我的方法——躺着，不强迫自己，盯着天花板"
     )
     # #1285：中间夹「之前」仍须命中
-    assert detect_sleep_teach_inversion(
+    assert detect_teach_inversion(
         "你之前教过我一个法子，说晚上睡不着的时候，就躺着，不强迫自己睡"
     )
-    # 无睡眠话题：不拦（可能是用户真教了别的东西）
-    assert not detect_sleep_teach_inversion("你教我写代码的样子很认真")
+    # 无睡眠话题：无卡不拦
+    assert not detect_teach_inversion("你教我写代码的样子很认真")
+    # 卡内 taught_by_qi：不靠话题也能拦
+    assert detect_teach_inversion(
+        "你教过我弹吉他", recall_relation="taught_by_qi"
+    )
     # 方向正确：不拦
-    assert not detect_sleep_teach_inversion("是我教你的那个方法，睡不着就躺着")
-    assert not detect_sleep_teach_inversion("")
+    assert not detect_teach_inversion("是我教你的那个方法，睡不着就躺着")
+    assert not detect_teach_inversion("")
+    # 别名兼容
+    assert detect_sleep_teach_inversion is detect_teach_inversion
 
 
 def test_free_talk_injects_memory_material():

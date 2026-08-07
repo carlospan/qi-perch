@@ -10,7 +10,7 @@ from qi.core.intention import (
     IntentionCard,
     anchor_teaching_relation,
     assert_reply_respects_card,
-    detect_sleep_teach_inversion,
+    detect_teach_inversion,
     is_hard_violation,
 )
 from qi.inner_life.consciousness import char_jaccard
@@ -29,12 +29,12 @@ _SHORT_LENGTH_CONSTRAINT = "用 1-2 句、克制长度，不超过 60 字。"
 _DEDUP_REGEN_CONSTRAINT = "不要重复刚才说过的话，换个说法回应。"
 # 运行时硬闸（补包 15/16/17 的最后一环）：反转重试约束与模板兜底
 _TEACH_INVERSION_CONSTRAINT = (
-    "施教方向必须正确：入睡方法是栖教给用户的。严禁说「你教我的方法/你教过我」"
-    "这类反转表述；若提起，说「我教你的那个方法」。"
+    "施教方向必须正确：若卡标明栖教用户，"
+    "严禁说「你教我的方法/你教过我」这类反转表述；"
+    "若提起，说「我教你的那个方法」。"
 )
-_TEACH_INVERSION_FALLBACK = (
-    "……我记得的。入睡那件事，是我教你的——允许自己躺着，不强迫。这个方向我不会记反。"
-)
+_TEACH_INVERSION_FALLBACK = "……我记得的。这个方向以记忆为准，我不会跟着说反。"
+_TEACH_INVERSION_FALLBACK_QI_TAUGHT = "……我记得的。是我教你的方向，我不会记反。"
 _FACT_CONSISTENCY_CONSTRAINT = (
     "事实必须来自意向卡素材。不要编造卡外共同回忆（如「那天你问…」「那晚我说…」）；"
     "不要引入素材中没有的具体人名。不确定就说不确定，或用意象/比喻。"
@@ -45,25 +45,23 @@ _TEACH_VIOLATION_TAGS = ("施教关系反转", "空卡编造共同回忆")
 
 def _teach_memory_violation(text: str, intention: IntentionCard) -> bool:
     """施教方向反转或空卡编造共同回忆 → 需硬闸。（包 15-17 保留）"""
-    if detect_sleep_teach_inversion(text):
+    if detect_teach_inversion(text, recall_relation=intention.recall_relation):
         return True
     viol = assert_reply_respects_card(text, intention)
     return any(any(tag in v for tag in _TEACH_VIOLATION_TAGS) for v in viol)
 
 
 def _hard_violations(text: str, intention: IntentionCard) -> list[str]:
-    return [
-        v
-        for v in assert_reply_respects_card(text, intention)
-        if is_hard_violation(v)
-    ]
+    return [v for v in assert_reply_respects_card(text, intention) if is_hard_violation(v)]
 
 
 def _build_fallback(intention: IntentionCard, viols: list[str]) -> str:
     """按违规类型选模板兜底。"""
-    if any(
-        "施教" in v or "空卡编造共同回忆" in v for v in viols
-    ) or any(any(t in v for t in _TEACH_VIOLATION_TAGS) for v in viols):
+    if any("施教" in v or "空卡编造共同回忆" in v for v in viols) or any(
+        any(t in v for t in _TEACH_VIOLATION_TAGS) for v in viols
+    ):
+        if intention.recall_relation == "taught_by_qi":
+            return _TEACH_INVERSION_FALLBACK_QI_TAUGHT
         return _TEACH_INVERSION_FALLBACK
     templated = render_template(intention)
     if templated:
@@ -196,29 +194,21 @@ class Expression:
             messages = list(messages)
             sys0 = dict(messages[0])
             sys0["content"] = (
-                str(sys0.get("content") or "")
-                + f"\n\n【长度】{_SHORT_LENGTH_CONSTRAINT}"
+                str(sys0.get("content") or "") + f"\n\n【长度】{_SHORT_LENGTH_CONSTRAINT}"
             )
             messages[0] = sys0
 
         # 包17：自由对话路径注入施教锚定（复用包15纯函数）；
         # 本次补强：近聊无话题时回退 user_facts 存档真值
         facts_text = str((inner_extras or {}).get("user_facts") or "")
-        teach_hint = anchor_teaching_relation(
-            recent_messages or [], facts_text=facts_text
-        )
+        teach_hint = anchor_teaching_relation(recent_messages or [], facts_text=facts_text)
         if teach_hint and messages:
             messages = list(messages)
             sys0 = dict(messages[0])
-            sys0["content"] = (
-                str(sys0.get("content") or "")
-                + f"\n\n【施教关系锚定】{teach_hint}"
-            )
+            sys0["content"] = str(sys0.get("content") or "") + f"\n\n【施教关系锚定】{teach_hint}"
             messages[0] = sys0
 
-        hist = recent_qi_replies_from_messages(
-            recent_messages, limit=REPLY_DEDUP_WINDOW
-        )
+        hist = recent_qi_replies_from_messages(recent_messages, limit=REPLY_DEDUP_WINDOW)
 
         text = ""
         try:
@@ -251,14 +241,11 @@ class Expression:
             if regen_messages:
                 sys0 = dict(regen_messages[0])
                 sys0["content"] = (
-                    str(sys0.get("content") or "")
-                    + f"\n\n【去重】{_DEDUP_REGEN_CONSTRAINT}"
+                    str(sys0.get("content") or "") + f"\n\n【去重】{_DEDUP_REGEN_CONSTRAINT}"
                 )
                 regen_messages[0] = sys0
             try:
-                again = await self.llm.call(
-                    purpose="conversation", messages=regen_messages
-                )
+                again = await self.llm.call(purpose="conversation", messages=regen_messages)
             except Exception:
                 logger.debug("去重重生成异常，走模板", exc_info=True)
                 again = ""
@@ -293,9 +280,7 @@ class Expression:
         intention: IntentionCard,
     ) -> str | None:
         """HARD 违规重试一次；仍违规返回 None（调用方模板兜底）。"""
-        teach_related = any(
-            "施教" in v or "空卡编造共同回忆" in v for v in viols
-        )
+        teach_related = any("施教" in v or "空卡编造共同回忆" in v for v in viols)
         if teach_related:
             header = "【施教方向硬约束】"
             constraint = _TEACH_INVERSION_CONSTRAINT
@@ -307,21 +292,19 @@ class Expression:
         fix_messages = list(messages)
         if fix_messages:
             sys0 = dict(fix_messages[0])
-            sys0["content"] = (
-                str(sys0.get("content") or "") + f"\n\n{header}{constraint}"
-            )
+            sys0["content"] = str(sys0.get("content") or "") + f"\n\n{header}{constraint}"
             fix_messages[0] = sys0
         try:
-            fixed = await self.llm.call(
-                purpose="conversation", messages=fix_messages
-            )
+            fixed = await self.llm.call(purpose="conversation", messages=fix_messages)
         except Exception:
             logger.debug("事实一致性重试异常，走兜底", exc_info=True)
             fixed = ""
         fixed = str(fixed or "").strip()
         if not fixed:
             return None
-        if teach_related and detect_sleep_teach_inversion(fixed):
+        if teach_related and detect_teach_inversion(
+            fixed, recall_relation=intention.recall_relation
+        ):
             return None
         if _hard_violations(fixed, intention):
             return None
@@ -338,13 +321,11 @@ class Expression:
             )
             fix_messages[0] = sys0
         try:
-            fixed = await self.llm.call(
-                purpose="conversation", messages=fix_messages
-            )
+            fixed = await self.llm.call(purpose="conversation", messages=fix_messages)
         except Exception:
             logger.debug("施教反转重试异常，走兜底", exc_info=True)
             fixed = ""
         fixed = str(fixed or "").strip()
-        if fixed and not detect_sleep_teach_inversion(fixed):
+        if fixed and not detect_teach_inversion(fixed):
             return fixed
         return None

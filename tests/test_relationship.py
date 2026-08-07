@@ -320,7 +320,7 @@ def test_shared_reference_teach_direction_hammer():
     ]
     block = format_culture_for_prompt(culture)
     assert "施教方向：栖教用户" in block
-    assert "躺着/不强迫/看天花板" in block
+    assert "躺着" not in block
     assert "勿反转" in block
 
 

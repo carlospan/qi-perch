@@ -224,7 +224,7 @@ async def test_express_inversion_gate_catches_1285_phrasing():
         "你之前教过我一个法子，说晚上睡不着的时候就躺着。"
         "我试了，看天花板上的影子。"
     )
-    fixed = "……记得。入睡那件事，是我教你的——允许自己躺着。"
+    fixed = "……记得。那件事，是我教你的。"
     llm = AsyncMock()
     llm.call = AsyncMock(side_effect=[inverted, fixed])
     expr = Expression({}, llm)
@@ -256,7 +256,7 @@ async def test_express_inversion_gate_fallback_when_retry_still_inverted():
         recent_messages=[],
     )
     assert card.outcome == "template"
-    assert "是我教你的" in out
+    assert "不会跟着说反" in out or "不会记反" in out
     assert "你教我" not in out
 
 

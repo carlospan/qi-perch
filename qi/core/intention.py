@@ -14,9 +14,7 @@ LAST_INTENTION_KEY = "last_intention"
 
 _REMEMBER_RE = re.compile(r"还记得|记得吗|记不记得|你还记得")
 # 方法/施教类追问（仅 has_mem 时转 recall）
-_METHOD_RECALL_RE = re.compile(
-    r"教过我|教了我|你教过|教你过|教过你|我教你|怎么做的|那个方法"
-)
+_METHOD_RECALL_RE = re.compile(r"教过我|教了我|你教过|教你过|教过你|我教你|怎么做的|那个方法")
 
 # 叙事第一人称「我」=栖；「我教了他」→ taught_by_qi（复核钉死）
 _TAUGHT_BY_QI_RE = re.compile(r"我教了|我教过|栖教|教了他|教了你|教过他|教过你")
@@ -179,9 +177,7 @@ def infer_recall_relation(memories: list[dict] | None) -> str | None:
     qi_hits = 0
     user_hits = 0
     for m in memories:
-        explicit = m.get("recall_relation") or (m.get("metadata") or {}).get(
-            "recall_relation"
-        )
+        explicit = m.get("recall_relation") or (m.get("metadata") or {}).get("recall_relation")
         if explicit in ("taught_by_qi", "learned_from_user", "mutual"):
             return str(explicit)
         content = str(m.get("content") or "")
@@ -206,13 +202,12 @@ def infer_recall_relation(memories: list[dict] | None) -> str | None:
     return None
 
 
-_TOPIC_RE = re.compile(r"教|方法|入睡|睡不着|呼吸|睡")
-_SLEEP_ADVICE_RE = re.compile(r"躺着|不强迫|看天花板|允许自己")
+_TOPIC_RE = re.compile(r"教|方法|入睡|睡不着|助眠|失眠|法子")
 # 对话视角：用户自称在教栖（与叙事视角的 _LEARNED_FROM_USER_RE 互补）
 _USER_TEACHES_QI_RE = re.compile(r"我教你|我教了你|教你一个|教给你|跟我学")
 # 用户承认「你（栖）教了我」——佐证 taught_by_qi，不是 learned_from_user
 _USER_ACK_QI_TAUGHT_RE = re.compile(r"你教了我|你教过我|你教的(?:那个)?方法")
-# 运行时硬闸：回复同时含反转句式 + 入睡/方法话题才拦（避免误伤其他真实请教）
+# 无卡时：反转句式 + 入睡/方法话题才拦（避免误伤其他真实请教）
 _SLEEP_TOPIC_RE = re.compile(r"入睡|睡不着|失眠|睡")
 _INVERT_TOPIC_RE = re.compile(r"入睡|睡不着|失眠|睡|方法|法子")
 # facts 兜底：存档真值的方向匹配（「不是他教栖」的否定式须排除；
@@ -221,25 +216,32 @@ _FACT_QI_TEACH_RE = re.compile(r"栖[^。\n]{0,16}教")
 _FACT_USER_TEACH_RE = re.compile(r"(?<!不是)他教栖|(?<!不是)用户教栖")
 
 
-def detect_sleep_teach_inversion(text: str) -> bool:
-    """回复里把入睡方法的施教方向说反了吗？
+def detect_teach_inversion(text: str, *, recall_relation: str | None = None) -> bool:
+    """回复里把施教方向说反了吗？（原 detect_sleep_teach_inversion）
 
-    真值（7-26 #72/74）：栖教用户。栖视角说「你教我的方法」+入睡/方法
-    话题同现 → 反转。实证：#1020/#1028/#1285（「你之前教过我一个法子」）。
+    卡内 taught_by_qi：只查反转句式（不靠话题启发式）。
+    无卡：反转句式 + 入睡/方法/法子 联判，避免误伤「你教我写代码」。
+    实证：#1020/#1028/#1285（「你之前教过我一个法子」）。
     """
     t = str(text or "")
     if not t:
         return False
-    return bool(_INVERT_TAUGHT_BY_QI_RE.search(t) and _INVERT_TOPIC_RE.search(t))
+    if not _INVERT_TAUGHT_BY_QI_RE.search(t):
+        return False
+    if recall_relation == "taught_by_qi":
+        return True
+    return bool(_INVERT_TOPIC_RE.search(t))
+
+
+# 向后兼容别名（包 15-17 测试可能引用旧名）
+detect_sleep_teach_inversion = detect_teach_inversion
 
 
 def _is_qi_role(role: str) -> bool:
     return role in ("qi", "assistant")
 
 
-def anchor_teaching_relation(
-    messages: list[dict], facts_text: str = ""
-) -> str:
+def anchor_teaching_relation(messages: list[dict], facts_text: str = "") -> str:
     """推断助眠/施教方向，返回一句话锚定。
 
     优先从真实对话（含 role 的 messages）推断；近聊无话题时回退 user_facts
@@ -269,7 +271,7 @@ def _infer_relation_from_facts(facts_text: str) -> str | None:
 
 
 def _anchor_from_facts(facts_text: str) -> str:
-    """facts 兜底：free_talk 突然提到入睡时，近聊无话题可扫，靠存档真值钉方向。"""
+    """facts 兜底：近聊无话题可扫时，靠存档真值钉方向。"""
     text = str(facts_text or "")
     if not text:
         return ""
@@ -277,9 +279,9 @@ def _anchor_from_facts(facts_text: str) -> str:
     user_teach = _FACT_USER_TEACH_RE.search(text)
     if qi_teach and user_teach:
         return ""
-    if qi_teach and _SLEEP_TOPIC_RE.search(text):
+    if qi_teach:
         return (
-            f"关于入睡方法：是你（栖）教给用户的，不是用户教你的。"
+            f"关于方法：是你（栖）教给用户的，不是用户教你的。"
             f"{_RELATION_HINT['taught_by_qi']}（taught_by_qi）"
         )
     if user_teach:
@@ -291,28 +293,38 @@ def _anchor_from_facts(facts_text: str) -> str:
 
 
 def _anchor_from_messages(messages: list[dict]) -> str:
-    """从真实对话（含 role 的 messages）推断助眠/施教方向。
+    """从真实对话（含 role 的 messages）推断施教方向。
 
-    - 扫含「教/方法/入睡/睡不着/呼吸/睡」的 user/assistant 消息；
-    - assistant/qi（栖）对用户说助眠建议（躺着/不强迫/看天花板/允许自己）→ taught_by_qi；
+    - 扫含「教/方法/入睡/睡不着/助眠…」的 user/assistant 消息；
+    - 话题窗扩一格以纳入夹在中间的栖发言；
+    - 栖显式「我教了」强分；其它非敷衍栖发言弱分（不绑助眠词面）；
     - user 说「我教你/教给你」且栖发言有话题佐证 → learned_from_user；
     - 冲突或不足 → 返回空串（不锚定，不瞎猜）。
     """
     if not messages:
         return ""
 
-    topic_msgs = [
-        m
-        for m in messages
-        if isinstance(m, dict) and _TOPIC_RE.search(str(m.get("content") or ""))
-    ]
-    if not topic_msgs:
+    indexed = [(i, m) for i, m in enumerate(messages) if isinstance(m, dict)]
+    topic_idxs = [i for i, m in indexed if _TOPIC_RE.search(str(m.get("content") or ""))]
+    if not topic_idxs:
         return ""
+
+    lo = max(0, min(topic_idxs) - 1)
+    hi = min(len(messages) - 1, max(topic_idxs) + 1)
+    topic_msgs = [messages[i] for i in range(lo, hi + 1) if isinstance(messages[i], dict)]
 
     qi_hits = 0
     user_hits = 0
-    sleep_quotes: list[str] = []
+    teach_quotes: list[str] = []
     qi_topic_ok = False
+
+    def _qi_ack_only(text: str) -> bool:
+        """敷衍附和不算栖施教证据（避免与「用户教栖」冲突）。"""
+        if _TAUGHT_BY_QI_RE.search(text):
+            return False
+        if len(text) <= 24 and re.match(r"^(?:好的?|嗯+|收到)", text):
+            return True
+        return bool(re.match(r"^(?:好的?|嗯+).{0,12}记住", text))
 
     for m in topic_msgs:
         role = str(m.get("role") or "")
@@ -321,17 +333,17 @@ def _anchor_from_messages(messages: list[dict]) -> str:
             continue
         if _is_qi_role(role):
             qi_topic_ok = True
-            if _SLEEP_ADVICE_RE.search(content):
-                qi_hits += 2
-                sleep_quotes.append(content[:60])
             if _TAUGHT_BY_QI_RE.search(content):
+                qi_hits += 2
+                teach_quotes.append(content[:60])
+            elif len(content) >= 8 and not _qi_ack_only(content):
                 qi_hits += 1
+                teach_quotes.append(content[:60])
         elif role == "user":
             if _USER_ACK_QI_TAUGHT_RE.search(content):
                 qi_hits += 1
             if _USER_TEACHES_QI_RE.search(content):
                 user_hits += 2
-            # 叙事口吻残留（少见）：「你教我」若出自用户则是承认栖教，已由 ACK 覆盖
 
     # learned_from_user 需栖侧话题佐证，避免单句瞎猜
     if user_hits > 0 and not qi_topic_ok:
@@ -340,11 +352,10 @@ def _anchor_from_messages(messages: list[dict]) -> str:
     if qi_hits > 0 and user_hits > 0:
         return ""
     if qi_hits > 0:
-        quote = "、".join(sleep_quotes[:2]) if sleep_quotes else "（见近聊助眠建议）"
-        # 显式排除易漂移虚构细节；含 taught_by_qi 便于验收断言
+        quote = "、".join(teach_quotes[:2]) if teach_quotes else "（见近聊相关发言）"
         return (
-            f"关于入睡方法：是你（栖）教给用户的，不是用户教你的；"
-            f"原话是「{quote}」，没有「数呼吸/数到七」。"
+            f"关于方法：是你（栖）教给用户的，不是用户教你的；"
+            f"原话是「{quote}」，不得添加原话没有的细节。"
             f"{_RELATION_HINT['taught_by_qi']}（taught_by_qi）"
         )
     if user_hits > 0:
@@ -395,9 +406,7 @@ def _length_for(emotion: EmotionState, stage: str, act: str) -> str:
     return "normal"
 
 
-_SHORT_FEEDBACK_RE = re.compile(
-    r"直接一点|简短|别绕|长话短说|说重点|简单点"
-)
+_SHORT_FEEDBACK_RE = re.compile(r"直接一点|简短|别绕|长话短说|说重点|简单点")
 
 
 def looks_like_short_feedback(text: str) -> bool:
@@ -473,9 +482,7 @@ def build_intention_card(
             source_parts.append(f"loop={loop.get('id')}")
         elif proactive_kind == "express_feeling":
             act = "share_state"
-            materials.append(
-                Material(tag="state", text=_short_emotion(emotion))
-            )
+            materials.append(Material(tag="state", text=_short_emotion(emotion)))
             topic = "想轻轻说一句自己的状态"
         else:
             act = "free_talk"
@@ -488,9 +495,7 @@ def build_intention_card(
         has_mem = bool(memories)
         facts = extras.get("user_facts") or ""
         facts_useful = bool(
-            facts
-            and "还不太了解" not in facts
-            and facts.strip() not in ("", "（你还不太了解他）")
+            facts and "还不太了解" not in facts and facts.strip() not in ("", "（你还不太了解他）")
         )
 
         if remember_q and not has_mem and not facts_useful:
@@ -560,10 +565,7 @@ def build_intention_card(
             if (
                 not materials
                 and facts_useful
-                and (
-                    _TOPIC_RE.search(text)
-                    or looks_like_recall_probe(text)
-                )
+                and (_TOPIC_RE.search(text) or looks_like_recall_probe(text))
             ):
                 for raw in facts.splitlines():
                     s = raw.strip().lstrip("- ").strip()
@@ -577,9 +579,7 @@ def build_intention_card(
                         break
             if not materials:
                 if act == "share_state":
-                    materials.append(
-                        Material(tag="state", text=_short_emotion(emotion))
-                    )
+                    materials.append(Material(tag="state", text=_short_emotion(emotion)))
                 else:
                     materials.append(Material(tag="none", text=""))
 
@@ -587,8 +587,7 @@ def build_intention_card(
         materials.append(Material(tag="none", text=""))
 
     has_real_material = any(
-        m.tag not in ("none", "relation") and (m.text or "").strip()
-        for m in materials
+        m.tag not in ("none", "relation") and (m.text or "").strip() for m in materials
     )
     pretend_ok = has_real_material
     must = _base_must(
@@ -734,10 +733,7 @@ def _normalize_for_match(s: str) -> str:
 
 
 def _card_has_real_material(card: IntentionCard) -> bool:
-    return any(
-        m.tag in ("memory", "fact") and (m.text or "").strip()
-        for m in card.materials
-    )
+    return any(m.tag in ("memory", "fact") and (m.text or "").strip() for m in card.materials)
 
 
 def _materials_blob(materials: list[Material]) -> str:
@@ -799,6 +795,7 @@ def _is_definite_name_entity(e: str, known: set[str], reply: str) -> bool:
         return False
     return bool(re.search(rf"叫{re.escape(e)}", reply or ""))
 
+
 def assert_reply_respects_card(
     reply: str,
     card: IntentionCard,
@@ -819,12 +816,8 @@ def assert_reply_respects_card(
         if re.search(r"你(那天|之前|曾经)?(说过|提到过|跟我说)", text):
             if not card.primary_text():
                 violations.append("伪记忆句式")
-    # 施教反转：卡内 taught_by_qi，或入睡/方法话题硬闸（含「你之前教过我」）
-    if card.recall_relation == "taught_by_qi" and _INVERT_TAUGHT_BY_QI_RE.search(
-        text
-    ):
-        violations.append("施教关系反转")
-    elif detect_sleep_teach_inversion(text):
+    # 施教反转：卡内 taught_by_qi 或无卡话题启发式
+    if detect_teach_inversion(text, recall_relation=card.recall_relation):
         violations.append("施教关系反转")
     elif (
         not card.primary_text()
@@ -843,11 +836,7 @@ def assert_reply_respects_card(
     for e in _extract_novel_entities(text, known):
         if _is_definite_name_entity(e, known, text):
             violations.append(f"虚构实体:{e}")
-    if (
-        card.channel == "proactive"
-        and card.act == "share_state"
-        and _SELF_VIEW_RE.search(text)
-    ):
+    if card.channel == "proactive" and card.act == "share_state" and _SELF_VIEW_RE.search(text):
         blob = card.state_material_blob()
         # 素材未包含同类自我认知词 → 无支撑
         if not _SELF_VIEW_RE.search(blob):

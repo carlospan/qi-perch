@@ -19,10 +19,7 @@ def test_read_prompt_conversation():
     assert "未加框" in text or "字面在场" in text
     assert "比喻" in text
     assert "不要替对方补比喻" in text or "对方实际说过" in text
-    assert "【陌生期硬约束】" in text
-    assert "不要用「嗯」省略寒暄" in text
-    assert "作息" in text
-    assert "老朋友" in text
+    assert "【陌生期硬约束】" not in text  # 距离细则在 stage_prompt_hint
     assert "阶段约束优先于" in text
     assert "{identity_snapshot}" in text
     assert "过渡脚手架" in text

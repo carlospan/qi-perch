@@ -598,6 +598,6 @@ async def test_consciousness_prompt_injects_teaching_relation_anchor():
         prompt = llm.calls[0]["messages"][1]["content"]
         assert "施教关系锚定" in prompt
         assert "taught_by_qi" in prompt
-        assert "数到七" in prompt  # 硬约束句提及；锚定原文不含虚构方法细节
+        assert "数到七" not in prompt
         assert "不得添加锚定里没有的细节" in prompt
         await db.close()

@@ -22,6 +22,7 @@
 | [`2026-08-04-health-fix/`](2026-08-04-health-fix/INDEX.md) | 包19 健康修复（施工闭环） | ✅ 闭环 |
 | [`2026-08-07-n5-hard-gate/`](2026-08-07-n5-hard-gate/INDEX.md) | N5 硬闸扩展 | ✅ 闭环 |
 | [`2026-08-07-n5-retrieval-gate/`](2026-08-07-n5-retrieval-gate/INDEX.md) | N5-b 检索相关门 | 🔧 编码完成，待方案验收 |
+| [`2026-08-07-teach-hardcode-cleanup/`](2026-08-07-teach-hardcode-cleanup/INDEX.md) | 施教硬编码清理 + 机制收束 | 🔧 文案墙待终验；机制收束 ✅ |
 
 ## 归档纪律
 
