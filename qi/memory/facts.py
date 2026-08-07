@@ -208,6 +208,11 @@ _CREATOR_SIGNALS = (
 # stranger 阶段语义兑底只留“重”的事实；阈值以下等关系深了再收
 STRANGER_FACT_WEIGHT_FLOOR = 0.6
 
+# 施教方向真值：不参与盲目 top-N 挤掉（#1377：入睡方法 fact 被裁掉后卡未武装）
+_TEACH_DIRECTION_FACT_RE = re.compile(
+    r"栖[^。\n]{0,16}教|(?<!不是)他教栖|(?<!不是)用户教栖"
+)
+
 # 弱自我指涉：句子谈到「我」的某种状态/关系/属性，够宽，细节交给 LLM 判
 _SELF_REFERENCE_HINT = ("我", "咱", "俺")
 
@@ -220,6 +225,7 @@ def format_facts_for_prompt(facts: list[dict], relationship_stage: str) -> str:
     """
     把 active 事实组织成一小段「你认识的他」。
     按 emotional_weight 排序、设条数上限；陌生期偏短、偏身份。
+    施教方向真值（栖教/用户教）至少保留 1 条，避免被 top-N 挤掉。
     """
     if not facts:
         return "（你还不太了解他）"
@@ -238,6 +244,37 @@ def format_facts_for_prompt(facts: list[dict], relationship_stage: str) -> str:
         picked = (core[:2] + others)[:limit]
     else:
         picked = ranked[:limit]
+
+    # 施教真值保底：权重低也会被裁；至少挤进 1 条（替换末位非身份，必要时替换末位）
+    teach = [
+        f
+        for f in ranked
+        if _TEACH_DIRECTION_FACT_RE.search(str(f.get("content") or ""))
+    ]
+    if teach:
+        picked_keys = {
+            (f.get("id"), str(f.get("content") or "")) for f in picked
+        }
+        slot = next(
+            (
+                f
+                for f in teach
+                if (f.get("id"), str(f.get("content") or "")) not in picked_keys
+            ),
+            None,
+        )
+        if slot is not None:
+            if len(picked) < limit:
+                picked.append(slot)
+            else:
+                replaced = False
+                for i in range(len(picked) - 1, -1, -1):
+                    if picked[i].get("fact_type") not in ("creator", "identity"):
+                        picked[i] = slot
+                        replaced = True
+                        break
+                if not replaced:
+                    picked[-1] = slot
 
     sentences: list[str] = []
     for f in picked:

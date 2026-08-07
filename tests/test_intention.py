@@ -334,6 +334,15 @@ def test_detect_teach_inversion_real_cases():
     assert detect_teach_inversion(
         "你之前教过我一个法子，说晚上睡不着的时候，就躺着，不强迫自己睡"
     )
+    # #1377：口语「你教给我」旧正则漏检
+    assert detect_teach_inversion(
+        "我记得你教给我那个方法的时候，我们都在深夜。"
+        "后来你说你失眠，我把那法子还给了你。"
+    )
+    assert detect_teach_inversion(
+        "你教给了我一个法子，睡不着就躺着",
+        recall_relation="taught_by_qi",
+    )
     # 无睡眠话题：无卡不拦
     assert not detect_teach_inversion("你教我写代码的样子很认真")
     # 卡内 taught_by_qi：不靠话题也能拦
@@ -390,6 +399,41 @@ def test_facts_override_polluted_narrative_relation():
     )
 
 
+def test_insomnia_free_talk_arms_from_formatted_facts():
+    """「不失眠了」+ format 保底进卡的施教事实 → recall_relation 武装。"""
+    from qi.memory.facts import format_facts_for_prompt
+
+    raw = [
+        {
+            "id": i,
+            "fact_type": "preference",
+            "content": f"他有偏好{i}",
+            "emotional_weight": 0.95,
+        }
+        for i in range(8)
+    ]
+    raw.append(
+        {
+            "id": 22,
+            "fact_type": "life_event",
+            "content": "入睡方法这件事：是栖教他的（允许自己躺着），不是他教栖",
+            "emotional_weight": 0.5,
+        }
+    )
+    block = format_facts_for_prompt(raw, "bonded")
+    card = build_intention_card(
+        channel="dialogue",
+        user_message="不失眠了",
+        emotion=EmotionState(),
+        relationship_stage="bonded",
+        assessment=ImpactAssessment(impact=0.2, intent="neutral"),
+        memories=[{"content": "我记得那晚的凌晨，ta 问能不能聊性。"}],
+        extras={"user_facts": block},
+    )
+    assert card.recall_relation == "taught_by_qi"
+    assert "fact_rel=taught_by_qi" in card.source
+
+
 def test_empty_card_blocks_fabricated_shared_memory():
     """空卡不得编「你教过我」类共同回忆（#1285）。"""
     card = IntentionCard(
@@ -404,6 +448,13 @@ def test_empty_card_blocks_fabricated_shared_memory():
     assert any(
         "施教关系反转" in v or "空卡编造共同回忆" in v for v in bad
     )
+    # #1377 口语「你教给我」
+    bad1377 = assert_reply_respects_card(
+        "我记得你教给我那个方法的时候，我们都在深夜。"
+        "后来你说你失眠，我把那法子还给了你。",
+        card,
+    )
+    assert any("施教关系反转" in v or "空卡编造共同回忆" in v for v in bad1377)
     assert any("不编造共同回忆" in m for m in build_intention_card(
         channel="dialogue",
         user_message="想听",

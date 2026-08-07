@@ -241,6 +241,32 @@ async def test_format_facts_for_prompt_restrained():
     assert "甲公司" in friend or "咖啡" in friend
 
 
+def test_format_facts_reserves_teach_direction_slot():
+    """施教真值权重再低也要进 prompt（防 #1377 被 bonded top8 挤掉）。"""
+    from qi.memory.facts import format_facts_for_prompt
+
+    facts = [
+        {
+            "id": i,
+            "fact_type": "preference",
+            "content": f"他有偏好条目{i}",
+            "emotional_weight": 0.9 - i * 0.01,
+        }
+        for i in range(10)
+    ]
+    facts.append(
+        {
+            "id": 22,
+            "fact_type": "life_event",
+            "content": "入睡方法这件事：是栖教他的（允许自己躺着），不是他教栖",
+            "emotional_weight": 0.5,
+        }
+    )
+    block = format_facts_for_prompt(facts, "bonded")
+    assert "栖教他" in block
+    assert "入睡方法" in block
+
+
 @pytest.mark.asyncio
 async def test_prompt_contains_user_facts_after_reopen():
     """重启后从 DB 读 active，组装的 system prompt 仍含「你认识的他」。"""
