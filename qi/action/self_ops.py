@@ -106,6 +106,7 @@ class SelfOps:
             "summary": summary,
             "action_id": action_id,
             "closed_loop": closed,
+            "outcome": OUTCOME_SUCCESS,
         }
 
     async def tune_budget(
@@ -239,4 +240,5 @@ class SelfOps:
             "summary": summary,
             "action_id": action_id,
             "closed_loop": closed,
+            "outcome": OUTCOME_SUCCESS,
         }

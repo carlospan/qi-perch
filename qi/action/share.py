@@ -117,6 +117,8 @@ class ShareAction:
             "qi_line": line,
             "action_id": action_id,
             "season": season,
+            "outcome": OUTCOME_SUCCESS,
+            "summary": summary,
         }
 
     async def try_share(

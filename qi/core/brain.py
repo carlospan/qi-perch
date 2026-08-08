@@ -848,6 +848,11 @@ class Brain:
                 scars = (
                     await self._db.list_scars() if self._db is not None else None
                 )
+                trust = 0.5
+                if self.relationship is not None:
+                    trust = float(
+                        getattr(self.relationship.state, "trust", 0.5) or 0.5
+                    )
                 action_result = await self.action.tick(
                     self.emotion,
                     self.relationship_stage,
@@ -857,6 +862,7 @@ class Brain:
                     user_online=self.user_online,
                     scars=scars,
                     pressure=self.last_pressure_response,
+                    trust=trust,
                 )
                 if action_result is not None:
                     acted = True
@@ -938,6 +944,11 @@ class Brain:
                         if self._db is not None
                         else None
                     )
+                    trust = 0.5
+                    if self.relationship is not None:
+                        trust = float(
+                            getattr(self.relationship.state, "trust", 0.5) or 0.5
+                        )
                     action_result = await self.action.execute_kind(
                         action_type,
                         self.emotion,
@@ -949,6 +960,7 @@ class Brain:
                         scars=scars,
                         sensing=self.last_sensing,
                         pressure=self.last_pressure_response,
+                        trust=trust,
                     )
                     if action_result is not None:
                         await self._persist_action_budget()

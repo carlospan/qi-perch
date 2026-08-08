@@ -85,4 +85,5 @@ class TendAction:
             "season": season,
             "speak": speak,
             "qi_line": summary if speak else None,
+            "outcome": OUTCOME_SUCCESS,
         }

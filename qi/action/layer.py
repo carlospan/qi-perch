@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from qi.action.budget import BODY_MEMORY_KEY, ActionBudget
 from qi.action.explore import ExploreAction
 from qi.action.explore_web import WebSearchClient
+from qi.action.permission import OUTCOME_OVERSTEPPED, outcome_creates_scar
 from qi.action.self_ops import SelfOps
 from qi.action.share import ShareAction
 from qi.action.tend import TendAction
@@ -96,6 +97,36 @@ class ActionLayer:
         if result and isinstance(result.get("closed_loop"), dict):
             self.last_closed_loop = result["closed_loop"]
 
+    async def _maybe_save_scar(
+        self,
+        result: dict,
+        kind: str,
+        now: datetime,
+        *,
+        trust: float = 0.5,
+    ) -> None:
+        """Step 5 收尾：失败行动形成伤疤。"""
+        outcome = result.get("outcome")
+        if not outcome_creates_scar(outcome):
+            return
+        severity = 0.7 if outcome == OUTCOME_OVERSTEPPED else 0.3
+        origin = f"[action:{kind}] {(result.get('summary') or '')[:80]}"
+        try:
+            scar_id = await self.db.save_scar(
+                origin_event=origin,
+                severity=severity,
+                trust_before=float(trust or 0.5),
+            )
+            result["created_scar"] = scar_id
+            logger.info(
+                "行动形成伤疤 kind=%s outcome=%s scar_id=%s",
+                kind,
+                outcome,
+                scar_id,
+            )
+        except Exception:
+            logger.debug("save_scar 失败", exc_info=True)
+
     async def detect_tend_occasion(
         self, season: str, now: datetime
     ) -> str | None:
@@ -173,6 +204,7 @@ class ActionLayer:
         scars: list[dict] | None = None,
         sensing: SensingSnapshot | None = None,
         pressure: Any | None = None,
+        trust: float = 0.5,
     ) -> dict | None:
         """
         独处一拍：至多做一个自主行动。
@@ -259,6 +291,8 @@ class ActionLayer:
             if result is not None:
                 self.budget.record("explore", now)
 
+        if result is not None:
+            await self._maybe_save_scar(result, chosen.kind, now, trust=trust)
         self.last_result = result
         return result
 
@@ -275,6 +309,7 @@ class ActionLayer:
         scars: list[dict] | None = None,
         sensing: SensingSnapshot | None = None,
         pressure: Any | None = None,
+        trust: float = 0.5,
     ) -> dict | None:
         """GWS 分发：执行指定行动 kind，跳过 tick 内随机软门。"""
         self.last_result = None
@@ -371,6 +406,8 @@ class ActionLayer:
             return None
 
         self._note_closed_loop(result)
+        if result is not None:
+            await self._maybe_save_scar(result, kind, now, trust=trust)
         self.last_result = result
         return result
 

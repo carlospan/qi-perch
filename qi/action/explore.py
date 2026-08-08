@@ -379,6 +379,7 @@ class ExploreAction:
             "curiosity": curiosity,
             "source": source,
             "sandbox": str(root),
+            "outcome": outcome,
         }
         if speak and qi_line:
             result["speak"] = True
