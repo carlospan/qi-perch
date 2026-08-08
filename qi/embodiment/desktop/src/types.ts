@@ -35,7 +35,27 @@ export type CreationCard = {
   season?: string;
 };
 
-/** 后端 action 三种 payload；谈区本包只渲染 creation_card */
+export type ExploreHit = { title: string; snippet?: string; url?: string };
+export type ExploreFound = {
+  entries: ExploreHit[];
+  source: string; // "web" | sandbox path
+  query?: string;
+};
+
+/** 栖外部探索的见闻卡片（对齐 qi/action/explore.py drift 返回） */
+export type ExploreCard = {
+  type: "explore_drift";
+  found: ExploreFound | null;
+  summary: string;
+  qi_line?: string | null;
+  action_id: number;
+  season?: string;
+  curiosity: number;
+  source: string; // "web"
+  sandbox: string;
+};
+
+/** 后端 action 三种 payload；谈区渲染 creation_card + 外部 explore_drift */
 export type ActionPayload =
   | CreationCard
   | {
@@ -49,11 +69,14 @@ export type ActionPayload =
     }
   | {
       type: "explore_drift";
-      found?: unknown;
+      found: ExploreFound | null;
       summary: string;
+      qi_line?: string | null;
+      speak?: boolean;
       action_id: number;
       season?: string;
       curiosity: number;
+      source: string; // "web" | "sandbox"
       sandbox: string;
     };
 
@@ -82,7 +105,7 @@ export type ServerMessage =
 export type TalkCardItem = {
   id: string;
   kind: "card";
-  card: CreationCard;
+  card: CreationCard | ExploreCard;
   at: number;
 };
 export type TalkItem = (TalkMessage & { kind: "text" }) | TalkCardItem;

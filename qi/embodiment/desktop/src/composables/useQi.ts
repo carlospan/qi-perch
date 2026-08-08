@@ -11,6 +11,7 @@ import type {
   AvatarState,
   CreationCard,
   EmotionSnapshot,
+  ExploreCard,
   JournalEntry,
   QiView,
   SpeechPayload,
@@ -22,6 +23,12 @@ import { qiWs } from "../ws";
 
 function uid(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function cardKey(card: CreationCard | ExploreCard): string {
+  return card.type === "creation_card"
+    ? `c${card.creation_id}`
+    : `e${card.action_id}`;
 }
 
 function sameDay(a: Date, b: Date) {
@@ -89,10 +96,9 @@ function createQi() {
     return emotion.value.mode || avatar.value.posture || "awake";
   });
 
-  function appendCard(card: CreationCard) {
-    if (cards.value.some((c) => c.card.creation_id === card.creation_id)) {
-      return;
-    }
+  function appendCard(card: CreationCard | ExploreCard) {
+    const key = cardKey(card);
+    if (cards.value.some((c) => cardKey(c.card) === key)) return;
     cards.value.push({
       id: uid("card"),
       kind: "card",
@@ -310,8 +316,22 @@ function createQi() {
         });
       });
       qiWs.on("action", (payload: ActionPayload) => {
-        if (payload?.type === "creation_card") appendCard(payload);
-        // tend_mark / explore_drift：到达不报错、不渲染
+        if (payload?.type === "creation_card") {
+          appendCard(payload);
+          return;
+        }
+        if (payload?.type === "explore_drift") {
+          // HITL2：仅外部；B1：须有 hits 才出卡（空手只开口、不出卡）
+          const entries = payload.found?.entries;
+          if (
+            payload.source === "web" &&
+            Array.isArray(entries) &&
+            entries.length > 0
+          ) {
+            appendCard(payload);
+          }
+        }
+        // tend_mark / sandbox / 空手：到达不报错、不渲染
       });
     }
 

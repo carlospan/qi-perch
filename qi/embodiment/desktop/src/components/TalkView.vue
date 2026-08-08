@@ -2,6 +2,7 @@
 import { nextTick, onMounted, ref, watch } from "vue";
 import type { TalkDayGroup } from "../composables/useQi";
 import ActionCard from "./ActionCard.vue";
+import ExploreCard from "./ExploreCard.vue";
 
 const WAITING_LINES = ["……", "嗯……", "我在想。", "稍等……"] as const;
 
@@ -69,7 +70,14 @@ watch(
         <template v-for="m in g.messages" :key="m.id">
           <div v-if="m.kind === 'card'" class="msg qi card">
             <div class="who">栖</div>
-            <ActionCard :card="m.card" />
+            <ActionCard
+              v-if="m.card.type === 'creation_card'"
+              :card="m.card"
+            />
+            <ExploreCard
+              v-else-if="m.card.type === 'explore_drift'"
+              :card="m.card"
+            />
             <div class="when">{{ timeLabel(m.at) }}</div>
           </div>
           <div v-else class="msg" :class="m.role">
