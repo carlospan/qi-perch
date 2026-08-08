@@ -16,7 +16,7 @@
 - **形态**：单进程异步 agent loop（心跳）+ 可选 WebSocket 具身通道 + Live2D 前端
 - **认知来源**：OpenAI 兼容协议的远程 LLM（现行 **tokenrhythm / minimax-m2.7**；`providers.deepseek` 备用），按 `purpose` 路由
 - **持久化**：SQLite（`data/qi.db`，17 张表）+ ChromaDB（`data/chroma/`，BGE 语义向量）
-- **测试规模**：约 **462** 条 pytest（`pytest --collect-only`，2026-08-08；阶段四退出时曾约 405）
+- **测试规模**：约 **556** 条 pytest（`pytest` 全绿，2026-08-09；explore C 收口时约 500、阶段四退出时约 405）
 - **协议**：MIT
 
 项目当前处于"阶段四退出"状态（架构方案 §五 的阶段零~四中，阶段零~四工程判据已过，72h 无人测试作为后台稳定性观察继续累积）。详细进度见 [docs/progress.md](../progress.md)。
@@ -140,7 +140,7 @@ requirements.lock   锁定版本（CI 用）
 
 | 文件 | 职责 |
 |---|---|
-| [brain.py](../../qi/core/brain.py) | **Brain 类**——栖的意识核心。心跳主循环、用户消息接收、状态恢复/保存。约 **1223** 行（编排面；薄委托 `brain_*.py`），协调所有子系统 |
+| [brain.py](../../qi/core/brain.py) | **Brain 类**——栖的意识核心。心跳主循环、用户消息接收、状态恢复/保存。约 **1377** 行（编排面；薄委托 `brain_*.py`），协调所有子系统 |
 | [brain_background.py](../../qi/core/brain_background.py) | `BackgroundTasks`——与心跳并行的后台任务（编织/衰减/反思/梦衰减/文化/季节/伤疤/漂移） |
 | [brain_context.py](../../qi/core/brain_context.py) | `gather_prompt_context`——组装对话 prompt 上下文（recent/messages/memories/extras/loops/hints） |
 | [brain_delivery.py](../../qi/core/brain_delivery.py) | 话语推送、avatar 同步、journal 广播、first_time 通知、行动结果投递 |
@@ -184,13 +184,15 @@ requirements.lock   锁定版本（CI 用）
 |---|---|
 | [layer.py](../../qi/action/layer.py) | **ActionLayer**——`tick`（独处一拍，至多一个自主行动）/ `execute_kind`（GWS 分发指定 kind） |
 | [budget.py](../../qi/action/budget.py) | **ActionBudget**——自主行动日限（`AUTONOMOUS_ACTION_DAILY_LIMIT=20`）+ 各意向权重（`DEFAULT_KIND_WEIGHTS` / `WEIGHT_MIN` / `WEIGHT_MAX`）；季节缩放见 `layer.py` 的 `SEASON_ACTION_SCALE` |
-| [volition.py](../../qi/action/volition.py) | `action_intentions`——形成意图列表（share/tend/explore/self_ops） |
+| [volition.py](../../qi/action/volition.py) | `action_intentions`——形成意图列表（share/tend/explore/assist/self_ops） |
 | [permission.py](../../qi/action/permission.py) | 权限门控（can_share/can_tend/can_explore/can_archive/can_budget_tune/can_journal/can_irreversible/can_read_user_file/can_write_user_file） |
 | [share.py](../../qi/action/share.py) | 分享创作（递出未分享的 creation） |
 | [tend.py](../../qi/action/tend.py) | 打理（季节更替/相识纪念日） |
-| [explore.py](../../qi/action/explore.py) | 探索（内部深读 narratives→digest；外部编排；见闻卡 source=web\|journal） |
+| [explore.py](../../qi/action/explore.py) | 探索（内部深读 narratives→digest；外部编排；见闻卡 source=web\|journal；N3 pressure 软调制） |
 | [explore_web.py](../../qi/action/explore_web.py) | 外部分支（Tavily 检索 + 门控；hits→digest） |
+| [assist.py](../../qi/action/assist.py) | 响应式协助（读文件 + confirm_gate + consciousness digest；跨轮确认由 brain pending） |
 | [self_ops.py](../../qi/action/self_ops.py) | 自操作（archive 归档/ budget_tune 调预算/ journal 内在日记） |
+| （未建）`irreversible.py` | 替你影响世界——仍待做 |
 
 **季节缩放**（`SEASON_ACTION_SCALE`，定义于 `qi/action/layer.py`）：spring 1.0 / summer 0.8 / autumn 0.5 / winter 0.2——冬天几乎不动手。可由 `config.action.season_scale` 覆盖（`resolve_season_scale`）。
 
@@ -557,7 +559,7 @@ brain ──► core.* / memory.manager / inner_life / relationship / action /
 memory.manager ──► working / narrative / vector_store / body_memory / facts
 inner_life ──► consciousness / dream / creativity / self_model / identity_snapshot
 relationship ──► stages / trust / scars / season / culture / drift / engine
-action ──► budget / volition / permission / share / tend / explore / self_ops
+action ──► budget / volition / permission / share / tend / explore / assist / self_ops
 learning ──► corpus / replay / drift_check（brain 包 10 好奇进度引用）
 embodiment.server ──► brain / avatar.controller / voice.tts
 llm.gateway ──► providers.openai_compat

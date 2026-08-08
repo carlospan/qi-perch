@@ -3,10 +3,11 @@
 # IDE Agent 同步栖的层文档代码块 · 提示词模板
 
 > 与 `IDE-Agent-执行栖的开发任务.md` 配套。那份是"按层文档写代码"，这份是反过来——"按代码回写层文档里的实现规格代码块"。
-> 背景：层文档实现规格须与代码一致。代码是现状权威。测试规模约 **132**（以 `pytest` 为准）。
+> 背景：层文档实现规格须与代码一致。代码是现状权威。测试规模约 **556**（以 `progress.md` / `pytest` 为准）。
 > <!-- 回写(2026-07-25)：测试数 67→132；范围扩至 L7 / L2-user-facts；补 2026-07-25 brain 时序。
 >      续：L2 MemoryManager facts；L3 mood md5 + DECAY_RATES + YAML threshold；
 >      L6 history/journal/action 协议；L7 narrative 恒织 + mode 门控 + _deliver_action_result。 -->
+> <!-- 回写(2026-08-09)：测试规模→556；L7 补 assist/explore_web；L6 action 前端已接卡片。 -->
 
 ---
 
@@ -64,7 +65,8 @@ gateway 内部用 qi/llm/providers/openai_compat.py 做协议适配。
   L6 → qi/embodiment/server.py, qi/embodiment/avatar/controller.py,
        qi/embodiment/avatar/states.py, qi/embodiment/voice/tts.py, qi/cli.py,
        qi/embodiment/desktop/（前端，仅在文档涉及处参考）
-  L7 → qi/action/（layer/budget/permission/share/tend/explore 等）, brain 接线
+  L7 → qi/action/（layer/budget/permission/share/tend/explore/explore_web/assist 等；
+       irreversible 未建）, brain 接线（含 pending_assist_confirmation）
 
 ---
 
@@ -148,7 +150,7 @@ L5 关系：
 L6 具身：
 - WebSocket 127.0.0.1:9527；TTS 用 edge-tts，pitch 单位是 Hz；
   voice_id = zh-CN-XiaoyiNeural。
-- 命令：/state /history /journal；后端另可推 action（前端未处理）。
+- 命令：/state /history /journal；后端可推 action → ActionCard / ExploreCard / AssistConfirmCard。
 - 谈=history；忆=journal（独白/梦/第一次）。
 - ASR（语音识别）未实现——文档若写了 asr.py，标注"未实现/未来方向"，不要伪造代码。
 - 桌面壳是 Tauri 2 + Vue3 + Vite，无 sidecar 进程。
@@ -156,6 +158,7 @@ L6 具身：
 L7 行动：
 - share/tend 恒织 narrative（0.78 / 0.7）；explore 不织。
 - tick 仅 solitary|ambient；awake 不自主伸手；_deliver_action_result 推 WS action。
+- assist 三包已落地（读文件 + confirm_gate + 跨轮确认）；irreversible 未做；伤疤 save_scar 骨架已接。
 
 ---
 

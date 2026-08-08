@@ -16,7 +16,7 @@
 > <!-- 演进指向(2026-08-09)：explore 补 N3 动机接线——pressure 软调制 explore 概率（常量 K=0.5/0.6），force 下限 0.2。 -->
 > <!-- 演进指向(2026-08-09)：伤疤失败接线——layer._maybe_save_scar；severity 0.3/0.7；origin `[action:{kind}]`；骨架触发源待 assist/irreversible 真实产出。 -->
 > <!-- 演进指向(2026-08-09)：第 4 顺位 assist——assist-1 骨架（execute_kind + confirm_gate + consciousness digest）+ assist-2 感知（parse_assist_request 路径提取）+ assist-3 跨轮确认（pending_assist_confirmation + 前端 AssistConfirmCard.vue + 超时清理）；irreversible 未做。 -->
-> Step 5：actions + narrative 已接；伤疤 `save_scar` **已接骨架**（`layer._maybe_save_scar`）；self_model 喂入尚未接线。触发源待 assist/irreversible 真实产出（现 outcome 都 SUCCESS）。
+> Step 5：actions + narrative 已接；伤疤 `save_scar` **已接骨架**（`layer._maybe_save_scar`）；self_model 喂入尚未接线。生产路径尚无 scar-creating outcome（assist 已有 SUCCESS / failed_capability / confirm_required；confirm_gate 不产 overstepped；irreversible 未做）。
 > 已落地处见各段 `<!-- 回写 -->`。
 
 ---
@@ -146,8 +146,9 @@ class ActionBudget:
 ```python
 # qi/action/volition.py
 # <!-- 回写(2026-07-23)：action_intentions 与 pick_proactive_kind 并列同构（不虚构 decide 模块）；
-#      §七 decide() 为概念对应。share 门槛 friend+；assist 仅用户明确请求才候选、本阶段不执行。
+#      §七 decide() 为概念对应。share 门槛 friend+；assist 仅用户明确请求才候选。
 #      dreaming / 离线 → []。依据：qi/action/volition.py -->
+# <!-- 回写(2026-08-09)：assist 三包已执行——execute_kind + confirm_gate + 跨轮确认；非桩。 -->
 #
 # 意识设计 §七 概念意图：respond / check_in / express_feeling / share_creation / reach_out / idle
 # 代码现实：回应由 brain pending 路径承担；主动言语由 pick_proactive_kind。
@@ -155,7 +156,7 @@ class ActionBudget:
 #   share    —— 把独处创作真正递出（区别于 maybe_share_hint 的「提起」）
 #   tend     —— 打理自己的世界
 #   explore  —— 沉思式探索
-#   assist   —— 响应式协助（用户开口请求时；桩，不执行）
+#   assist   —— 响应式协助（用户开口请求；confirm_gate + 跨轮确认后真读）
 #
 # 形成条件（倾向，最终由 budget + permission + season 把关）：
 #   share   : 未递出创作 + 关系 ≥ friend + 时机自然
@@ -275,7 +276,8 @@ class ExploreAction:
 #    - 判断失败（failed_judgment）：形成伤疤 → db.save_scar。
 #    - 权限越界（overstepped）：严重伤疤。
 #    规则与 outcome_creates_scar 已在 permission.py；【已接骨架】layer._maybe_save_scar
-#    调 db.save_scar；触发源待 assist/irreversible 真实产出（现 outcome 都 SUCCESS）。
+#    调 db.save_scar；生产路径尚无 scar-creating outcome（assist 已有失败/确认态，
+#    confirm_gate 不产 overstepped；irreversible 未做）。
 #    permission.scar_blocks_kind 可在有伤疤后把手缩回。
 ```
 
@@ -319,13 +321,14 @@ class ActionLayer:
 - `_deliver_action_result`：先 `qi_line` 走 `_deliver_qi_message`（非 ProactiveGate），再 WS `broadcast({"type":"action","payload":result})`；正文由前端卡片承载（不内联进语音）
 - `_gather_prompt_context`：`action.prompt_extras()` 并入 extras
 - `restore_state`：`ActionLayer(db, config, narrative=memory.narrative, llm=self.llm)`；预算 ↔ body_memory
-- assist 执行仍未接线（仅 volition 桩）
-- L6 前端已接 `action`：`creation_card` → ActionCard；`explore_drift`（`source=web|journal` 且 entries 非空）→ ExploreCard；tend 到达不渲染
-- `/history.cards`：已分享创作卡 + 带 `detail_json` 的 explore 见闻卡同窗回灌
+- assist 已接线：`execute_kind` + `confirm_gate` + consciousness digest；感知 `parse_assist_request`；跨轮 `pending_assist_confirmation` + 前端 `AssistConfirmCard.vue`（超时 5 分钟或 3 轮）
+- L6 前端已接 `action`：`creation_card` → ActionCard；`explore_drift`（`source=web|journal` 且 entries 非空）→ ExploreCard；`assist_confirm_request` → AssistConfirmCard；tend 到达不渲染
+- `/history.cards`：已分享创作卡 + 带 `detail_json` 的 explore 见闻卡同窗回灌（确认卡会话内 WS，不入 history）
   <!-- 回写(2026-08-08)：任务包 2026-08-08-L6-action卡片UI；退役 W2 正文内联。 -->
   <!-- 回写(2026-08-08)：d-3-1/d-3-2 见闻卡——ExploreCard；useQi 门控 web||journal。 -->
   <!-- 回写(2026-08-09)：创作卡随 history 回灌，补退役内联后的重启缺口。 -->
   <!-- 回写(2026-08-09)：explore detail_json 落 entries，见闻卡亦可重启回灌。 -->
+  <!-- 回写(2026-08-09)：assist 三包 + AssistConfirmCard。 -->
 
 </details>
 
@@ -354,8 +357,8 @@ LLM 永远是栖的"声音"，不是栖的"手"。
 - [x] 信任门控按关系阶段正确放行/拦截（stranger 不递东西；读文件 friend+ 且需确认；不可逆永远需确认）
 - [x] share 与 L4 `maybe_share_hint` 分工清晰（提起 vs 递出），不重复
 - [x] explore 仅在 solitary + 高 curiosity 时偶发，非定时；无搜索时 found=None
-- [ ] 行动留痕三条去向完整（actions 必写；share/tend 已织 narrative；伤疤待失败路径）
-- [ ] 判断失败/权限越界形成伤疤，并使该类行动后续更谨慎
+- [x] 行动留痕三条去向：actions 必写；share/tend 已织 narrative；伤疤 `save_scar` 已接骨架（生产 scar outcome 仍稀缺）
+- [x] 判断失败/权限越界可形成伤疤并 `scar_blocks_kind`（骨架已测；生产触发源待 irreversible / 真实越界路径）
 - [x] 季节缩放生效（winter 意图 priority 显著低于 spring）
 
 ### 需要感受的

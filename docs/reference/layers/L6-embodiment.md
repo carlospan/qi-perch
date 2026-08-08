@@ -71,7 +71,7 @@ qi/cli.py                             # qi-desktop：Brain + EmbodimentServer
 
 - 建 `qi/embodiment/server.py`：Python 端开 WebSocket（`127.0.0.1:9527`）
 - 消息协议：
-  - 后端→前端：`speech` / `state`（含 `avatar_state`+`season`+`mode`）/ `typing` / `ping` / `audio` / `history` / `journal` / `emotion_update`；另有 `action`（L7 推送，**前端尚未处理**）
+  - 后端→前端：`speech` / `state`（含 `avatar_state`+`season`+`mode`）/ `typing` / `ping` / `audio` / `history` / `journal` / `emotion_update`；另有 `action`（L7：ActionCard / ExploreCard / AssistConfirmCard）
   - 前端→后端：`user_message` / `presence` / `pong`；`command`：`/state` / `/history` / `/journal`
 - 修改 `qi/core/brain.py`：`attach_embodiment` + `_emit_speech` / `_sync_avatar` 推送
 - 验收：Python 后端发消息，前端能收到
@@ -133,13 +133,15 @@ class EmbodimentServer:
 # 后端→前端：speech | state{avatar_state,season?,mode?} | typing | emotion_update
 #            | ping | audio{data,mime} | history{messages, cards?} | journal{entries}
 #            | journal_entry{kind,text,at,id?}（单条实时；忆 Tab prepend）
-#            | action{payload}（L7；creation_card → ActionCard；explore_drift web|journal → ExploreCard；tend 不渲染）
+#            | action{payload}（L7；creation_card → ActionCard；explore_drift web|journal → ExploreCard；
+#              assist_confirm_request → AssistConfirmCard；tend 不渲染）
 # 前端→后端：user_message | presence | pong | command{/state|/history|/journal}
 #
 # <!-- 回写(2026-08-08)：action/creation_card 卡片 UI 落地；见 tasks/2026-08-08-L6-action卡片UI -->
 # <!-- 回写(2026-08-08)：d-3-1/d-3-2 ExploreCard；useQi 门控 source=web|journal 且 entries 非空 -->
 # <!-- 回写(2026-08-09)：/history.cards 回灌已分享创作卡；见闻卡仍会话瞬时 -->
 # <!-- 回写(2026-08-09)：见闻卡亦回灌——actions.detail_json 存 found.entries -->
+# <!-- 回写(2026-08-09)：assist_confirm_request → AssistConfirmCard（会话内 WS，不入 history） -->
 # 前端 useQi：on("journal") 全量替换；on("journal_entry") unshift 单条；on("history") 文本+创作/见闻卡；on("action") appendCard
 # 前端重连（ws.ts）：指数退避 1s→…→30s；onopen 发 presence online
 # 启动：qi-desktop（Brain∥WS）+ npm run tauri:dev（或 npm run dev）
