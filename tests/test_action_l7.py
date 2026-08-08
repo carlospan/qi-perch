@@ -330,6 +330,76 @@ async def test_history_creation_cards_hydrate_shared(db):
 
 
 @pytest.mark.asyncio
+async def test_history_explore_cards_hydrate_from_detail(db):
+    """重启谈区：带 entries 的 explore 落 detail_json，/history 可回灌见闻卡。"""
+    from unittest.mock import AsyncMock
+
+    from qi.action.explore import ExploreAction
+    from qi.action.explore_web import SearchHit, WebSearchClient
+    from qi.core.emotion import EmotionState
+    from qi.embodiment.server import build_history_explore_cards
+
+    class _LLM:
+        async def call(self, purpose, messages, **kwargs):
+            _ = purpose, messages, kwargs
+            # query → digest
+            if not getattr(self, "_n", 0):
+                self._n = 1
+                return "落叶会停在哪里"
+            return "叶子好像还带着一点夏天的热。"
+
+    web = WebSearchClient(provider="tavily", api_key="tvly-test", config={})
+    web.search = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SearchHit(title="秋声", snippet="落叶", url="https://ex/leaf")
+        ]
+    )
+    explore = ExploreAction(
+        db,
+        config={
+            "action": {
+                "explore_external": {
+                    "enabled": True,
+                    "cooldown_hours": 0,
+                    "probability": 1.0,
+                }
+            }
+        },
+        llm=_LLM(),  # type: ignore[arg-type]
+        web=web,
+        base_probability=1.0,
+    )
+    now = datetime(2026, 8, 9, 3, 0)
+    result = await explore.drift(
+        0.95,
+        EmotionState(curiosity=0.95),
+        "autumn",
+        force=True,
+        now=now,
+    )
+    assert result is not None
+    assert result["source"] == "web"
+    assert result["found"]["entries"]
+
+    row = (await db.list_recent_actions(1))[0]
+    assert row["detail_json"]
+    assert "秋声" in row["detail_json"]
+
+    hydrated = await build_history_explore_cards(db, oldest_at_ms=None)
+    assert len(hydrated) == 1
+    assert hydrated[0]["type"] == "explore_drift"
+    assert hydrated[0]["source"] == "web"
+    assert hydrated[0]["found"]["entries"][0]["title"] == "秋声"
+    assert hydrated[0]["action_id"] == result["action_id"]
+    assert hydrated[0]["season"] == "autumn"
+
+    # 空手 explore（无 detail）不回灌
+    empty = ExploreAction(db, base_probability=1.0)
+    await empty.drift(0.9, EmotionState(curiosity=0.9), "spring", force=True)
+    assert len(await build_history_explore_cards(db, oldest_at_ms=None)) == 1
+
+
+@pytest.mark.asyncio
 async def test_explore_never_fabricates_found(db):
     from qi.action.explore import ExploreAction
     from qi.core.emotion import EmotionState

@@ -99,8 +99,8 @@ export type ServerMessage =
       type: "history";
       payload: {
         messages: TalkMessage[];
-        /** 已分享创作卡回灌（可选；旧后端无此字段） */
-        cards?: Array<CreationCard & { at?: number }>;
+        /** 创作卡 + 见闻卡回灌（可选；旧后端无此字段） */
+        cards?: Array<(CreationCard | ExploreCard) & { at?: number }>;
       };
     }
   | { type: "journal"; payload: { entries: JournalEntry[] } }

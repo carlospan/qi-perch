@@ -139,7 +139,8 @@ class EmbodimentServer:
 # <!-- 回写(2026-08-08)：action/creation_card 卡片 UI 落地；见 tasks/2026-08-08-L6-action卡片UI -->
 # <!-- 回写(2026-08-08)：d-3-1/d-3-2 ExploreCard；useQi 门控 source=web|journal 且 entries 非空 -->
 # <!-- 回写(2026-08-09)：/history.cards 回灌已分享创作卡；见闻卡仍会话瞬时 -->
-# 前端 useQi：on("journal") 全量替换；on("journal_entry") unshift 单条；on("history") 文本+创作卡；on("action") appendCard
+# <!-- 回写(2026-08-09)：见闻卡亦回灌——actions.detail_json 存 found.entries -->
+# 前端 useQi：on("journal") 全量替换；on("journal_entry") unshift 单条；on("history") 文本+创作/见闻卡；on("action") appendCard
 # 前端重连（ws.ts）：指数退避 1s→…→30s；onopen 发 presence online
 # 启动：qi-desktop（Brain∥WS）+ npm run tauri:dev（或 npm run dev）
 # Cubism Core：见 docs/how-to/ui/主界面-Live2D接入.md / 换机搭建.md（不入库）

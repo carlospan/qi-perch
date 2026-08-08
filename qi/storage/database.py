@@ -256,7 +256,8 @@ CREATE TABLE IF NOT EXISTS actions (
     outcome TEXT,
     emotion_context TEXT,
     season TEXT,
-    created_scar BOOLEAN DEFAULT 0
+    created_scar BOOLEAN DEFAULT 0,
+    detail_json TEXT
 )
 """
 
@@ -295,6 +296,7 @@ class Database:
         await self._migrate_creations_mentioned_at()
         await self._migrate_broadcast_traces_gws()
         await self._migrate_narrative_archived()
+        await self._migrate_actions_detail_json()
         for ddl in _CREATE_INDEXES:
             await self._conn.execute(ddl)
         await self._conn.execute(
@@ -345,6 +347,14 @@ class Database:
                 "ALTER TABLE narrative_memories "
                 "ADD COLUMN archived INTEGER NOT NULL DEFAULT 0"
             )
+
+    async def _migrate_actions_detail_json(self) -> None:
+        """explore 见闻卡：落 found.entries 等，供 /history 回灌。"""
+        conn = self._require_conn()
+        async with conn.execute("PRAGMA table_info(actions)") as cursor:
+            cols = {str(row[1]) for row in await cursor.fetchall()}
+        if "detail_json" not in cols:
+            await conn.execute("ALTER TABLE actions ADD COLUMN detail_json TEXT")
 
     def _require_conn(self) -> aiosqlite.Connection:
         if self._conn is None:
@@ -1445,6 +1455,7 @@ class Database:
         emotion_context: str | None = None,
         season: str | None = None,
         created_scar: bool = False,
+        detail_json: str | None = None,
         now: datetime | None = None,
     ) -> int:
         conn = self._require_conn()
@@ -1453,8 +1464,8 @@ class Database:
             """
             INSERT INTO actions
                 (timestamp, kind, target, summary, outcome,
-                 emotion_context, season, created_scar)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 emotion_context, season, created_scar, detail_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 when.isoformat(timespec="seconds"),
@@ -1465,6 +1476,7 @@ class Database:
                 emotion_context,
                 season,
                 1 if created_scar else 0,
+                detail_json,
             ),
         )
         await conn.commit()
@@ -1475,6 +1487,23 @@ class Database:
         async with conn.execute(
             """
             SELECT * FROM actions
+            ORDER BY timestamp DESC, id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+    async def list_recent_explore_card_actions(self, limit: int = 40) -> list[dict]:
+        """最近带 detail_json 的 explore（见闻卡真源），新→旧。"""
+        conn = self._require_conn()
+        async with conn.execute(
+            """
+            SELECT * FROM actions
+            WHERE kind = 'explore'
+              AND detail_json IS NOT NULL
+              AND detail_json != ''
             ORDER BY timestamp DESC, id DESC
             LIMIT ?
             """,

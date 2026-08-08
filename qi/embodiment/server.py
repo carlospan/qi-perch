@@ -94,6 +94,66 @@ async def build_history_creation_cards(
     cards.reverse()  # 库查新→旧；谈区时间轴要旧→新
     return cards
 
+
+async def build_history_explore_cards(
+    db: Any,
+    *,
+    oldest_at_ms: int | None = None,
+    limit: int = HISTORY_CARD_LIMIT,
+) -> list[dict]:
+    """从 actions.detail_json 拼 explore_drift 列表（旧→新），供 /history 回灌。"""
+    try:
+        rows = await db.list_recent_explore_card_actions(limit=limit)
+    except Exception:
+        logger.exception("拉取 explore 见闻卡失败")
+        return []
+
+    cards: list[dict] = []
+    for r in rows:
+        ts_raw = str(r.get("timestamp") or "")
+        at_ms = _iso_to_ms(ts_raw)
+        if at_ms is None:
+            continue
+        if oldest_at_ms is not None and at_ms < oldest_at_ms:
+            continue
+        detail = _parse_emotion_context(r.get("detail_json"))
+        if not isinstance(detail, dict):
+            continue
+        found = detail.get("found")
+        if not isinstance(found, dict):
+            continue
+        entries = found.get("entries")
+        source = str(detail.get("source") or found.get("source") or "")
+        if source not in ("web", "journal"):
+            continue
+        if not isinstance(entries, list) or not entries:
+            continue
+        try:
+            curiosity = float(detail.get("curiosity") or 0.0)
+        except (TypeError, ValueError):
+            curiosity = 0.0
+        summary = str(r.get("summary") or "").strip()
+        qi_line = detail.get("qi_line")
+        if qi_line is not None:
+            qi_line = str(qi_line)
+        card = {
+            "type": "explore_drift",
+            "found": found,
+            "summary": summary,
+            "qi_line": qi_line if qi_line else summary,
+            "action_id": int(r["id"]),
+            "curiosity": curiosity,
+            "source": source,
+            "sandbox": str(detail.get("sandbox") or ""),
+            "at": at_ms,
+        }
+        if r.get("season"):
+            card["season"] = str(r["season"])
+        cards.append(card)
+    cards.reverse()
+    return cards
+
+
 # 仅允许 loopback 绑定；配置里写 0.0.0.0 等会强制回退
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
@@ -347,7 +407,12 @@ class EmbodimentServer:
         cards: list[dict] = []
         if db is not None:
             oldest = messages[0]["at"] if messages else None
-            cards = await build_history_creation_cards(db, oldest_at_ms=oldest)
+            creations = await build_history_creation_cards(db, oldest_at_ms=oldest)
+            explores = await build_history_explore_cards(db, oldest_at_ms=oldest)
+            cards = sorted(
+                [*creations, *explores],
+                key=lambda c: int(c.get("at") or 0),
+            )
 
         packet = {
             "type": "history",

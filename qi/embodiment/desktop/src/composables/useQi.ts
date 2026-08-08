@@ -83,7 +83,7 @@ function createQi() {
 
   /** 对话历史（启动后由 /history 灌入） */
   const talk = ref<TalkMessage[]>([]);
-  /** 谈区卡片：创作卡随 /history.cards 回灌；见闻卡仍为会话瞬时 */
+  /** 谈区卡片：创作卡 + 见闻卡均随 /history.cards 回灌 */
   const cards = ref<TalkCardItem[]>([]);
   const historyLoaded = ref(false);
   /** 内在日记（启动后由 /journal 灌入；库空则保持空） */
@@ -107,30 +107,64 @@ function createQi() {
     });
   }
 
-  function applyHistoryCards(raw: Array<CreationCard & { at?: number }>) {
-    const explores = cards.value.filter((c) => c.card.type === "explore_drift");
+  function applyHistoryCards(
+    raw: Array<(CreationCard | ExploreCard) & { at?: number }>
+  ) {
     const hydrated: TalkCardItem[] = [];
+    const seen = new Set<string>();
     for (const row of raw ?? []) {
-      if (row?.type !== "creation_card" || !row.content?.trim()) continue;
-      const card: CreationCard = {
-        type: "creation_card",
-        creation_id: Number(row.creation_id),
-        creation_type: String(row.creation_type || "note"),
-        content: String(row.content).trim(),
-        emotion_context: row.emotion_context,
-        qi_line: row.qi_line,
-        action_id: Number(row.action_id) || 0,
-        season: row.season,
-      };
-      if (!Number.isFinite(card.creation_id)) continue;
-      hydrated.push({
-        id: uid("card"),
-        kind: "card",
-        card,
-        at: typeof row.at === "number" ? row.at : Date.now(),
-      });
+      if (row?.type === "creation_card") {
+        if (!row.content?.trim()) continue;
+        const card: CreationCard = {
+          type: "creation_card",
+          creation_id: Number(row.creation_id),
+          creation_type: String(row.creation_type || "note"),
+          content: String(row.content).trim(),
+          emotion_context: row.emotion_context,
+          qi_line: row.qi_line,
+          action_id: Number(row.action_id) || 0,
+          season: row.season,
+        };
+        if (!Number.isFinite(card.creation_id)) continue;
+        const key = cardKey(card);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        hydrated.push({
+          id: uid("card"),
+          kind: "card",
+          card,
+          at: typeof row.at === "number" ? row.at : Date.now(),
+        });
+        continue;
+      }
+      if (row?.type === "explore_drift") {
+        const entries = row.found?.entries;
+        const okSource = row.source === "web" || row.source === "journal";
+        if (!okSource || !Array.isArray(entries) || entries.length === 0) continue;
+        const card: ExploreCard = {
+          type: "explore_drift",
+          found: row.found,
+          summary: String(row.summary || "").trim(),
+          qi_line: row.qi_line,
+          action_id: Number(row.action_id) || 0,
+          season: row.season,
+          curiosity: Number(row.curiosity) || 0,
+          source: row.source,
+          sandbox: String(row.sandbox || ""),
+        };
+        if (!Number.isFinite(card.action_id) || card.action_id <= 0) continue;
+        const key = cardKey(card);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        hydrated.push({
+          id: uid("card"),
+          kind: "card",
+          card,
+          at: typeof row.at === "number" ? row.at : Date.now(),
+        });
+      }
     }
-    cards.value = [...hydrated, ...explores];
+    cards.value = hydrated;
   }
 
   const talkByDay = computed<TalkDayGroup[]>(() => {
@@ -330,7 +364,7 @@ function createQi() {
         "history",
         (payload: {
           messages?: TalkMessage[];
-          cards?: Array<CreationCard & { at?: number }>;
+          cards?: Array<(CreationCard | ExploreCard) & { at?: number }>;
         }) => {
           applyHistory(payload?.messages ?? []);
           applyHistoryCards(payload?.cards ?? []);

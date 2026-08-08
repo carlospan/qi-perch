@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import random
 from datetime import datetime, timedelta
@@ -300,6 +301,25 @@ class ExploreAction:
         if emotion is not None and hasattr(emotion, "model_dump_json"):
             emotion_ctx = emotion.model_dump_json()
 
+        # 见闻卡真源：有 entries 才落 detail，供 /history 回灌
+        detail_json: str | None = None
+        entries = (found or {}).get("entries") if isinstance(found, dict) else None
+        if (
+            isinstance(entries, list)
+            and entries
+            and source in ("web", "journal")
+        ):
+            detail_json = json.dumps(
+                {
+                    "found": found,
+                    "source": source,
+                    "curiosity": float(curiosity),
+                    "qi_line": qi_line,
+                    "sandbox": str(root),
+                },
+                ensure_ascii=False,
+            )
+
         action_id = await self.db.insert_action(
             "explore",
             summary,
@@ -307,6 +327,7 @@ class ExploreAction:
             outcome=outcome,
             emotion_context=emotion_ctx,
             season=season,
+            detail_json=detail_json,
             now=now,
         )
 
