@@ -126,6 +126,7 @@ def action_intentions(
     open_loop_count: int = 0,
     sensing_uptime_seconds: float | None = None,
     energy: float | None = None,
+    pressure: object | None = None,
 ) -> list[ActionIntention]:
     """
     返回本拍可考虑的行动意图（倾向，非硬触发）。
@@ -196,6 +197,13 @@ def action_intentions(
         ):
             pri = (0.35 + (curiosity - 0.65) * 0.8) * scale
             pri *= budget.weight_for(KIND_EXPLORE)
+            # N3：pressure 弱调制候选 priority（弱于 drift 触发调制）
+            if pressure is not None:
+                throttle = max(
+                    0.0,
+                    min(1.0, float(getattr(pressure, "throttle", 0.0) or 0.0)),
+                )
+                pri *= 1.0 - 0.3 * throttle
             out.append(
                 ActionIntention(
                     kind=KIND_EXPLORE,

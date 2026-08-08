@@ -37,6 +37,10 @@ _SEASON_ZH = {
     "winter": "冬",
 }
 
+# N3：内稳态压力软调制（throttle=1 概率减半；rest=1 降 60%；force 路径下限 0.2）
+PRESSURE_THROTTLE_K = 0.5
+PRESSURE_REST_K = 0.6
+
 # 内部深读：最近 N 条记忆叙事（d-3-2）
 INTERNAL_SOURCE_LIMIT = 3
 
@@ -270,20 +274,44 @@ class ExploreAction:
         season_scale: float = 1.0,
         now: datetime | None = None,
         force: bool = False,
+        pressure: Any | None = None,
     ) -> dict | None:
         """
         返回 None 表示这拍没有飘出去（多数时候）。
         若飘出去：稀有走外部 web；否则深读自己的记忆叙事；空则 found=None。
+        pressure：N3 内稳态软调制（None 时行为与 d-3-2 一致）。
         """
         now = now or datetime.now()
+        # curiosity 硬阈：force（GWS）可跳过；压力软门两条路径都过
+        if curiosity < 0.65 and not force:
+            return None
+
         if not force:
-            # 好奇不够 → 不飘
-            if curiosity < 0.65:
-                return None
             warmth = max(0.0, (curiosity - 0.65) / 0.35)
             p = self.base_probability * max(0.0, season_scale) * (0.4 + 0.6 * warmth)
+            # N3：穷/累/不安时少走神（软调制，不归零）
+            if pressure is not None:
+                throttle = max(
+                    0.0, min(1.0, float(getattr(pressure, "throttle", 0.0) or 0.0))
+                )
+                rest = max(
+                    0.0, min(1.0, float(getattr(pressure, "rest", 0.0) or 0.0))
+                )
+                p *= 1.0 - PRESSURE_THROTTLE_K * throttle
+                p *= 1.0 - PRESSURE_REST_K * rest
             # C4 时机阀：好奇已过阈，随机仅扰动本拍是否飘出（非动机来源）
             if random.random() > p:
+                return None
+        elif pressure is not None:
+            # force=True（GWS）：仍过压力软门；throttle=rest=1 时下限 0.2
+            throttle = max(
+                0.0, min(1.0, float(getattr(pressure, "throttle", 0.0) or 0.0))
+            )
+            rest = max(0.0, min(1.0, float(getattr(pressure, "rest", 0.0) or 0.0)))
+            p_force = (1.0 - PRESSURE_THROTTLE_K * throttle) * (
+                1.0 - PRESSURE_REST_K * rest
+            )
+            if random.random() > p_force:
                 return None
 
         root = resolve_sandbox_root(self.db, self.config)

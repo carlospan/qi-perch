@@ -172,6 +172,7 @@ class ActionLayer:
         user_online: bool = True,
         scars: list[dict] | None = None,
         sensing: SensingSnapshot | None = None,
+        pressure: Any | None = None,
     ) -> dict | None:
         """
         独处一拍：至多做一个自主行动。
@@ -214,6 +215,7 @@ class ActionLayer:
             open_loop_count=open_loop_count,
             sensing_uptime_seconds=uptime,
             energy=float(emotion.energy),
+            pressure=pressure,
         )
         # tick 只跑 share/tend/explore，self_ops 留给 GWS execute_kind
         autos = [
@@ -252,6 +254,7 @@ class ActionLayer:
                 season,
                 season_scale=scale,
                 now=now,
+                pressure=pressure,
             )
             if result is not None:
                 self.budget.record("explore", now)
@@ -271,6 +274,7 @@ class ActionLayer:
         user_online: bool = True,
         scars: list[dict] | None = None,
         sensing: SensingSnapshot | None = None,
+        pressure: Any | None = None,
     ) -> dict | None:
         """GWS 分发：执行指定行动 kind，跳过 tick 内随机软门。"""
         self.last_result = None
@@ -316,6 +320,7 @@ class ActionLayer:
                 season_scale=scale,
                 now=now,
                 force=True,
+                pressure=pressure,
             )
             if result is not None:
                 self.budget.record("explore", now)

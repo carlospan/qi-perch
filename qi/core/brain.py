@@ -117,6 +117,7 @@ class Brain:
         # ActionBudget 日限 = 安全阀，不计入 C2 账本余额；两者并存，职责分离
         self.action: ActionLayer | None = None
         self.ledger = ResourceLedger()  # N0 资源账本（包 12）；压力动力学归包 13
+        self.last_pressure_response = None  # PressureResponse | None（N3：供 explore 软调制）
         self.last_sensing = None  # SensingSnapshot | None（包 8）
         self.world = WorldModel()
         self.last_world = None  # dict | None（包 9：世界模型旁路快照）
@@ -614,6 +615,7 @@ class Brain:
             resp = compute_pressure(
                 self.ledger, self.emotion, sensitivity=sens
             )
+            self.last_pressure_response = resp  # N3：供 ActionLayer / volition 读
             if resp.throttle > 0.3:
                 logger.debug(
                     "内稳态节流倾向 throttle=%.2f energy=%.2f",
@@ -854,6 +856,7 @@ class Brain:
                     mode=self.emotion.mode.value,
                     user_online=self.user_online,
                     scars=scars,
+                    pressure=self.last_pressure_response,
                 )
                 if action_result is not None:
                     acted = True
@@ -945,6 +948,7 @@ class Brain:
                         user_online=self.user_online,
                         scars=scars,
                         sensing=self.last_sensing,
+                        pressure=self.last_pressure_response,
                     )
                     if action_result is not None:
                         await self._persist_action_budget()

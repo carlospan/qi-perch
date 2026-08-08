@@ -421,6 +421,8 @@ async def collect_contenders(
             sensing = getattr(brain, "last_sensing", None)
             if sensing is not None:
                 uptime = float(sensing.uptime_seconds)
+            # N3：内稳态压力软调制 explore 候选 priority
+            pressure = getattr(brain, "last_pressure_response", None)
             intents = action_intentions(
                 mode=brain.emotion.mode.value,
                 relationship_stage=brain.relationship_stage,
@@ -438,6 +440,7 @@ async def collect_contenders(
                 open_loop_count=open_loop_n,
                 sensing_uptime_seconds=uptime,
                 energy=float(brain.emotion.energy),
+                pressure=pressure,
             )
             for it in intents:
                 if it.kind == "assist":
