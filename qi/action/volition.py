@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -49,12 +50,47 @@ class ActionIntention:
     reason: str = ""
 
 
+@dataclass(frozen=True)
+class AssistRequest:
+    """感知层从用户消息提取的协助请求（assist-2）。"""
+
+    op: str
+    target_path: str
+
+
+# 文件路径：Windows 绝对 / ~/Home（须先于 POSIX，避免 ~/x 被咬成 /x）/ POSIX / 相对扩展名
+_PATH_PATTERNS = [
+    re.compile(r"([A-Za-z]:[\\/][^\s'\"，。、]+)"),
+    re.compile(r"(~[\\/][^\s'\"，。、]+)"),
+    re.compile(r"(/(?:[^\s'\"，。、/]+/)*[^\s'\"，。、/]+)"),
+    re.compile(r"([\w./-]+\.(?:txt|md|json|csv|log|py|js|ts))", re.I),
+]
+
+_OP_CUES_READ = ("读", "看", "打开", "瞧", "瞄", "查")
+
+
 def looks_like_help_request(message: str | None) -> bool:
     """粗检：用户是否在明确开口请求帮忙。误报宁可少，不可主动塞建议。"""
     text = (message or "").strip()
     if not text:
         return False
     return any(cue in text for cue in _HELP_REQUEST_CUES)
+
+
+def parse_assist_request(message: str | None) -> AssistRequest | None:
+    """从用户消息提取协助请求。无路径或无 op cue 返回 None。"""
+    text = (message or "").strip()
+    if not text:
+        return None
+    if not any(cue in text for cue in _OP_CUES_READ):
+        return None
+    for pattern in _PATH_PATTERNS:
+        m = pattern.search(text)
+        if m:
+            path = m.group(1).strip("'\"，。、")
+            path = path.replace("\\", "/")
+            return AssistRequest(op="read_file", target_path=path)
+    return None
 
 
 def _append_self_ops(
@@ -134,21 +170,20 @@ def action_intentions(
 
     - share / tend / explore：独处气质（solitary/ambient）；占 ActionBudget。
     - archive / budget_tune / journal：自反，awake 亦可（补丁 C）。
-    - assist：仅当用户明确请求才候选；不占自主预算；本阶段不执行（桩）。
+    - assist：仅当用户明确请求才候选；不占自主预算；执行由 GWS→execute_kind（assist-1/2）。
     """
     if not user_online or mode == "dreaming":
         return []
 
     out: list[ActionIntention] = []
 
-    # --- assist 桩：仅响应式，绝不主动（contract 第 25 条）---
-    # 本阶段只形成意图候选，不接任何执行路径。
+    # --- assist：仅响应式，绝不主动（contract 第 25 条）---
     if looks_like_help_request(user_message):
         out.append(
             ActionIntention(
                 kind=KIND_ASSIST,
                 priority=0.85,
-                reason="用户明确请求帮忙（仅响应式，不执行）",
+                reason="用户明确请求帮忙（仅响应式）",
             )
         )
 

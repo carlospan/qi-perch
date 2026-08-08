@@ -27,8 +27,10 @@ from qi.action.share import ShareAction
 from qi.action.tend import TendAction
 from qi.action.volition import (
     ActionIntention,
+    AssistRequest,
     action_intentions,
     looks_like_help_request,
+    parse_assist_request,
 )
 
 __all__ = [
@@ -39,6 +41,7 @@ __all__ = [
     "ActionIntention",
     "ActionLayer",
     "AssistAction",
+    "AssistRequest",
     "ExploreAction",
     "SelfOps",
     "ShareAction",
@@ -55,5 +58,6 @@ __all__ = [
     "can_write_user_file",
     "looks_like_help_request",
     "outcome_creates_scar",
+    "parse_assist_request",
     "resolve_season_scale",
 ]

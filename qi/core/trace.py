@@ -430,7 +430,7 @@ async def collect_contenders(
                 valence=float(brain.emotion.valence),
                 has_undelivered_creation=undelivered is not None,
                 tend_occasion=tend_occasion,
-                user_message=None,
+                user_message=getattr(brain, "last_user_message", None),
                 budget=brain.action.budget,
                 now=now,
                 season_scale=scale,
@@ -442,9 +442,8 @@ async def collect_contenders(
                 energy=float(brain.emotion.energy),
                 pressure=pressure,
             )
+            # B1：assist 放行进 GWS（响应式候选；assist-1 已接执行骨架）
             for it in intents:
-                if it.kind == "assist":
-                    continue
                 candidates.append(
                     Contender(
                         kind=f"action:{it.kind}",

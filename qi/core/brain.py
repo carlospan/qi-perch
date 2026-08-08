@@ -119,6 +119,8 @@ class Brain:
         self.ledger = ResourceLedger()  # N0 资源账本（包 12）；压力动力学归包 13
         self.last_pressure_response = None  # PressureResponse | None（N3：供 explore 软调制）
         self.last_sensing = None  # SensingSnapshot | None（包 8）
+        self.last_user_message: str | None = None  # assist-2：供 trace / 感知
+        self.last_assist_request = None  # AssistRequest | None（assist-2）
         self.world = WorldModel()
         self.last_world = None  # dict | None（包 9：世界模型旁路快照）
         # 包 14：优雅停钩子（库内不 sys.exit；CLI 可注入）
@@ -949,6 +951,14 @@ class Brain:
                         trust = float(
                             getattr(self.relationship.state, "trust", 0.5) or 0.5
                         )
+                    op = None
+                    target_path = None
+                    if (
+                        action_type == "assist"
+                        and self.last_assist_request is not None
+                    ):
+                        op = self.last_assist_request.op
+                        target_path = self.last_assist_request.target_path
                     action_result = await self.action.execute_kind(
                         action_type,
                         self.emotion,
@@ -961,7 +971,13 @@ class Brain:
                         sensing=self.last_sensing,
                         pressure=self.last_pressure_response,
                         trust=trust,
+                        op=op,
+                        target_path=target_path,
+                        confirmed=False,  # assist-2：恒 False，留 assist-3
                     )
+                    # B3：assist 消费一次，防 idle 反复 confirm_gate
+                    if action_type == "assist":
+                        self.last_assist_request = None
                     if action_result is not None:
                         await self._persist_action_budget()
                         await self._deliver_action_result(action_result, now)
@@ -1084,6 +1100,14 @@ class Brain:
                     dropped[:40],
                 )
             self._pending_queue.append(text)
+            self.last_user_message = text
+            try:
+                from qi.action.volition import parse_assist_request
+
+                self.last_assist_request = parse_assist_request(text)
+            except Exception:
+                logger.debug("assist_request 解析失败", exc_info=True)
+                self.last_assist_request = None
             await self._heartbeat()
             speech = self._take_pending_speech()
         if self.in_stasis and speech is None:
