@@ -8,12 +8,15 @@
 
 > **本文档状态：Step 1–6 已落地（actions / budget / volition / permission / share / tend / explore 气质 / ActionLayer / brain 接线）。**
 > 六层（L1~L6）已完成。L7 行动层骨架与起手能力已接入心跳。
-> explore：内部深读（d-3-2，读记忆叙事 + LLM digest + speak + 见闻卡）+ 外部联网（d-1）已收口；d-2 外部 hits 消化 + d-3-1 见闻卡片已收口。C 方案工程交付完成，相处复验中。assist / irreversible 文件未建。
+> explore：内部深读（d-3-2，读记忆叙事 + LLM digest + speak + 见闻卡）+ 外部联网（d-1）已收口；d-2 外部 hits 消化 + d-3-1 见闻卡片已收口。C 方案工程交付完成，相处复验中。assist 三包已落地（`qi/action/assist.py`）；irreversible 未做。
 > <!-- 演进指向(2026-08-01)：行动框架（预算/门控）保留；方向为 N1 执行器真实化（真读、有后果）与 N3 动机驱动（学习进度/内稳态压力替代随机意向）。见 docs/explanation/栖·数字生命架构方案.md §四 N1/N3。 -->
 > <!-- 演进指向(2026-08-08)：包 10 curiosity 候选注入回退（空赢仲裁堵死自主行动，已解；见解堵包）。 -->
 > <!-- 演进指向(2026-08-08)：explore 真搜索 C 方案 d-1~d-3-2 工程已交付（外部 Tavily + digest；内部 narratives 深读；ExploreCard）；相处复验中。assist / irreversible 仍待做。 -->
 > <!-- 演进指向(2026-08-08)：explore C 方案收尾——d-2 外部 hits→digest；d-3-1 见闻卡片（web）；d-3-2 内部 narratives→digest + speak + 见闻卡（journal）；工程交付完成，相处复验中。 -->
-> Step 5：actions + narrative 已接；self_model 喂入与伤疤 `save_scar` **尚未接线**。
+> <!-- 演进指向(2026-08-09)：explore 补 N3 动机接线——pressure 软调制 explore 概率（常量 K=0.5/0.6），force 下限 0.2。 -->
+> <!-- 演进指向(2026-08-09)：伤疤失败接线——layer._maybe_save_scar；severity 0.3/0.7；origin `[action:{kind}]`；骨架触发源待 assist/irreversible 真实产出。 -->
+> <!-- 演进指向(2026-08-09)：第 4 顺位 assist——assist-1 骨架（execute_kind + confirm_gate + consciousness digest）+ assist-2 感知（parse_assist_request 路径提取）+ assist-3 跨轮确认（pending_assist_confirmation + 前端 AssistConfirmCard.vue + 超时清理）；irreversible 未做。 -->
+> Step 5：actions + narrative 已接；伤疤 `save_scar` **已接骨架**（`layer._maybe_save_scar`）；self_model 喂入尚未接线。触发源待 assist/irreversible 真实产出（现 outcome 都 SUCCESS）。
 > 已落地处见各段 `<!-- 回写 -->`。
 
 ---
@@ -77,11 +80,13 @@ qi/action/share.py           # 分享创造（起手式；接 L4 creations）
 qi/action/tend.py            # 打理自己的世界
 qi/action/explore.py         # 沉思式探索（d-3-2 深读记忆叙事 + d-1 外部分支）
 qi/action/explore_web.py     # 外部 WebSearchClient（Tavily；失败/空→None）
+qi/action/assist.py          # 介入你的生活（已建：骨架 + 感知 + 跨轮确认）
+qi/action/irreversible.py    # 替你影响世界（未建）
 qi/action/self_ops.py        # 自反操作（归档/调预算/日记等，阶段二）
 qi/storage/database.py       # actions 表（行动留痕）
 ```
 
-> `assist`（介入你的生活）与 `irreversible`（替你影响世界）暂不建文件，待第 4、5 顺位能力规划时再补。本提案先把第 1~3 顺位的骨架立住；`self_ops` 属自反闭环，不是 assist。
+> `assist.py` 已建（第 4 顺位三包）；`irreversible.py` 仍未建。`self_ops` 属自反闭环，不是 assist。
 
 ## 实现步骤
 
@@ -269,7 +274,8 @@ class ExploreAction:
 #    - 能力失败（failed_capability）：老实说，不形成伤疤。
 #    - 判断失败（failed_judgment）：形成伤疤 → db.save_scar。
 #    - 权限越界（overstepped）：严重伤疤。
-#    规则与 outcome_creates_scar 已在 permission.py；【实际 save_scar 接线待后续】。
+#    规则与 outcome_creates_scar 已在 permission.py；【已接骨架】layer._maybe_save_scar
+#    调 db.save_scar；触发源待 assist/irreversible 真实产出（现 outcome 都 SUCCESS）。
 #    permission.scar_blocks_kind 可在有伤疤后把手缩回。
 ```
 
