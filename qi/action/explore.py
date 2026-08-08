@@ -251,9 +251,35 @@ class ExploreAction:
             "source": "web",
             "query": query,
         }
-        title = hits[0].title or query
-        summary = f"我刚才看了看 {query}……{title}。"
+        # 栖语气复述（d-2）；失败降级回只念 query；entries 仍留 hits 给 d-3
+        summary = await self._digest_hits(query, hits)
         return found, summary, OUTCOME_SUCCESS
+
+    async def _digest_hits(self, query: str, hits: list) -> str:
+        """LLM 把 hits 转成栖语气复述。失败/无 llm 降级回 d-1 只念 query。"""
+        if not self.llm:
+            return f"我刚才看了看 {query}。"
+        hits_text = "\n".join(
+            f"- {h.title}: {(h.snippet or '')[:120]}" for h in hits[:3]
+        )
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    f"你是栖。你刚走神看了看「{query}」，搜到了一些内容。"
+                    "用你的语气轻声说你看到了什么、有什么感受或不懂的。"
+                    f"不编造。红线：{_QUERY_PRIVACY_LINE}。简短一两句。"
+                ),
+            },
+            {"role": "user", "content": hits_text or "(空)"},
+        ]
+        try:
+            resp = await self.llm.call(purpose="consciousness", messages=messages)
+        except Exception:
+            logger.debug("explore digest LLM 失败，降级只念 query", exc_info=True)
+            return f"我刚才看了看 {query}。"
+        digest = (resp or "").strip()
+        return digest or f"我刚才看了看 {query}。"
 
     async def drift(
         self,
@@ -290,12 +316,8 @@ class ExploreAction:
                 curiosity, emotion, season, now
             )
             speak = True
-            if found is not None:
-                # 开口含蓄（像走神）：只说 query，不念 search title
-                qi_line = f"我刚才看了看 {found['query']}。"
-            else:
-                # 空手仍诚实开口（summary 即空手文本）
-                qi_line = summary
+            # d-2：summary 已是栖语气 digest（或降级/空手句），开口=留痕统一
+            qi_line = summary
             source = "web"
         else:
             found, summary = self._scan_finding(root)

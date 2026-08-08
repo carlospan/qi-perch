@@ -20,15 +20,22 @@ from qi.storage.database import Database
 
 
 class _FakeLLM:
-    def __init__(self, text: str = "枝上那只鸟在想什么") -> None:
-        self.text = text
+    """N2-a：可按调用序返回；传 str 则每次同值（兼容旧测）。"""
+
+    def __init__(self, texts: list[str] | str = "枝上那只鸟在想什么") -> None:
+        self._texts = [texts] if isinstance(texts, str) else list(texts)
+        self.text = self._texts[0] if self._texts else ""
         self.calls: list[dict] = []
 
     async def call(self, purpose: str, messages: list[dict], temperature=None) -> str:
         self.calls.append(
             {"purpose": purpose, "messages": messages, "temperature": temperature}
         )
-        return self.text
+        if not self._texts:
+            return ""
+        if len(self._texts) > 1:
+            return self._texts.pop(0)
+        return self._texts[0]
 
 
 def _cfg(*, enabled: bool = True, cooldown_hours: float = 6.0) -> dict:
@@ -105,7 +112,9 @@ async def test_curiosity_below_08_stays_internal(db, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_external_when_gates_pass(db):
-    llm = _FakeLLM()
+    query = "枝上那只鸟在想什么"
+    digest = "好像有只很小的鸟，停在光里。"
+    llm = _FakeLLM([query, digest])
     explore = ExploreAction(
         db, config=_cfg(cooldown_hours=0), llm=llm, web=_web_ok(), base_probability=1.0
     )
@@ -116,16 +125,20 @@ async def test_external_when_gates_pass(db):
     assert result is not None
     assert result["source"] == "web"
     assert result["speak"] is True
-    query = llm.text
-    assert result["qi_line"] == f"我刚才看了看 {query}。"
+    # N2-b：两次 consciousness；开口=留痕=digest；title 只在 entries
+    assert len(llm.calls) == 2
+    assert all(c["purpose"] == "consciousness" for c in llm.calls)
+    assert result["qi_line"] == digest
+    assert result["summary"] == digest
     assert "窗边的鸟" not in result["qi_line"]
-    assert "窗边的鸟" in result["summary"]
+    assert "窗边的鸟" not in result["summary"]
     assert result["found"] is not None
-    assert llm.calls and llm.calls[0]["purpose"] == "consciousness"
-    joined = " ".join(
-        str(m.get("content") or "") for m in llm.calls[0]["messages"]
+    assert result["found"]["entries"][0]["title"] == "窗边的鸟"
+    assert result["found"]["query"] == query
+    digest_joined = " ".join(
+        str(m.get("content") or "") for m in llm.calls[1]["messages"]
     )
-    assert "不引用 user_facts / 对话内容" in joined
+    assert "不引用 user_facts / 对话内容" in digest_joined
 
 
 @pytest.mark.asyncio
@@ -224,7 +237,8 @@ async def test_force_still_respects_external_probability(db):
 
 @pytest.mark.asyncio
 async def test_non_force_internal_gate_then_external(db):
-    llm = _FakeLLM()
+    digest = "看懂了一点窗外的光。"
+    llm = _FakeLLM(["窗外问句", digest])
     explore = ExploreAction(
         db, config=_cfg(cooldown_hours=0), llm=llm, web=_web_ok(), base_probability=1.0
     )
@@ -236,6 +250,7 @@ async def test_non_force_internal_gate_then_external(db):
     assert result is not None
     assert result["source"] == "web"
     assert result["speak"] is True
+    assert result["qi_line"] == result["summary"] == digest
 
 
 @pytest.mark.asyncio
