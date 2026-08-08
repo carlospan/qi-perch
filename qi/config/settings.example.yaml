@@ -85,6 +85,16 @@ action:
     summer: 0.8
     autumn: 0.5
     winter: 0.2
+  # explore 外部联网（d-1）：默认关；配齐 key 后本机 settings 开 enabled
+  # 不设独立 external daily_limit——复用 ActionBudget 日限 20；
+  # 外部稀有靠 curiosity≥0.8 + 冷却6h + 概率0.05
+  explore_external:
+    enabled: false
+    provider: tavily
+    api_key: "${TAVILY_API_KEY}"
+    cooldown_hours: 6
+    probability: 0.05
+
 
 # 关系
 relationship:

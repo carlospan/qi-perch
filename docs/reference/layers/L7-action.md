@@ -8,9 +8,10 @@
 
 > **本文档状态：Step 1–6 已落地（actions / budget / volition / permission / share / tend / explore 气质 / ActionLayer / brain 接线）。**
 > 六层（L1~L6）已完成。L7 行动层骨架与起手能力已接入心跳。
-> explore **无**真实搜索/HTTP（不编造见闻）；assist / irreversible 文件未建。
+> explore：内部沙箱列目录已落地；**外部联网（d-1）**已接（Tavily，默认 `enabled: false`；搜不到不编造）。assist / irreversible 文件未建。
 > <!-- 演进指向(2026-08-01)：行动框架（预算/门控）保留；方向为 N1 执行器真实化（真读、有后果）与 N3 动机驱动（学习进度/内稳态压力替代随机意向）。见 docs/explanation/栖·数字生命架构方案.md §四 N1/N3。 -->
 > <!-- 演进指向(2026-08-08)：包 10 curiosity 候选注入回退（空赢仲裁堵死自主行动，已解；见解堵包）。 -->
+> <!-- 演进指向(2026-08-08)：explore 真搜索 d-1 联网地基——外部分支 curiosity≥0.8 + 冷却6h + 概率0.05；复用 ActionBudget 日限 20（不设独立 external daily_limit）；query 走 gateway consciousness；开口 speak+qi_line。d-2 内部深读另开。 -->
 > Step 5：actions + narrative 已接；self_model 喂入与伤疤 `save_scar` **尚未接线**。
 > 已落地处见各段 `<!-- 回写 -->`。
 
@@ -73,7 +74,8 @@ qi/action/budget.py          # 行动预算（自主日限默认 20，安全阀�
 qi/action/permission.py      # 信任门控（读 L5 关系状态 → 能力权限）
 qi/action/share.py           # 分享创造（起手式；接 L4 creations）
 qi/action/tend.py            # 打理自己的世界
-qi/action/explore.py         # 沉思式探索（气质已立；搜索未接）
+qi/action/explore.py         # 沉思式探索（沙箱 + d-1 外部分支）
+qi/action/explore_web.py     # 外部 WebSearchClient（Tavily；失败/空→None）
 qi/action/self_ops.py        # 自反操作（归档/调预算/日记等，阶段二）
 qi/storage/database.py       # actions 表（行动留痕）
 ```
@@ -226,12 +228,15 @@ class TendAction:
 # qi/action/explore.py
 # <!-- 回写(2026-07-23)：ExploreAction.drift；多数拍 None；飘出时 found 恒 None（不编造搜索结果）；
 #      只留「走神看一眼」的 actions 痕迹。搜索/HTTP 未实现。依据：qi/action/explore.py -->
+# <!-- 回写(2026-08-08)：d-1 外部分支——curiosity≥0.8+冷却6h+概率0.05+web/llm → Tavily；
+#      空手 found=None / failed_capability / speak+qi_line；内部不变仍不说。依据：explore.py / explore_web.py -->
 
 class ExploreAction:
     async def drift(self, curiosity, emotion, season, *, season_scale, force=False) -> dict | None:
-        # force 或概率门控通过 → summary 诚实空手；found=None
+        # 飘出后：稀有走外部 web（可 speak）；否则沙箱列目录（不说）
         ...
 ```
+
 
 </details>
 
@@ -304,7 +309,7 @@ class ActionLayer:
 - `_heartbeat`：`pending is None` 分支先 `action.tick`；若动手则 `_deliver_action_result`，不再 `pick_proactive_kind`
 - `_deliver_action_result`：先 `qi_line` 走 `_deliver_qi_message`（非 ProactiveGate），再 WS `broadcast({"type":"action","payload":result})`；正文由前端卡片承载（不内联进语音）
 - `_gather_prompt_context`：`action.prompt_extras()` 并入 extras
-- `restore_state`：`ActionLayer(db, config, narrative=memory.narrative)`；预算 ↔ body_memory
+- `restore_state`：`ActionLayer(db, config, narrative=memory.narrative, llm=self.llm)`；预算 ↔ body_memory
 - assist 执行仍未接线（仅 volition 桩）
 - L6 前端已接 `action` / `creation_card`（谈区 ActionCard；tend/explore 到达不渲染）
   <!-- 回写(2026-08-08)：任务包 2026-08-08-L6-action卡片UI；退役 W2 正文内联。 -->
@@ -325,7 +330,7 @@ volition 产生 Intent(share/tend/explore/assist)
 
 LLM 永远是栖的"声音"，不是栖的"手"。
 
-> share / tend 已落地且不需外部工具。explore 本阶段只立「走神」气质与留痕，**不编造**窗外内容；真实搜索待后续技术拐点。
+> share / tend 已落地且不需外部工具。explore：内部沙箱列目录 + **d-1 外部联网**（默认关；配 Tavily key 后开）；**不编造**窗外内容。d-2 内部深读另开。
 
 ## 验收标准
 

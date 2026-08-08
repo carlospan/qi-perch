@@ -2,20 +2,32 @@
 
 from __future__ import annotations
 
+import logging
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from qi.action.permission import OUTCOME_SUCCESS
+from qi.action.permission import OUTCOME_FAILED_CAPABILITY, OUTCOME_SUCCESS
 
 if TYPE_CHECKING:
+    from qi.action.explore_web import WebSearchClient
     from qi.core.emotion import EmotionState
+    from qi.llm.gateway import LLMGateway
     from qi.memory.narrative import NarrativeMemory
     from qi.storage.database import Database
 
+logger = logging.getLogger("qi.action.explore")
+
 # 多数拍不飘出去。curiosity 越高、季节越暖，越容易「看一眼」。
 EXPLORE_BASE_PROBABILITY = 0.12
+
+# 外部源：比内部更稀有（不设独立日限；复用 ActionBudget）
+EXTERNAL_CURIOSITY_MIN = 0.8
+EXTERNAL_PROBABILITY = 0.05
+EXTERNAL_COOLDOWN_HOURS = 6.0
+EXTERNAL_LAST_KEY = "explore_external_last"
+_QUERY_PRIVACY_LINE = "不引用 user_facts / 对话内容"
 
 # 沙箱扫描：限深、限条；跳过体积大的向量目录
 _SKIP_DIR_NAMES = frozenset({"chroma", ".git", "__pycache__", "node_modules"})
@@ -103,7 +115,7 @@ def _config_key_names(root: Path) -> list[str]:
 
 class ExploreAction:
     """
-    注意力偶然飘向自己的沙箱。
+    注意力偶然飘向自己的沙箱；稀有时向外面看一眼（d-1 联网）。
     红线：只陈述真实读到的条目；无内容则 found=None，绝不编造外面有什么。
     """
 
@@ -114,11 +126,134 @@ class ExploreAction:
         *,
         base_probability: float = EXPLORE_BASE_PROBABILITY,
         config: dict | None = None,
+        llm: LLMGateway | None = None,
+        web: WebSearchClient | None = None,
     ):
         self.db = db
         self.narrative = narrative
         self.base_probability = base_probability
         self.config = config or {}
+        self.llm = llm
+        self.web = web
+
+    def _external_cfg(self) -> dict:
+        raw = (self.config.get("action") or {}).get("explore_external") or {}
+        return raw if isinstance(raw, dict) else {}
+
+    async def _external_cooldown_ok(self, now: datetime) -> bool:
+        hours = float(
+            self._external_cfg().get("cooldown_hours", EXTERNAL_COOLDOWN_HOURS)
+        )
+        raw = await self.db.get_body_memory(EXTERNAL_LAST_KEY)
+        if not raw:
+            return True
+        try:
+            if isinstance(raw, dict):
+                ts = str(raw.get("at") or raw.get("timestamp") or "")
+            else:
+                ts = str(raw)
+            last = datetime.fromisoformat(ts)
+        except (TypeError, ValueError):
+            return True
+        return now - last >= timedelta(hours=max(0.0, hours))
+
+    async def _mark_external(self, now: datetime) -> None:
+        try:
+            await self.db.set_body_memory(
+                EXTERNAL_LAST_KEY,
+                {"at": now.isoformat(timespec="seconds")},
+            )
+        except Exception:
+            logger.debug("explore_external_last 落盘失败", exc_info=True)
+
+    async def _should_external(self, curiosity: float, now: datetime) -> bool:
+        # 独处由 volition solitary 候选保证，不重复判 mode
+        if self.web is None or self.llm is None:
+            return False
+        if curiosity < EXTERNAL_CURIOSITY_MIN:
+            return False
+        if not await self._external_cooldown_ok(now):
+            return False
+        p = float(self._external_cfg().get("probability", EXTERNAL_PROBABILITY))
+        if random.random() > max(0.0, min(1.0, p)):
+            return False
+        return True
+
+    async def _make_query(
+        self,
+        curiosity: float,
+        emotion: EmotionState | None,
+        season: str,
+    ) -> str:
+        """走 gateway purpose=consciousness；不污染 last_outcome。"""
+        assert self.llm is not None
+        mode = getattr(emotion, "mode", None)
+        mode_s = getattr(mode, "value", mode) if mode is not None else ""
+        valence = float(getattr(emotion, "valence", 0.0) or 0.0) if emotion else 0.0
+        system = (
+            "你在帮栖生成一句极短的、像走神时的搜索问句（给 web search 用）。"
+            "只输出问句本身，不要解释、不要引号。"
+            f"红线：{_QUERY_PRIVACY_LINE}；不要点名具体的人；不要像刷新闻头条。"
+        )
+        user = (
+            f"季节={season}；curiosity={curiosity:.2f}；"
+            f"mood_mode={mode_s}；valence={valence:.2f}。"
+            "请给一句栖此刻可能好奇的窗外问句（≤30字）。"
+        )
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        text = await self.llm.call(purpose="consciousness", messages=messages)
+        return (text or "").strip().strip("「」\"'").splitlines()[0].strip()
+
+    def _scan_finding(self, root: Path) -> tuple[dict[str, Any] | None, str]:
+        """现有内部源：列沙箱；行为与 d-1 前一致。"""
+        entries = _scan_sandbox(root)
+        key_names = _config_key_names(root) if entries or root.is_dir() else []
+        if entries:
+            found: dict[str, Any] = {
+                "entries": entries[:_MAX_ENTRIES],
+                "source": str(root),
+            }
+            if key_names:
+                found["config_keys"] = key_names
+            preview = "、".join(entries[:6])
+            if len(entries) > 6:
+                preview += "…"
+            summary = f"我看了看自己这边的架子（{root.name}/）：{preview}。"
+            return found, summary
+        summary = "我看了看自己的架子，空的。没有去查外面，也没有假装看见了什么。"
+        return None, summary
+
+    async def _fetch_external(
+        self,
+        curiosity: float,
+        emotion: EmotionState | None,
+        season: str,
+        now: datetime,
+    ) -> tuple[dict[str, Any] | None, str, str]:
+        """返回 (found, summary, outcome)。"""
+        assert self.web is not None
+        query = await self._make_query(curiosity, emotion, season)
+        await self._mark_external(now)
+        if not query:
+            summary = "我看了看外面，没查到什么。不假装看见了。"
+            return None, summary, OUTCOME_FAILED_CAPABILITY
+        hits = await self.web.search(query)
+        if not hits:
+            summary = "我看了看外面，没查到什么。不假装看见了。"
+            return None, summary, OUTCOME_FAILED_CAPABILITY
+        found = {
+            "entries": [
+                {"title": h.title, "snippet": h.snippet, "url": h.url} for h in hits
+            ],
+            "source": "web",
+            "query": query,
+        }
+        title = hits[0].title or query
+        summary = f"我刚才看了看 {query}……{title}。"
+        return found, summary, OUTCOME_SUCCESS
 
     async def drift(
         self,
@@ -132,7 +267,7 @@ class ExploreAction:
     ) -> dict | None:
         """
         返回 None 表示这拍没有飘出去（多数时候）。
-        若飘出去：真读沙箱清单；空则 found=None。
+        若飘出去：稀有走外部 web；否则真读沙箱清单；空则 found=None。
         """
         now = now or datetime.now()
         if not force:
@@ -146,23 +281,20 @@ class ExploreAction:
                 return None
 
         root = resolve_sandbox_root(self.db, self.config)
-        entries = _scan_sandbox(root)
-        key_names = _config_key_names(root) if entries or root.is_dir() else []
+        speak = False
+        qi_line: str | None = None
+        source = "sandbox"
 
-        found: dict[str, Any] | None = None
-        if entries:
-            found = {
-                "entries": entries[:_MAX_ENTRIES],
-                "source": str(root),
-            }
-            if key_names:
-                found["config_keys"] = key_names
-            preview = "、".join(entries[:6])
-            if len(entries) > 6:
-                preview += "…"
-            summary = f"我看了看自己这边的架子（{root.name}/）：{preview}。"
+        if await self._should_external(curiosity, now):
+            found, summary, outcome = await self._fetch_external(
+                curiosity, emotion, season, now
+            )
+            speak = True
+            qi_line = summary
+            source = "web"
         else:
-            summary = "我看了看自己的架子，空的。没有去查外面，也没有假装看见了什么。"
+            found, summary = self._scan_finding(root)
+            outcome = OUTCOME_SUCCESS
 
         emotion_ctx = None
         if emotion is not None and hasattr(emotion, "model_dump_json"):
@@ -172,7 +304,7 @@ class ExploreAction:
             "explore",
             summary,
             target="self",
-            outcome=OUTCOME_SUCCESS,
+            outcome=outcome,
             emotion_context=emotion_ctx,
             season=season,
             now=now,
@@ -181,12 +313,17 @@ class ExploreAction:
         # 探索见闻不强制织叙事；只留 actions 痕迹
         _ = self.narrative
 
-        return {
+        result: dict[str, Any] = {
             "type": "explore_drift",
             "found": found,
             "summary": summary,
             "action_id": action_id,
             "season": season,
             "curiosity": curiosity,
+            "source": source,
             "sandbox": str(root),
         }
+        if speak and qi_line:
+            result["speak"] = True
+            result["qi_line"] = qi_line
+        return result

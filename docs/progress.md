@@ -24,6 +24,8 @@
 
 ## 已拍板决策
 
+- **2026-08-08 · L7 explore 真搜索 d-1（联网地基）**：外部分支（Tavily；默认 `explore_external.enabled=false`）；门控 curiosity≥0.8 + 冷却 6h + 概率 0.05；**不设独立外部日限**（复用 ActionBudget 20）；query 走 gateway `purpose=consciousness`；外部结果 `speak+qi_line` 开口，搜不到 `failed_capability` 不编造；内部沙箱不变。d-2 深读另开。见 `docs/specs/tasks/2026-08-08-L7-explore真搜索-d1联网地基.md`。**contract drift 待同步**：contract「自主行动日限默认 1/天」vs 现行 20（本包不改正文）。
+
 - **2026-08-08 · Gap 2 修复：curiosity 候选回退，L7 自主行动恢复触发**：删 `trace.collect_contenders` 包 10 注入的非可执行 `kind="curiosity"` 候选（空赢 GWS → idle，堵死 share/archive/tend/explore）；curiosity 只作 motive（写回 `emotion.curiosity` + 驱动 `action:explore`）。见 `docs/specs/tasks/2026-08-08-L7-curiosity候选解堵.md` / 排查包。**真机验证（17:00+）**：curiosity 候选消失、share 恢复触发（6 天积压 8 张创作 16:58-17:02 递出）。
 
 - **2026-08-08 · 相处验证收口：L1-L6 升 ✅**：b 路径（回溯式感受读 1400 条真实对话 + 960 意识流 + 维护者 live 答五问第五项「心疼」=有过）→ 五问全过、不回炉。L1-L6 🌱→✅（完成时间 2026-08-08）；L7 仍在养（explore 真搜索 / assist / irreversible 待做 = 下一刀 d）。**R1 不破**：心疼是维护者第一人称感受记录，非栖有现象体验的证明。见 `docs/specs/tasks/2026-08-08-相处验证收口-结论.md`。

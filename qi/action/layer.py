@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from qi.action.budget import BODY_MEMORY_KEY, ActionBudget
 from qi.action.explore import ExploreAction
+from qi.action.explore_web import WebSearchClient
 from qi.action.self_ops import SelfOps
 from qi.action.share import ShareAction
 from qi.action.tend import TendAction
@@ -16,6 +17,7 @@ from qi.action.volition import action_intentions
 
 if TYPE_CHECKING:
     from qi.core.emotion import EmotionState
+    from qi.llm.gateway import LLMGateway
     from qi.memory.narrative import NarrativeMemory
     from qi.sensing import SensingSnapshot
     from qi.storage.database import Database
@@ -54,18 +56,38 @@ class ActionLayer:
         db: Database,
         config: dict | None = None,
         narrative: NarrativeMemory | None = None,
+        llm: LLMGateway | None = None,
     ):
         self.db = db
         self.config = config or {}
+        self.llm = llm
         self.budget = ActionBudget(self.config)
         self.share = ShareAction(db, narrative=narrative)
         self.tend = TendAction(db, narrative=narrative)
+        web = self._build_explore_web()
         self.explore = ExploreAction(
-            db, narrative=narrative, config=self.config
+            db,
+            narrative=narrative,
+            config=self.config,
+            web=web,
+            llm=llm,
         )
         self.self_ops = SelfOps(db)
         self.last_result: dict | None = None
         self.last_closed_loop: dict[str, Any] | None = None
+
+    def _build_explore_web(self) -> WebSearchClient | None:
+        """enabled + api_key 配齐才建；否则外部分支禁用。"""
+        ext = (self.config.get("action") or {}).get("explore_external") or {}
+        if not isinstance(ext, dict):
+            return None
+        if not ext.get("enabled"):
+            return None
+        key = str(ext.get("api_key") or "").strip()
+        if not key:
+            return None
+        provider = str(ext.get("provider") or "tavily").strip() or "tavily"
+        return WebSearchClient(provider=provider, api_key=key, config=ext)
 
     def season_scale(self, season: str) -> float:
         return resolve_season_scale(season, self.config)

@@ -1154,7 +1154,7 @@ class Brain:
         self.perception.relationship_stage = self.relationship.state.stage
         # L7：叙事注入 ShareAction；预算从 body_memory 恢复
         self.action = ActionLayer(
-            db, self.config, narrative=self.memory.narrative
+            db, self.config, narrative=self.memory.narrative, llm=self.llm
         )
         await self.action.restore_budget()
         saved_gate = await db.get_body_memory("proactive_gate")
