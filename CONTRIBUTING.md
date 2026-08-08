@@ -7,6 +7,7 @@
 - Python **3.12+**；具身前端另需 Node **18+**
 - 密钥：复制 `.env.example` → `.env`（勿提交）
 - 配置：推荐 `data/settings.yaml`（由 `settings.example.yaml` 复制）
+- **换行**：仓库用 LF（见 `.gitattributes` / `.editorconfig`）。本仓库建议 `git config core.autocrlf false`（只改本仓；勿依赖系统 `autocrlf=true`），避免 Windows 上「有 M 无 diff」假脏
 
 ## 必跑验收
 
