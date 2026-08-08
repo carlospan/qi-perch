@@ -116,8 +116,10 @@ async def test_external_when_gates_pass(db):
     assert result is not None
     assert result["source"] == "web"
     assert result["speak"] is True
-    assert result["qi_line"]
-    assert "窗边的鸟" in result["qi_line"] or "鸟" in result["summary"]
+    query = llm.text
+    assert result["qi_line"] == f"我刚才看了看 {query}。"
+    assert "窗边的鸟" not in result["qi_line"]
+    assert "窗边的鸟" in result["summary"]
     assert result["found"] is not None
     assert llm.calls and llm.calls[0]["purpose"] == "consciousness"
     joined = " ".join(

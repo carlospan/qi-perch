@@ -290,7 +290,12 @@ class ExploreAction:
                 curiosity, emotion, season, now
             )
             speak = True
-            qi_line = summary
+            if found is not None:
+                # 开口含蓄（像走神）：只说 query，不念 search title
+                qi_line = f"我刚才看了看 {found['query']}。"
+            else:
+                # 空手仍诚实开口（summary 即空手文本）
+                qi_line = summary
             source = "web"
         else:
             found, summary = self._scan_finding(root)
