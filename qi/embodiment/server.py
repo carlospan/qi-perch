@@ -14,6 +14,85 @@ WS_HOST = "127.0.0.1"
 WS_PORT = 9527
 # 桌面 /history 默认窗口（旧→新中的最近 N 条）；避免库长大后全表推送
 HISTORY_WINDOW = 200
+# 与 history 同窗回灌的创作卡片上限（按 shared_at 新→旧再裁到窗口）
+HISTORY_CARD_LIMIT = 40
+
+
+def _iso_to_ms(ts_raw: str) -> int | None:
+    from datetime import datetime
+
+    try:
+        return int(datetime.fromisoformat(ts_raw).timestamp() * 1000)
+    except ValueError:
+        return None
+
+
+def _parse_emotion_context(raw: Any) -> Any:
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, (dict, list)):
+        return raw
+    try:
+        return json.loads(str(raw))
+    except (json.JSONDecodeError, TypeError):
+        return raw
+
+
+async def build_history_creation_cards(
+    db: Any,
+    *,
+    oldest_at_ms: int | None = None,
+    limit: int = HISTORY_CARD_LIMIT,
+) -> list[dict]:
+    """从已递出 creations 拼 creation_card 列表（旧→新），供 /history 回灌谈区。"""
+    try:
+        rows = await db.list_recent_shared_creations(limit=limit)
+    except Exception:
+        logger.exception("拉取已分享创作失败")
+        return []
+
+    season_by_ts: dict[str, str] = {}
+    action_id_by_ts: dict[str, int] = {}
+    try:
+        for a in await db.list_recent_actions(limit=max(limit * 2, 80)):
+            if a.get("kind") != "share":
+                continue
+            ts = str(a.get("timestamp") or "")
+            if not ts:
+                continue
+            if a.get("season"):
+                season_by_ts[ts] = str(a["season"])
+            if a.get("id") is not None:
+                action_id_by_ts[ts] = int(a["id"])
+    except Exception:
+        logger.debug("拉取 share actions 供卡片季节对齐失败", exc_info=True)
+
+    cards: list[dict] = []
+    for r in rows:
+        content = (r.get("content") or "").strip()
+        if not content:
+            continue
+        ts_raw = str(r.get("shared_at") or "")
+        at_ms = _iso_to_ms(ts_raw)
+        if at_ms is None:
+            continue
+        if oldest_at_ms is not None and at_ms < oldest_at_ms:
+            continue
+        card = {
+            "type": "creation_card",
+            "creation_id": int(r["id"]),
+            "creation_type": str(r.get("type") or "note"),
+            "content": content,
+            "emotion_context": _parse_emotion_context(r.get("emotion_context")),
+            "action_id": action_id_by_ts.get(ts_raw, 0),
+            "at": at_ms,
+        }
+        season = season_by_ts.get(ts_raw)
+        if season:
+            card["season"] = season
+        cards.append(card)
+    cards.reverse()  # 库查新→旧；谈区时间轴要旧→新
+    return cards
 
 # 仅允许 loopback 绑定；配置里写 0.0.0.0 等会强制回退
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -235,9 +314,7 @@ class EmbodimentServer:
                     await self.broadcast(self._state_packet())
 
     async def _send_history(self, websocket: Any | None) -> None:
-        """把最近 HISTORY_WINDOW 条对话推给请求方（本机单用户；无 websocket 则广播）。"""
-        from datetime import datetime
-
+        """把最近 HISTORY_WINDOW 条对话 + 同窗创作卡推给请求方（本机单用户；无 websocket 则广播）。"""
         db = getattr(self.brain, "_db", None)
         rows: list[dict] = []
         if db is not None:
@@ -251,9 +328,8 @@ class EmbodimentServer:
             role = r.get("role")
             ui_role = "me" if role == "user" else "qi"
             ts_raw = str(r.get("timestamp") or "")
-            try:
-                at_ms = int(datetime.fromisoformat(ts_raw).timestamp() * 1000)
-            except ValueError:
+            at_ms = _iso_to_ms(ts_raw)
+            if at_ms is None:
                 at_ms = int(time.time() * 1000)
             text = (r.get("content") or "").strip()
             if not text:
@@ -268,7 +344,15 @@ class EmbodimentServer:
                 }
             )
 
-        packet = {"type": "history", "payload": {"messages": messages}}
+        cards: list[dict] = []
+        if db is not None:
+            oldest = messages[0]["at"] if messages else None
+            cards = await build_history_creation_cards(db, oldest_at_ms=oldest)
+
+        packet = {
+            "type": "history",
+            "payload": {"messages": messages, "cards": cards},
+        }
         raw = json.dumps(packet, ensure_ascii=False)
         if websocket is not None:
             try:

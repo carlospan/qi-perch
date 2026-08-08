@@ -84,7 +84,7 @@ class ShareAction:
         # C4 表达层：话术选型，不是动机来源
         line = qi_line or random.choice(_QI_LINES)
 
-        await self.db.mark_creation_shared(creation_id)
+        await self.db.mark_creation_shared(creation_id, now=now)
 
         summary = f"我把一段创作递给他了。{line}"
         action_id = await self.db.insert_action(

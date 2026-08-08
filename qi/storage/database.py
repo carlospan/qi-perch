@@ -981,16 +981,34 @@ class Database:
             row = await cursor.fetchone()
         return dict(row) if row else None
 
-    async def mark_creation_shared(self, creation_id: int) -> None:
+    async def mark_creation_shared(
+        self, creation_id: int, *, now: datetime | None = None
+    ) -> None:
         """真正递出（L7 share.deliver）：写 shared=1 与 shared_at。"""
+        when = now or datetime.now()
         conn = self._require_conn()
         await conn.execute(
             """
             UPDATE creations SET shared = 1, shared_at = ? WHERE id = ?
             """,
-            (datetime.now().isoformat(timespec="seconds"), creation_id),
+            (when.isoformat(timespec="seconds"), creation_id),
         )
         await conn.commit()
+
+    async def list_recent_shared_creations(self, limit: int = 40) -> list[dict]:
+        """最近真正递出的创作（shared=1），新→旧；供桌面 /history 回灌卡片。"""
+        conn = self._require_conn()
+        async with conn.execute(
+            """
+            SELECT * FROM creations
+            WHERE shared = 1 AND shared_at IS NOT NULL
+            ORDER BY shared_at DESC, id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
 
     async def mark_creation_mentioned(
         self, creation_id: int, now: datetime | None = None

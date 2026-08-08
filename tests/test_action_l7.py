@@ -294,6 +294,40 @@ async def test_deliver_excludes_from_unshared_and_traces(db):
         is None
     )
 
+    shared = await db.list_recent_shared_creations(10)
+    assert len(shared) == 1
+    assert int(shared[0]["id"]) == crid
+    assert shared[0]["shared_at"] == now.isoformat(timespec="seconds")
+
+
+@pytest.mark.asyncio
+async def test_history_creation_cards_hydrate_shared(db):
+    """重启谈区：/history 附带已分享创作卡（与 share action 时间对齐季节）。"""
+    from qi.action.share import ShareAction
+    from qi.core.emotion import EmotionState
+    from qi.embodiment.server import build_history_creation_cards
+
+    crid = await db.save_creation("重启后还在", "note", '{"valence": 0.1}')
+    budget = ActionBudget({"action": {"autonomous_daily_limit": 3}})
+    now = datetime(2026, 8, 9, 0, 10)
+    card = await ShareAction(db, narrative=None).try_share(
+        EmotionState(), "friend", budget, season="summer", now=now
+    )
+    assert card is not None
+
+    hydrated = await build_history_creation_cards(db, oldest_at_ms=None)
+    assert len(hydrated) == 1
+    assert hydrated[0]["type"] == "creation_card"
+    assert hydrated[0]["creation_id"] == crid
+    assert hydrated[0]["content"] == "重启后还在"
+    assert hydrated[0]["season"] == "summer"
+    assert hydrated[0]["action_id"] == card["action_id"]
+    assert isinstance(hydrated[0]["at"], int)
+
+    # 窗口裁剪：比 shared_at 更晚的 oldest 应滤掉
+    too_new = hydrated[0]["at"] + 1
+    assert await build_history_creation_cards(db, oldest_at_ms=too_new) == []
+
 
 @pytest.mark.asyncio
 async def test_explore_never_fabricates_found(db):

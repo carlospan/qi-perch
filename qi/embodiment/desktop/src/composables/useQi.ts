@@ -83,7 +83,7 @@ function createQi() {
 
   /** 对话历史（启动后由 /history 灌入） */
   const talk = ref<TalkMessage[]>([]);
-  /** share 创作卡片（会话瞬时，不随 /history 回灌） */
+  /** 谈区卡片：创作卡随 /history.cards 回灌；见闻卡仍为会话瞬时 */
   const cards = ref<TalkCardItem[]>([]);
   const historyLoaded = ref(false);
   /** 内在日记（启动后由 /journal 灌入；库空则保持空） */
@@ -96,15 +96,41 @@ function createQi() {
     return emotion.value.mode || avatar.value.posture || "awake";
   });
 
-  function appendCard(card: CreationCard | ExploreCard) {
+  function appendCard(card: CreationCard | ExploreCard, at?: number) {
     const key = cardKey(card);
     if (cards.value.some((c) => cardKey(c.card) === key)) return;
     cards.value.push({
       id: uid("card"),
       kind: "card",
       card,
-      at: Date.now(),
+      at: typeof at === "number" ? at : Date.now(),
     });
+  }
+
+  function applyHistoryCards(raw: Array<CreationCard & { at?: number }>) {
+    const explores = cards.value.filter((c) => c.card.type === "explore_drift");
+    const hydrated: TalkCardItem[] = [];
+    for (const row of raw ?? []) {
+      if (row?.type !== "creation_card" || !row.content?.trim()) continue;
+      const card: CreationCard = {
+        type: "creation_card",
+        creation_id: Number(row.creation_id),
+        creation_type: String(row.creation_type || "note"),
+        content: String(row.content).trim(),
+        emotion_context: row.emotion_context,
+        qi_line: row.qi_line,
+        action_id: Number(row.action_id) || 0,
+        season: row.season,
+      };
+      if (!Number.isFinite(card.creation_id)) continue;
+      hydrated.push({
+        id: uid("card"),
+        kind: "card",
+        card,
+        at: typeof row.at === "number" ? row.at : Date.now(),
+      });
+    }
+    cards.value = [...hydrated, ...explores];
   }
 
   const talkByDay = computed<TalkDayGroup[]>(() => {
@@ -300,9 +326,16 @@ function createQi() {
       qiWs.on("audio", (payload: { data: string; mime?: string }) => {
         playAudio(payload.data, payload.mime);
       });
-      qiWs.on("history", (payload: { messages?: TalkMessage[] }) => {
-        applyHistory(payload?.messages ?? []);
-      });
+      qiWs.on(
+        "history",
+        (payload: {
+          messages?: TalkMessage[];
+          cards?: Array<CreationCard & { at?: number }>;
+        }) => {
+          applyHistory(payload?.messages ?? []);
+          applyHistoryCards(payload?.cards ?? []);
+        }
+      );
       qiWs.on("journal", (payload: { entries?: JournalEntry[] }) => {
         applyJournal(payload?.entries ?? []);
       });

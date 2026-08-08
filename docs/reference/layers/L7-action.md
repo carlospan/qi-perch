@@ -315,8 +315,10 @@ class ActionLayer:
 - `restore_state`：`ActionLayer(db, config, narrative=memory.narrative, llm=self.llm)`；预算 ↔ body_memory
 - assist 执行仍未接线（仅 volition 桩）
 - L6 前端已接 `action`：`creation_card` → ActionCard；`explore_drift`（`source=web|journal` 且 entries 非空）→ ExploreCard；tend 到达不渲染
+- `/history.cards`：已分享创作卡按 `shared_at` 回灌谈区（见闻卡仍会话瞬时）
   <!-- 回写(2026-08-08)：任务包 2026-08-08-L6-action卡片UI；退役 W2 正文内联。 -->
   <!-- 回写(2026-08-08)：d-3-1/d-3-2 见闻卡——ExploreCard；useQi 门控 web||journal。 -->
+  <!-- 回写(2026-08-09)：创作卡随 history 回灌，补退役内联后的重启缺口。 -->
 
 </details>
 

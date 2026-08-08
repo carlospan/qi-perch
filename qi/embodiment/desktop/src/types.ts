@@ -95,7 +95,14 @@ export type ServerMessage =
   | { type: "emotion_update"; payload: EmotionSnapshot }
   | { type: "ping"; payload: { ts: number } }
   | { type: "audio"; payload: { data: string; mime?: string } }
-  | { type: "history"; payload: { messages: TalkMessage[] } }
+  | {
+      type: "history";
+      payload: {
+        messages: TalkMessage[];
+        /** 已分享创作卡回灌（可选；旧后端无此字段） */
+        cards?: Array<CreationCard & { at?: number }>;
+      };
+    }
   | { type: "journal"; payload: { entries: JournalEntry[] } }
   | { type: "journal_entry"; payload: JournalEntry }
   | { type: "wake_result"; payload: { ok: boolean; reason?: string; mode?: string } }
