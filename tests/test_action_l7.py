@@ -302,18 +302,23 @@ async def test_explore_never_fabricates_found(db):
 
     explore = ExploreAction(db, base_probability=1.0)
     emotion = EmotionState(curiosity=0.9)
-    # force=True 必飘；只陈述沙箱实见，不得编造「远方」见闻
+    # force=True 必飘；内部 journal，不得编造「远方」见闻
     result = await explore.drift(
         0.9, emotion, "spring", season_scale=1.0, force=True
     )
     assert result is not None
+    assert result["source"] == "journal"
+    assert result["speak"] is True
+    assert result["qi_line"] == result["summary"]
     assert "远方" not in result["summary"]
     assert "假装看见" not in result["summary"]
     if result["found"] is None:
-        assert "没有" in result["summary"] or "空" in result["summary"]
+        assert "没有" in result["summary"]
     else:
+        assert result["found"].get("source") == "journal"
         assert "entries" in result["found"]
-        assert any("qi.db" in e for e in result["found"]["entries"])
+        for e in result["found"]["entries"]:
+            assert isinstance(e, dict) and "title" in e
     actions = await db.list_recent_actions(1)
     assert actions[0]["kind"] == "explore"
     assert actions[0]["target"] == "self"

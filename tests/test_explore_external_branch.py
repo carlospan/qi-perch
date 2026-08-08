@@ -77,24 +77,12 @@ def _web_empty() -> WebSearchClient:
 
 
 @pytest.mark.asyncio
-async def test_curiosity_below_08_stays_internal(db, tmp_path: Path):
-    sandbox = tmp_path / "box"
-    sandbox.mkdir()
-    (sandbox / "a.txt").write_text("x", encoding="utf-8")
+async def test_curiosity_below_08_stays_internal(db):
+    """curiosity<0.8 → 不走外部；内部 journal（fresh db 无记忆）。"""
     llm = _FakeLLM()
     explore = ExploreAction(
         db,
-        config={
-            "action": {
-                "sandbox": str(sandbox),
-                "explore_external": {
-                    "enabled": True,
-                    "api_key": "k",
-                    "probability": 1.0,
-                    "cooldown_hours": 0,
-                },
-            }
-        },
+        config=_cfg(cooldown_hours=0),
         llm=llm,
         web=_web_ok(),
         base_probability=1.0,
@@ -104,10 +92,12 @@ async def test_curiosity_below_08_stays_internal(db, tmp_path: Path):
             0.79, EmotionState(curiosity=0.79), "spring", force=True
         )
     assert result is not None
-    assert result.get("source") == "sandbox"
-    assert "speak" not in result
+    assert result.get("source") == "journal"
+    assert result["speak"] is True
+    assert result["qi_line"] == result["summary"]
+    assert "没有" in result["summary"]
+    assert result["found"] is None
     assert llm.calls == []
-    assert result["found"] is not None
 
 
 @pytest.mark.asyncio
@@ -157,35 +147,24 @@ async def test_cooldown_blocks_external(db):
             0.95, EmotionState(curiosity=0.95), "spring", force=True, now=now
         )
     assert result is not None
-    assert result.get("source") == "sandbox"
-    assert "speak" not in result
+    assert result.get("source") == "journal"
+    assert result["speak"] is True
+    assert result["qi_line"] == result["summary"]
     assert llm.calls == []
 
 
 @pytest.mark.asyncio
-async def test_web_none_or_llm_none_internal(db, tmp_path: Path):
-    sandbox = tmp_path / "box"
-    sandbox.mkdir()
-    (sandbox / "n.txt").write_text("n", encoding="utf-8")
-    cfg = {
-        "action": {
-            "sandbox": str(sandbox),
-            "explore_external": {
-                "enabled": True,
-                "api_key": "k",
-                "probability": 1.0,
-                "cooldown_hours": 0,
-            },
-        }
-    }
+async def test_web_none_or_llm_none_internal(db):
+    cfg = _cfg(cooldown_hours=0)
     a = ExploreAction(db, config=cfg, llm=_FakeLLM(), web=None, base_probability=1.0)
     b = ExploreAction(db, config=cfg, llm=None, web=_web_ok(), base_probability=1.0)
     with patch("qi.action.explore.random.random", return_value=0.0):
         ra = await a.drift(0.95, EmotionState(curiosity=0.95), "spring", force=True)
         rb = await b.drift(0.95, EmotionState(curiosity=0.95), "spring", force=True)
     assert ra is not None and rb is not None
-    assert "speak" not in ra and "speak" not in rb
-    assert ra.get("source") == "sandbox" and rb.get("source") == "sandbox"
+    assert ra.get("source") == "journal" and rb.get("source") == "journal"
+    assert ra["speak"] is True and rb["speak"] is True
+    assert "没有" in ra["summary"] and "没有" in rb["summary"]
 
 
 @pytest.mark.asyncio
@@ -231,7 +210,8 @@ async def test_force_still_respects_external_probability(db):
             0.95, EmotionState(curiosity=0.95), "spring", force=True
         )
     assert result is not None
-    assert result.get("source") == "sandbox"
+    assert result.get("source") == "journal"
+    assert result["speak"] is True
     assert llm.calls == []
 
 
@@ -280,20 +260,15 @@ async def test_action_layer_passes_llm_and_builds_web(db):
 
 
 @pytest.mark.asyncio
-async def test_internal_success_outcome_unchanged(db, tmp_path: Path):
-    sandbox = tmp_path / "box"
-    sandbox.mkdir()
-    (sandbox / "z.txt").write_text("z", encoding="utf-8")
-    explore = ExploreAction(
-        db,
-        config={"action": {"sandbox": str(sandbox)}},
-        base_probability=1.0,
-    )
+async def test_internal_success_outcome_unchanged(db):
+    explore = ExploreAction(db, base_probability=1.0)
     result = await explore.drift(
         0.9, EmotionState(curiosity=0.9), "spring", force=True
     )
     assert result is not None
-    assert "speak" not in result
+    assert result["source"] == "journal"
+    assert result["speak"] is True
+    assert result["qi_line"] == result["summary"]
     conn = db._require_conn()
     cur = await conn.execute(
         "SELECT outcome FROM actions WHERE id=?", (result["action_id"],)

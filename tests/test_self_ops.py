@@ -91,42 +91,35 @@ async def test_budget_tune_shifts_explore_priority(db):
 
 
 @pytest.mark.asyncio
-async def test_explore_reads_sandbox_entries(db):
-    root = Path(db.db_path).parent
-    marker = root / "sandbox_marker.txt"
-    marker.write_text("hello", encoding="utf-8")
+async def test_explore_reads_journal_narratives(db):
+    await db.save_narrative_memory(
+        "午后的光把影子拉长，我想起你说话时的停顿。", importance=0.6
+    )
     explore = ExploreAction(db, base_probability=1.0)
     result = await explore.drift(
         0.9, EmotionState(curiosity=0.9), "spring", force=True
     )
     assert result is not None
+    assert result["source"] == "journal"
+    assert result["speak"] is True
     assert result["found"] is not None
-    entries = result["found"]["entries"]
-    assert any("sandbox_marker.txt" in e for e in entries)
-    assert "假装" not in result["summary"] or "架子" in result["summary"]
+    assert result["found"]["source"] == "journal"
+    titles = [e["title"] for e in result["found"]["entries"]]
+    assert any("影子" in t or "停顿" in t for t in titles)
+    assert "远方" not in result["summary"]
 
 
 @pytest.mark.asyncio
-async def test_explore_empty_sandbox_found_none():
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
-        empty = Path(tmp) / "empty_sandbox"
-        empty.mkdir()
-        db_path = str(Path(tmp) / "elsewhere" / "qi.db")
-        Path(db_path).parent.mkdir(parents=True)
-        database = Database(db_path)
-        await database.initialize()
-        explore = ExploreAction(
-            database,
-            base_probability=1.0,
-            config={"action": {"sandbox": str(empty)}},
-        )
-        result = await explore.drift(
-            0.9, EmotionState(curiosity=0.9), "spring", force=True
-        )
-        assert result is not None
-        assert result["found"] is None
-        assert "空" in result["summary"] or "没有" in result["summary"]
-        await database.close()
+async def test_explore_no_narratives_found_none(db):
+    explore = ExploreAction(db, base_probability=1.0)
+    result = await explore.drift(
+        0.9, EmotionState(curiosity=0.9), "spring", force=True
+    )
+    assert result is not None
+    assert result["source"] == "journal"
+    assert result["speak"] is True
+    assert result["found"] is None
+    assert "没有" in result["summary"]
 
 
 @pytest.mark.asyncio

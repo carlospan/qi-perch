@@ -29,11 +29,8 @@ EXTERNAL_COOLDOWN_HOURS = 6.0
 EXTERNAL_LAST_KEY = "explore_external_last"
 _QUERY_PRIVACY_LINE = "不引用 user_facts / 对话内容"
 
-# 沙箱扫描：限深、限条；跳过体积大的向量目录
-_SKIP_DIR_NAMES = frozenset({"chroma", ".git", "__pycache__", "node_modules"})
-_MAX_ENTRIES = 24
-_MAX_DEPTH = 2
-_SECRET_KEY_FRAGMENTS = ("key", "token", "secret", "password", "api_key")
+# 内部深读：最近 N 条记忆叙事（d-3-2）
+INTERNAL_SOURCE_LIMIT = 3
 
 
 def resolve_sandbox_root(
@@ -51,72 +48,18 @@ def resolve_sandbox_root(
     return Path("data").resolve()
 
 
-def _scan_sandbox(root: Path) -> list[str]:
-    """列目录/文件名（限深限条）；不读文件内容。"""
-    if not root.is_dir():
-        return []
-    entries: list[str] = []
-
-    def walk(current: Path, depth: int, prefix: str) -> None:
-        if len(entries) >= _MAX_ENTRIES or depth > _MAX_DEPTH:
-            return
-        try:
-            children = sorted(current.iterdir(), key=lambda p: p.name.lower())
-        except OSError:
-            return
-        for child in children:
-            if len(entries) >= _MAX_ENTRIES:
-                return
-            name = child.name
-            rel = f"{prefix}{name}" if not prefix else f"{prefix}/{name}"
-            if child.is_dir():
-                if name.lower() in _SKIP_DIR_NAMES or name.startswith("."):
-                    entries.append(f"{rel}/")
-                    continue
-                entries.append(f"{rel}/")
-                walk(child, depth + 1, rel)
-            else:
-                entries.append(rel)
-
-    walk(root, 0, "")
-    return entries
-
-
-def _config_key_names(root: Path) -> list[str]:
-    """可选：读 settings*.yaml 的顶层键名（不读密钥值）。"""
-    keys: list[str] = []
-    for fname in ("settings.yaml", "settings.example.yaml"):
-        path = root / fname
-        if not path.is_file():
-            # 沙箱常是 data/，配置可能在上一级
-            alt = root.parent / fname
-            path = alt if alt.is_file() else path
-        if not path.is_file():
-            continue
-        try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        for line in text.splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#") or ":" not in stripped:
-                continue
-            if line[:1].isspace():
-                continue
-            key = stripped.split(":", 1)[0].strip()
-            if not key or any(f in key.lower() for f in _SECRET_KEY_FRAGMENTS):
-                continue
-            if key not in keys:
-                keys.append(key)
-            if len(keys) >= 12:
-                return keys
-    return keys
+def _clip_entry(s: str, limit: int = 40) -> str:
+    """见闻卡 title：截断叙事正文。"""
+    text = (s or "").strip().replace("\n", " ")
+    if len(text) > limit:
+        return text[:limit] + "…"
+    return text
 
 
 class ExploreAction:
     """
-    注意力偶然飘向自己的沙箱；稀有时向外面看一眼（d-1 联网）。
-    红线：只陈述真实读到的条目；无内容则 found=None，绝不编造外面有什么。
+    注意力偶然飘向自己记得的事；稀有时向外面看一眼（d-1 联网）。
+    红线：只陈述真实读到的条目；无内容则 found=None，绝不编造。
     """
 
     def __init__(
@@ -207,25 +150,6 @@ class ExploreAction:
         text = await self.llm.call(purpose="consciousness", messages=messages)
         return (text or "").strip().strip("「」\"'").splitlines()[0].strip()
 
-    def _scan_finding(self, root: Path) -> tuple[dict[str, Any] | None, str]:
-        """现有内部源：列沙箱；行为与 d-1 前一致。"""
-        entries = _scan_sandbox(root)
-        key_names = _config_key_names(root) if entries or root.is_dir() else []
-        if entries:
-            found: dict[str, Any] = {
-                "entries": entries[:_MAX_ENTRIES],
-                "source": str(root),
-            }
-            if key_names:
-                found["config_keys"] = key_names
-            preview = "、".join(entries[:6])
-            if len(entries) > 6:
-                preview += "…"
-            summary = f"我看了看自己这边的架子（{root.name}/）：{preview}。"
-            return found, summary
-        summary = "我看了看自己的架子，空的。没有去查外面，也没有假装看见了什么。"
-        return None, summary
-
     async def _fetch_external(
         self,
         curiosity: float,
@@ -281,6 +205,53 @@ class ExploreAction:
         digest = (resp or "").strip()
         return digest or f"我刚才看了看 {query}。"
 
+    async def _digest_internal(self, narratives: list[dict]) -> str:
+        """LLM 把自己记得的事转成栖语气复述。失败/无 llm 降级。"""
+        if not self.llm:
+            return "我翻了翻自己记得的事。"
+        items_text = "\n".join(
+            f"- {(n.get('content') or '')[:120]}"
+            for n in narratives[:INTERNAL_SOURCE_LIMIT]
+        )
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "你是栖。你走神翻了翻自己记得的事。"
+                    "用你的语气轻声说你想起或看懂了什么。"
+                    f"不编造。红线：{_QUERY_PRIVACY_LINE}。简短一两句。"
+                ),
+            },
+            {"role": "user", "content": items_text or "(空)"},
+        ]
+        try:
+            resp = await self.llm.call(purpose="consciousness", messages=messages)
+        except Exception:
+            logger.debug("explore internal digest LLM 失败，降级", exc_info=True)
+            return "我翻了翻自己记得的事。"
+        digest = (resp or "").strip()
+        return digest or "我翻了翻自己记得的事。"
+
+    async def _read_internal(self) -> tuple[dict[str, Any] | None, str, str]:
+        """读栖自己的记忆叙事 → digest。无源降级。返回 (found, summary, outcome)。"""
+        narratives = await self.db.list_recent_narratives(limit=INTERNAL_SOURCE_LIMIT)
+        if not narratives:
+            summary = "我翻了翻自己这边，没有记得的事。"
+            return None, summary, OUTCOME_SUCCESS
+        digest = await self._digest_internal(narratives)
+        found: dict[str, Any] = {
+            "entries": [
+                {
+                    "title": _clip_entry(str(n.get("content") or "")),
+                    "snippet": None,
+                    "url": None,
+                }
+                for n in narratives
+            ],
+            "source": "journal",
+        }
+        return found, digest, OUTCOME_SUCCESS
+
     async def drift(
         self,
         curiosity: float,
@@ -293,7 +264,7 @@ class ExploreAction:
     ) -> dict | None:
         """
         返回 None 表示这拍没有飘出去（多数时候）。
-        若飘出去：稀有走外部 web；否则真读沙箱清单；空则 found=None。
+        若飘出去：稀有走外部 web；否则深读自己的记忆叙事；空则 found=None。
         """
         now = now or datetime.now()
         if not force:
@@ -309,7 +280,7 @@ class ExploreAction:
         root = resolve_sandbox_root(self.db, self.config)
         speak = False
         qi_line: str | None = None
-        source = "sandbox"
+        source = "journal"
 
         if await self._should_external(curiosity, now):
             found, summary, outcome = await self._fetch_external(
@@ -320,8 +291,10 @@ class ExploreAction:
             qi_line = summary
             source = "web"
         else:
-            found, summary = self._scan_finding(root)
-            outcome = OUTCOME_SUCCESS
+            found, summary, outcome = await self._read_internal()
+            speak = True
+            qi_line = summary
+            source = "journal"
 
         emotion_ctx = None
         if emotion is not None and hasattr(emotion, "model_dump_json"):

@@ -321,17 +321,15 @@ function createQi() {
           return;
         }
         if (payload?.type === "explore_drift") {
-          // HITL2：仅外部；B1：须有 hits 才出卡（空手只开口、不出卡）
+          // d-3-2：web | journal；须有 entries 才出卡（空手只开口、不出卡）
           const entries = payload.found?.entries;
-          if (
-            payload.source === "web" &&
-            Array.isArray(entries) &&
-            entries.length > 0
-          ) {
+          const okSource =
+            payload.source === "web" || payload.source === "journal";
+          if (okSource && Array.isArray(entries) && entries.length > 0) {
             appendCard(payload);
           }
         }
-        // tend_mark / sandbox / 空手：到达不报错、不渲染
+        // tend_mark / 空手：到达不报错、不渲染
       });
     }
 
