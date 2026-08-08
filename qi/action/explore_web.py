@@ -46,6 +46,13 @@ class WebSearchClient:
         logger.warning("explore_web 未实现的 provider=%s", self.provider)
         return None
 
+    def _exclude_domains(self) -> list[str]:
+        """config 已是 explore_external 扁平子段（见 layer._build_explore_web）。"""
+        raw = self.config.get("exclude_domains") or []
+        if not isinstance(raw, list):
+            return []
+        return [str(d).strip().lower() for d in raw if str(d).strip()]
+
     async def _search_tavily(self, query: str, *, top_k: int) -> list[SearchHit] | None:
         payload: dict[str, Any] = {
             "api_key": self.api_key,
@@ -54,6 +61,9 @@ class WebSearchClient:
             "search_depth": "basic",
             "include_answer": False,
         }
+        exclude = self._exclude_domains()
+        if exclude:
+            payload["exclude_domains"] = exclude
         try:
             async with httpx.AsyncClient(timeout=20.0) as client:
                 resp = await client.post(_TAVILY_URL, json=payload)

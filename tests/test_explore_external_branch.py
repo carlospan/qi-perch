@@ -274,3 +274,27 @@ async def test_internal_success_outcome_unchanged(db):
         "SELECT outcome FROM actions WHERE id=?", (result["action_id"],)
     )
     assert (await cur.fetchone())[0] == OUTCOME_SUCCESS
+
+
+@pytest.mark.asyncio
+async def test_make_query_uses_chinese_season(db):
+    """_make_query 注入 prompt 的季节段为中文，不含英文码。"""
+    llm = _FakeLLM("秋天的风为什么听起来那么远")
+    explore = ExploreAction(db, llm=llm, web=_web_ok(), base_probability=1.0)
+    await explore._make_query(curiosity=0.9, emotion=None, season="autumn")
+    assert llm.calls
+    assert llm.calls[0]["purpose"] == "consciousness"
+    user_msg = llm.calls[0]["messages"][1]["content"]
+    assert "autumn" not in user_msg
+    assert "秋" in user_msg
+    assert "纯中文" in user_msg
+
+
+@pytest.mark.asyncio
+async def test_make_query_unknown_season_fallback(db):
+    """未知季节码兜底原样注入，不崩。"""
+    llm = _FakeLLM("窗外有什么")
+    explore = ExploreAction(db, llm=llm, web=_web_ok(), base_probability=1.0)
+    await explore._make_query(curiosity=0.9, emotion=None, season="unknown")
+    user_msg = llm.calls[0]["messages"][1]["content"]
+    assert "unknown" in user_msg

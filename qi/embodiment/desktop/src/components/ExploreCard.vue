@@ -6,9 +6,20 @@ const props = defineProps<{
   card: ExploreCard;
 }>();
 
+/** 与后端 explore._SEASON_ZH 同构；未知码兜底原样 */
+const SEASON_ZH: Record<string, string> = {
+  spring: "春",
+  summer: "夏",
+  autumn: "秋",
+  winter: "冬",
+};
+
 const hits = computed(() => props.card.found?.entries ?? []);
 const query = computed(() => props.card.found?.query?.trim() || "");
-const seasonLabel = computed(() => (props.card.season || "").trim());
+const seasonLabel = computed(() => {
+  const s = (props.card.season || "").trim();
+  return s ? SEASON_ZH[s] || s : "";
+});
 </script>
 
 <template>

@@ -94,6 +94,8 @@ action:
     api_key: "${TAVILY_API_KEY}"
     cooldown_hours: 6
     probability: 0.05
+    # 可选域名过滤（默认空=不改变 Tavily 现状；嫌噪声可加如 music.apple.com / mojim.com）
+    exclude_domains: []
 
 
 # 关系

@@ -29,6 +29,13 @@ EXTERNAL_PROBABILITY = 0.05
 EXTERNAL_COOLDOWN_HOURS = 6.0
 EXTERNAL_LAST_KEY = "explore_external_last"
 _QUERY_PRIVACY_LINE = "不引用 user_facts / 对话内容"
+# 仅 _make_query 展示用；全局 season 码仍是英文（不碰 season.py）
+_SEASON_ZH = {
+    "spring": "春",
+    "summer": "夏",
+    "autumn": "秋",
+    "winter": "冬",
+}
 
 # 内部深读：最近 N 条记忆叙事（d-3-2）
 INTERNAL_SOURCE_LIMIT = 3
@@ -139,10 +146,11 @@ class ExploreAction:
             "只输出问句本身，不要解释、不要引号。"
             f"红线：{_QUERY_PRIVACY_LINE}；不要点名具体的人；不要像刷新闻头条。"
         )
+        season_zh = _SEASON_ZH.get(season, season)
         user = (
-            f"季节={season}；curiosity={curiosity:.2f}；"
+            f"季节={season_zh}；curiosity={curiosity:.2f}；"
             f"mood_mode={mode_s}；valence={valence:.2f}。"
-            "请给一句栖此刻可能好奇的窗外问句（≤30字）。"
+            "请给一句栖此刻可能好奇的窗外问句（≤30字，纯中文）。"
         )
         messages = [
             {"role": "system", "content": system},
