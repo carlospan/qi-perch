@@ -166,15 +166,20 @@ async def test_user_reply_think_pause_outside_lock():
 
 @pytest.mark.asyncio
 async def test_creation_card_delivers_content_with_qi_line():
-    """W2：share 递出时作品正文必须随 qi_line 进对话流——否则栖递了什么谁都看不见，
-    被问起只能现场虚构（实证：递《凌晨五点》却念了首现编的）。"""
+    """share 递出：qi_line 进语音；正文经 action 广播由前端卡片承载（W2 内联退役）。"""
     brain = Brain({}, MagicMock())
     delivered: list[str] = []
+    broadcasts: list[dict] = []
 
     async def fake_deliver(text, now, proactive=False):
         delivered.append(text)
 
+    async def fake_broadcast(msg):
+        broadcasts.append(msg)
+
     brain._deliver_qi_message = fake_deliver  # type: ignore[method-assign]
+    brain.embodiment = MagicMock()
+    brain.embodiment.broadcast = fake_broadcast
 
     from datetime import datetime
 
@@ -184,14 +189,18 @@ async def test_creation_card_delivers_content_with_qi_line():
         "content": "**凌晨五点**\n\n天还没亮。",
     }
     await brain._deliver_action_result(card, datetime(2026, 7, 31, 12, 0))
-    assert len(delivered) == 1
-    assert "我今天写了个东西" in delivered[0]
-    assert "凌晨五点" in delivered[0]
+    assert delivered == ["我今天写了个东西……给你。"]
+    assert "凌晨五点" not in delivered[0]
+    assert len(broadcasts) == 1
+    assert broadcasts[0]["type"] == "action"
+    assert "凌晨五点" in str(broadcasts[0]["payload"].get("content") or "")
 
-    # 无正文时退回只发 qi_line
+    # 无正文时仍只发 qi_line，并广播卡片
     delivered.clear()
+    broadcasts.clear()
     await brain._deliver_action_result(
         {"type": "creation_card", "qi_line": "写了一点。", "content": ""},
         datetime(2026, 7, 31, 12, 1),
     )
     assert delivered == ["写了一点。"]
+    assert len(broadcasts) == 1

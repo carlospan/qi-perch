@@ -7,11 +7,15 @@
 import { computed, ref } from "vue";
 import { useEmotion } from "./useEmotion";
 import type {
+  ActionPayload,
   AvatarState,
+  CreationCard,
   EmotionSnapshot,
   JournalEntry,
   QiView,
   SpeechPayload,
+  TalkCardItem,
+  TalkItem,
   TalkMessage,
 } from "../types";
 import { qiWs } from "../ws";
@@ -48,7 +52,7 @@ export function dayLabel(ts: number) {
 export type TalkDayGroup = {
   key: string;
   label: string;
-  messages: TalkMessage[];
+  messages: TalkItem[];
 };
 
 let singleton: ReturnType<typeof createQi> | null = null;
@@ -72,6 +76,8 @@ function createQi() {
 
   /** 对话历史（启动后由 /history 灌入） */
   const talk = ref<TalkMessage[]>([]);
+  /** share 创作卡片（会话瞬时，不随 /history 回灌） */
+  const cards = ref<TalkCardItem[]>([]);
   const historyLoaded = ref(false);
   /** 内在日记（启动后由 /journal 灌入；库空则保持空） */
   const journal = ref<JournalEntry[]>([]);
@@ -83,9 +89,25 @@ function createQi() {
     return emotion.value.mode || avatar.value.posture || "awake";
   });
 
+  function appendCard(card: CreationCard) {
+    if (cards.value.some((c) => c.card.creation_id === card.creation_id)) {
+      return;
+    }
+    cards.value.push({
+      id: uid("card"),
+      kind: "card",
+      card,
+      at: Date.now(),
+    });
+  }
+
   const talkByDay = computed<TalkDayGroup[]>(() => {
+    const items: TalkItem[] = [
+      ...talk.value.map((m) => ({ ...m, kind: "text" as const })),
+      ...cards.value,
+    ].sort((a, b) => a.at - b.at);
     const groups = new Map<string, TalkDayGroup>();
-    for (const m of talk.value) {
+    for (const m of items) {
       const key = dayKey(m.at);
       let g = groups.get(key);
       if (!g) {
@@ -286,6 +308,10 @@ function createQi() {
           text: entry.text.trim(),
           at: typeof entry.at === "number" ? entry.at : Date.now(),
         });
+      });
+      qiWs.on("action", (payload: ActionPayload) => {
+        if (payload?.type === "creation_card") appendCard(payload);
+        // tend_mark / explore_drift：到达不报错、不渲染
       });
     }
 

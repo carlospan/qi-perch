@@ -23,6 +23,40 @@ export type SpeechPayload = {
   tone: string;
 };
 
+/** share 递出的创作卡片（对齐 qi/action/share.py） */
+export type CreationCard = {
+  type: "creation_card";
+  creation_id: number;
+  creation_type: string;
+  content: string;
+  emotion_context?: unknown;
+  qi_line?: string;
+  action_id: number;
+  season?: string;
+};
+
+/** 后端 action 三种 payload；谈区本包只渲染 creation_card */
+export type ActionPayload =
+  | CreationCard
+  | {
+      type: "tend_mark";
+      occasion: string;
+      summary: string;
+      action_id: number;
+      season?: string;
+      speak: boolean;
+      qi_line?: string | null;
+    }
+  | {
+      type: "explore_drift";
+      found?: unknown;
+      summary: string;
+      action_id: number;
+      season?: string;
+      curiosity: number;
+      sandbox: string;
+    };
+
 export type ServerMessage =
   | { type: "speech"; payload: SpeechPayload }
   | {
@@ -41,7 +75,17 @@ export type ServerMessage =
   | { type: "history"; payload: { messages: TalkMessage[] } }
   | { type: "journal"; payload: { entries: JournalEntry[] } }
   | { type: "journal_entry"; payload: JournalEntry }
-  | { type: "wake_result"; payload: { ok: boolean; reason?: string; mode?: string } };
+  | { type: "wake_result"; payload: { ok: boolean; reason?: string; mode?: string } }
+  | { type: "action"; payload: ActionPayload };
+
+/** 谈区时间线条目：文本投影带 kind:"text"；卡片带 kind:"card" */
+export type TalkCardItem = {
+  id: string;
+  kind: "card";
+  card: CreationCard;
+  at: number;
+};
+export type TalkItem = (TalkMessage & { kind: "text" }) | TalkCardItem;
 
 export type ClientMessage =
   | { type: "user_message"; payload: { text: string } }

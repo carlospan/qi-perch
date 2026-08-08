@@ -301,11 +301,12 @@ class ActionLayer:
 
 **Brain 接线（已落地）：**
 - `_heartbeat`：`pending is None` 分支先 `action.tick`；若动手则 `_deliver_action_result`，不再 `pick_proactive_kind`
-- `_deliver_action_result`：WS `broadcast({"type":"action","payload":result})`；`creation_card` 的 `qi_line` 走 `_deliver_qi_message`（非 ProactiveGate）
+- `_deliver_action_result`：先 `qi_line` 走 `_deliver_qi_message`（非 ProactiveGate），再 WS `broadcast({"type":"action","payload":result})`；正文由前端卡片承载（不内联进语音）
 - `_gather_prompt_context`：`action.prompt_extras()` 并入 extras
 - `restore_state`：`ActionLayer(db, config, narrative=memory.narrative)`；预算 ↔ body_memory
 - assist 执行仍未接线（仅 volition 桩）
-- L6 前端尚无 `action` / `creation_card` handler（**故意缺口**，卡片 UI 待做）
+- L6 前端已接 `action` / `creation_card`（谈区 ActionCard；tend/explore 到达不渲染）
+  <!-- 回写(2026-08-08)：任务包 2026-08-08-L6-action卡片UI；退役 W2 正文内联。 -->
 
 </details>
 

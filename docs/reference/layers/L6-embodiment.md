@@ -133,10 +133,11 @@ class EmbodimentServer:
 # 后端→前端：speech | state{avatar_state,season?,mode?} | typing | emotion_update
 #            | ping | audio{data,mime} | history{messages} | journal{entries}
 #            | journal_entry{kind,text,at,id?}（单条实时；忆 Tab prepend）
-#            | action{payload}（L7 推送；前端尚无 handler，creation_card UI 待做）
+#            | action{payload}（L7；creation_card → 谈区 ActionCard；tend/explore 不渲染）
 # 前端→后端：user_message | presence | pong | command{/state|/history|/journal}
 #
-# 前端 useQi：on("journal") 全量替换；on("journal_entry") unshift 单条
+# <!-- 回写(2026-08-08)：action/creation_card 卡片 UI 落地；见 tasks/2026-08-08-L6-action卡片UI -->
+# 前端 useQi：on("journal") 全量替换；on("journal_entry") unshift 单条；on("action") appendCard
 # 前端重连（ws.ts）：指数退避 1s→…→30s；onopen 发 presence online
 # 启动：qi-desktop（Brain∥WS）+ npm run tauri:dev（或 npm run dev）
 # Cubism Core：见 docs/how-to/ui/主界面-Live2D接入.md / 换机搭建.md（不入库）

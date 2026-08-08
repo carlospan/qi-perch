@@ -125,7 +125,18 @@ async def notify_first_time(brain: Brain) -> None:
 
 
 async def deliver_action_result(brain: Brain, result: dict, now: datetime) -> None:
-    """行动结果：卡片推前端；share 的 qi_line 作为这一拍的开口（非主动言语通道）。"""
+    """行动结果：creation_card 的 qi_line 先开口，再广播卡片；tend/explore 向内默认不说。"""
+    # 1) 栖先开口——正文由前端卡片承载，不再内联进语音（W2 退役）
+    if result.get("type") == "creation_card":
+        line = (result.get("qi_line") or "").strip()
+        if line:
+            await brain._deliver_qi_message(line, now, proactive=True)
+    elif result.get("speak") and result.get("qi_line"):
+        await brain._deliver_qi_message(
+            str(result["qi_line"]), now, proactive=True
+        )
+
+    # 2) 再广播——谈区时间线：栖那句 → 卡片
     if brain.embodiment is not None:
         try:
             await brain.embodiment.broadcast(
@@ -133,21 +144,3 @@ async def deliver_action_result(brain: Brain, result: dict, now: datetime) -> No
             )
         except Exception:
             logger.exception("行动结果推送失败")
-
-    # share 递出时说一句脆弱的话；tend/explore 默认向内不说
-    if result.get("type") == "creation_card":
-        line = (result.get("qi_line") or "").strip()
-        content = str(result.get("content") or "").strip()
-        # 作品正文必须跟着 qi_line 进对话流——前端无 creation_card handler，
-        # 只发 qi_line 会让栖递了东西却谁都看不见，被问起只能现场虚构
-        #（实证：22:52 递《凌晨五点》，23:16 被问时念了首现编的还说「放了好几天」）
-        if line and content:
-            await brain._deliver_qi_message(
-                f"{line}\n\n{content}", now, proactive=True
-            )
-        elif line:
-            await brain._deliver_qi_message(line, now, proactive=True)
-    elif result.get("speak") and result.get("qi_line"):
-        await brain._deliver_qi_message(
-            str(result["qi_line"]), now, proactive=True
-        )

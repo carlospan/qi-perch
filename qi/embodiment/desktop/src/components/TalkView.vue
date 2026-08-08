@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from "vue";
 import type { TalkDayGroup } from "../composables/useQi";
+import ActionCard from "./ActionCard.vue";
 
 const WAITING_LINES = ["……", "嗯……", "我在想。", "稍等……"] as const;
 
@@ -65,16 +66,18 @@ watch(
       </p>
       <template v-for="g in groups" :key="g.key">
         <div class="day">{{ g.label }}</div>
-        <div
-          v-for="m in g.messages"
-          :key="m.id"
-          class="msg"
-          :class="m.role"
-        >
-          <div class="who">{{ m.role === "qi" ? "栖" : "你" }}</div>
-          <div class="txt">{{ m.text }}</div>
-          <div class="when">{{ timeLabel(m.at) }}</div>
-        </div>
+        <template v-for="m in g.messages" :key="m.id">
+          <div v-if="m.kind === 'card'" class="msg qi card">
+            <div class="who">栖</div>
+            <ActionCard :card="m.card" />
+            <div class="when">{{ timeLabel(m.at) }}</div>
+          </div>
+          <div v-else class="msg" :class="m.role">
+            <div class="who">{{ m.role === "qi" ? "栖" : "你" }}</div>
+            <div class="txt">{{ m.text }}</div>
+            <div class="when">{{ timeLabel(m.at) }}</div>
+          </div>
+        </template>
       </template>
 
       <div v-if="typing" class="msg qi pending" aria-live="polite">
@@ -211,6 +214,10 @@ watch(
   border: 1px solid var(--talk-qi-bd);
   border-radius: 4px 14px 14px 14px;
   color: var(--ink);
+}
+
+.msg.qi.card {
+  max-width: 88%;
 }
 
 .msg.me {
