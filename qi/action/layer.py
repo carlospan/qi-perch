@@ -7,6 +7,7 @@ import random
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from qi.action.assist import AssistAction
 from qi.action.budget import BODY_MEMORY_KEY, ActionBudget
 from qi.action.explore import ExploreAction
 from qi.action.explore_web import WebSearchClient
@@ -74,6 +75,7 @@ class ActionLayer:
             llm=llm,
         )
         self.self_ops = SelfOps(db)
+        self.assist = AssistAction(db, llm=llm)
         self.last_result: dict | None = None
         self.last_closed_loop: dict[str, Any] | None = None
 
@@ -310,17 +312,22 @@ class ActionLayer:
         sensing: SensingSnapshot | None = None,
         pressure: Any | None = None,
         trust: float = 0.5,
+        op: str | None = None,
+        target_path: str | None = None,
+        confirmed: bool = False,
     ) -> dict | None:
         """GWS 分发：执行指定行动 kind，跳过 tick 内随机软门。"""
         self.last_result = None
         if not user_online or mode == "dreaming":
             return None
+        # B1：awake 放行 self_ops + assist（响应式对话期）
         if mode == "awake":
-            if kind not in _AWAKE_SELF_OPS:
+            if kind not in _AWAKE_SELF_OPS and kind != "assist":
                 return None
         elif mode not in ("solitary", "ambient"):
             return None
-        if not self.budget.can_autonomous(now):
+        # B2：assist 响应式不占预算，跳过自主日限总闸
+        if kind != "assist" and not self.budget.can_autonomous(now):
             return None
 
         undelivered = await self.db.load_unshared_creation()
@@ -402,6 +409,21 @@ class ActionLayer:
                 scars=scars,
                 now=now,
             )
+        elif kind == "assist":
+            # assist 响应式，不占 ActionBudget
+            if not target_path or not op:
+                result = None
+            else:
+                result = await self.assist.execute(
+                    op,
+                    target_path,
+                    relationship_stage=relationship_stage,
+                    trust=trust,
+                    scars=scars,
+                    confirmed=confirmed,
+                    season=season,
+                    now=now,
+                )
         else:
             return None
 

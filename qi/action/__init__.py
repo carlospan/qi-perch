@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from qi.action.assist import AssistAction
 from qi.action.budget import (
     AUTONOMOUS_ACTION_DAILY_LIMIT,
     BODY_MEMORY_KEY,
@@ -37,6 +38,7 @@ __all__ = [
     "ActionBudget",
     "ActionIntention",
     "ActionLayer",
+    "AssistAction",
     "ExploreAction",
     "SelfOps",
     "ShareAction",
