@@ -188,7 +188,8 @@ requirements.lock   锁定版本（CI 用）
 | [permission.py](../../qi/action/permission.py) | 权限门控（can_share/can_tend/can_explore/can_archive/can_budget_tune/can_journal/can_irreversible/can_read_user_file/can_write_user_file） |
 | [share.py](../../qi/action/share.py) | 分享创作（递出未分享的 creation） |
 | [tend.py](../../qi/action/tend.py) | 打理（季节更替/相识纪念日） |
-| [explore.py](../../qi/action/explore.py) | 探索（真读沙箱文件，记 closed_loop） |
+| [explore.py](../../qi/action/explore.py) | 探索（内部深读 narratives→digest；外部编排；见闻卡 source=web\|journal） |
+| [explore_web.py](../../qi/action/explore_web.py) | 外部分支（Tavily 检索 + 门控；hits→digest） |
 | [self_ops.py](../../qi/action/self_ops.py) | 自操作（archive 归档/ budget_tune 调预算/ journal 内在日记） |
 
 **季节缩放**（`SEASON_ACTION_SCALE`，定义于 `qi/action/layer.py`）：spring 1.0 / summer 0.8 / autumn 0.5 / winter 0.2——冬天几乎不动手。可由 `config.action.season_scale` 覆盖（`resolve_season_scale`）。

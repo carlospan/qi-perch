@@ -425,7 +425,7 @@ L5（关系）需要：
 
 L7（行动）需要：
 - 未递出创作（`shared=0`）作为 `ShareAction` 素材；提起（`mentioned_at`）与递出（`shared`）分轨
-- 意识流 / curiosity 可作为 explore 气质的触发背景（搜索手段未接）
+- 意识流 / curiosity 可作为 explore 气质的触发背景（外部联网 + 内部记忆深读已接；见 L7-action / explore C 方案）
 
 ## 人格契约检查点
 

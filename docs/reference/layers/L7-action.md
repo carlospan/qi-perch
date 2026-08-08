@@ -11,7 +11,7 @@
 > explore：内部深读（d-3-2，读记忆叙事 + LLM digest + speak + 见闻卡）+ 外部联网（d-1）已收口；d-2 外部 hits 消化 + d-3-1 见闻卡片已收口。C 方案工程交付完成，相处复验中。assist / irreversible 文件未建。
 > <!-- 演进指向(2026-08-01)：行动框架（预算/门控）保留；方向为 N1 执行器真实化（真读、有后果）与 N3 动机驱动（学习进度/内稳态压力替代随机意向）。见 docs/explanation/栖·数字生命架构方案.md §四 N1/N3。 -->
 > <!-- 演进指向(2026-08-08)：包 10 curiosity 候选注入回退（空赢仲裁堵死自主行动，已解；见解堵包）。 -->
-> <!-- 演进指向(2026-08-08)：explore 真搜索 d-1 联网地基——外部分支 curiosity≥0.8 + 冷却6h + 概率0.05；复用 ActionBudget 日限 20（不设独立 external daily_limit）；query 走 gateway consciousness；开口 speak+qi_line。d-2 内部深读另开。 -->
+> <!-- 演进指向(2026-08-08)：explore 真搜索 C 方案 d-1~d-3-2 工程已交付（外部 Tavily + digest；内部 narratives 深读；ExploreCard）；相处复验中。assist / irreversible 仍待做。 -->
 > <!-- 演进指向(2026-08-08)：explore C 方案收尾——d-2 外部 hits→digest；d-3-1 见闻卡片（web）；d-3-2 内部 narratives→digest + speak + 见闻卡（journal）；工程交付完成，相处复验中。 -->
 > Step 5：actions + narrative 已接；self_model 喂入与伤疤 `save_scar` **尚未接线**。
 > 已落地处见各段 `<!-- 回写 -->`。
@@ -314,8 +314,9 @@ class ActionLayer:
 - `_gather_prompt_context`：`action.prompt_extras()` 并入 extras
 - `restore_state`：`ActionLayer(db, config, narrative=memory.narrative, llm=self.llm)`；预算 ↔ body_memory
 - assist 执行仍未接线（仅 volition 桩）
-- L6 前端已接 `action` / `creation_card`（谈区 ActionCard；tend/explore 到达不渲染）
+- L6 前端已接 `action`：`creation_card` → ActionCard；`explore_drift`（`source=web|journal` 且 entries 非空）→ ExploreCard；tend 到达不渲染
   <!-- 回写(2026-08-08)：任务包 2026-08-08-L6-action卡片UI；退役 W2 正文内联。 -->
+  <!-- 回写(2026-08-08)：d-3-1/d-3-2 见闻卡——ExploreCard；useQi 门控 web||journal。 -->
 
 </details>
 
