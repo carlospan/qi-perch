@@ -1,7 +1,7 @@
 """learning-progress 好奇信号（轻量代理，零重依赖）。
 
 合成世界模型 surprise + open_loop 积压 + 情绪层 curiosity（含 anomaly），
-写回 emotion.curiosity，并可作为 GWS 竞争者入场。
+写回 emotion.curiosity，并可作为 GWS 竞争者入场（contender 入场已回退，2026-08-08，见解堵包）。
 
 动机加成每拍重算：先剥去上拍加成再叠本拍信号，避免 curiosity 单调顶满。
 """

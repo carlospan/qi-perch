@@ -124,7 +124,7 @@ async def test_collect_contenders_curiosity_gate():
             now=now,
             curiosity=0.8,
         )
-        assert any(c.kind == "curiosity" for c in with_c)
+        assert not any(c.kind == "curiosity" for c in with_c)
         without = await collect_contenders(
             brain,
             pending=None,

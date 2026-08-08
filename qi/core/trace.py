@@ -336,6 +336,7 @@ async def collect_contenders(
     curiosity: float = 0.0,
 ) -> list[Contender]:
     """只读收集本拍竞争者——不算 winner。"""
+    del curiosity  # 形参保留（调用方仍传）；包 10 contender 注入已回退，本函数不再消费
     candidates: list[Contender] = []
     silence = 0.0
     try:
@@ -511,16 +512,6 @@ async def collect_contenders(
                 kind="report",
                 salience=report_s,
                 reason=reason,
-            )
-        )
-
-    # 包 10：curiosity 竞争者仅在无用户消息时入场（respond 恒胜）
-    if pending is None and curiosity > 0.0:
-        candidates.append(
-            Contender(
-                kind="curiosity",
-                salience=salience(kind="curiosity", curiosity=curiosity),
-                reason="learning-progress 好奇驱动",
             )
         )
 

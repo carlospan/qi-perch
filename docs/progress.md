@@ -24,6 +24,8 @@
 
 ## 已拍板决策
 
+- **2026-08-08 · Gap 2 修复：curiosity 候选回退，L7 自主行动恢复触发**：删 `trace.collect_contenders` 包 10 注入的非可执行 `kind="curiosity"` 候选（空赢 GWS → idle，堵死 share/archive/tend/explore）；curiosity 只作 motive（写回 `emotion.curiosity` + 驱动 `action:explore`）。见 `docs/specs/tasks/2026-08-08-L7-curiosity候选解堵.md` / 排查包。
+
 - **2026-08-08 · 健康审计 Stage1 文档回写**：`reference/layers` L1/L2/L4/L7 文件清单与卫星/N 侧索引对齐现码；L7 原则句与 `budget.py` 日限 **20**（安全阀）对齐；`stage-0` 注明 P0「632」为收官快照、现行 `brain.py`≈1223；`stage-1`/`stage-4` 判据表勾达成（与 progress 退出叙事一致）；layers README 收录允许依赖例外（`storage→core`、`llm→relationship` 等）。
 
 - **2026-08-08 · 健康审计 Stage4 文档回写**：`config.md` / code-wiki §九 补全 `stasis`；wiki 概述与 §8.1 现行 provider 对齐 **tokenrhythm / minimax-m2.7**；刷测试规模≈462、`brain.py`≈1223；progress 文首与 L1 表备注同步。
