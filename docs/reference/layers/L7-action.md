@@ -8,7 +8,7 @@
 
 > **本文档状态：Step 1–6 已落地（actions / budget / volition / permission / share / tend / explore 气质 / ActionLayer / brain 接线）。**
 > 六层（L1~L6）已完成。L7 行动层骨架与起手能力已接入心跳。
-> explore：内部沙箱列目录已落地；**外部联网（d-1）**已接（Tavily，默认 `enabled: false`；搜不到不编造）。assist / irreversible 文件未建。
+> explore：内部沙箱列目录已落地；**外部联网（d-1）已接且已收口**（Tavily，默认 `enabled: false`；搜不到不编造；成功开口只念 query 不念 search title）。assist / irreversible 文件未建。
 > <!-- 演进指向(2026-08-01)：行动框架（预算/门控）保留；方向为 N1 执行器真实化（真读、有后果）与 N3 动机驱动（学习进度/内稳态压力替代随机意向）。见 docs/explanation/栖·数字生命架构方案.md §四 N1/N3。 -->
 > <!-- 演进指向(2026-08-08)：包 10 curiosity 候选注入回退（空赢仲裁堵死自主行动，已解；见解堵包）。 -->
 > <!-- 演进指向(2026-08-08)：explore 真搜索 d-1 联网地基——外部分支 curiosity≥0.8 + 冷却6h + 概率0.05；复用 ActionBudget 日限 20（不设独立 external daily_limit）；query 走 gateway consciousness；开口 speak+qi_line。d-2 内部深读另开。 -->
@@ -330,7 +330,7 @@ volition 产生 Intent(share/tend/explore/assist)
 
 LLM 永远是栖的"声音"，不是栖的"手"。
 
-> share / tend 已落地且不需外部工具。explore：内部沙箱列目录 + **d-1 外部联网**（默认关；配 Tavily key 后开）；**不编造**窗外内容。d-2 内部深读另开。
+> share / tend 已落地且不需外部工具。explore：内部沙箱列目录 + **d-1 外部联网（已收口）**（默认关；配 Tavily key 后开；成功开口只念 query 不念 search title）；**不编造**窗外内容。d-2 内部深读另开。
 
 ## 验收标准
 
