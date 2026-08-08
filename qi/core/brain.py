@@ -121,6 +121,10 @@ class Brain:
         self.last_sensing = None  # SensingSnapshot | None（包 8）
         self.last_user_message: str | None = None  # assist-2：供 trace / 感知
         self.last_assist_request = None  # AssistRequest | None（assist-2）
+        # assist-3：跨轮确认（仅内存，不落 body_memory）
+        self.pending_assist_confirmation = None  # AssistRequest | None
+        self.pending_assist_confirmation_at: datetime | None = None
+        self.pending_assist_heartbeats: int = 0
         self.world = WorldModel()
         self.last_world = None  # dict | None（包 9：世界模型旁路快照）
         # 包 14：优雅停钩子（库内不 sys.exit；CLI 可注入）
@@ -465,6 +469,20 @@ class Brain:
 
         note_snapshot_beat()
         now = datetime.now()
+        # assist-3：pending 超时清理（5 分钟或 3 轮心跳，取先到）
+        if self.pending_assist_confirmation is not None:
+            self.pending_assist_heartbeats += 1
+            timed_out = False
+            if self.pending_assist_confirmation_at is not None:
+                elapsed = (
+                    now - self.pending_assist_confirmation_at
+                ).total_seconds()
+                if elapsed > 300:
+                    timed_out = True
+            if timed_out or self.pending_assist_heartbeats >= 3:
+                self.pending_assist_confirmation = None
+                self.pending_assist_confirmation_at = None
+                self.pending_assist_heartbeats = 0
         try:
             self.ledger.tick_window(self.heartbeat_count)
         except Exception:
@@ -973,10 +991,24 @@ class Brain:
                         trust=trust,
                         op=op,
                         target_path=target_path,
-                        confirmed=False,  # assist-2：恒 False，留 assist-3
+                        confirmed=False,  # GWS 路径仍先走 confirm_gate
                     )
-                    # B3：assist 消费一次，防 idle 反复 confirm_gate
+                    # assist-2 B3 消费 + assist-3 B1：清之前用 op/path 存 pending
                     if action_type == "assist":
+                        if (
+                            action_result
+                            and action_result.get("type")
+                            == "assist_confirm_request"
+                            and op
+                            and target_path
+                        ):
+                            from qi.action.volition import AssistRequest
+
+                            self.pending_assist_confirmation = AssistRequest(
+                                op=op, target_path=target_path
+                            )
+                            self.pending_assist_confirmation_at = now
+                            self.pending_assist_heartbeats = 0
                         self.last_assist_request = None
                     if action_result is not None:
                         await self._persist_action_budget()
@@ -1083,6 +1115,62 @@ class Brain:
             logger.debug("蛰伏提示推送失败", exc_info=True)
         return notice
 
+    _CONFIRM_CUES = ("看吧", "好", "行", "确认", "可以", "嗯", "yes", "ok")
+    # 「不用看」须先于「不用」；英文 no 只整句匹配（避免 notes 误伤）
+    _REJECT_CUES = ("不用看", "不用", "算了", "不要", "取消")
+    _NEW_ASSIST_MARKERS = ("帮我看", "帮我读", "帮我看一下", "帮我读一下")
+
+    def _is_confirm_cue(self, text: str) -> bool:
+        """assist-3：短确认；排除新协助请求（B3）。"""
+        t = text.strip().lower()
+        if any(m in t for m in self._NEW_ASSIST_MARKERS):
+            return False
+        return any(cue in t for cue in self._CONFIRM_CUES)
+
+    def _is_reject_cue(self, text: str) -> bool:
+        t = text.strip().lower()
+        if t in ("no", "n"):
+            return True
+        return any(cue in t for cue in self._REJECT_CUES)
+
+    def _clear_pending_assist(self) -> None:
+        self.pending_assist_confirmation = None
+        self.pending_assist_confirmation_at = None
+        self.pending_assist_heartbeats = 0
+
+    async def _execute_confirmed_assist(self, confirmed_req: object) -> dict | None:
+        """B2：用户确认后直接 execute_kind(confirmed=True)，不走 GWS。"""
+        if self.action is None:
+            return None
+        now = datetime.now()
+        scars = None
+        if self._db is not None:
+            try:
+                scars = await self._db.list_scars()
+            except Exception:
+                scars = None
+        trust = 0.5
+        if self.relationship is not None:
+            trust = float(
+                getattr(self.relationship.state, "trust", 0.5) or 0.5
+            )
+        return await self.action.execute_kind(
+            "assist",
+            self.emotion,
+            self.relationship_stage,
+            self._current_season(),
+            now,
+            mode=self.emotion.mode.value,
+            user_online=self.user_online,
+            scars=scars,
+            sensing=self.last_sensing,
+            pressure=self.last_pressure_response,
+            trust=trust,
+            op=getattr(confirmed_req, "op", None),
+            target_path=getattr(confirmed_req, "target_path", None),
+            confirmed=True,
+        )
+
     async def receive_user_message(self, message: str) -> str | None:
         text = (message or "").strip()
         if not text:
@@ -1093,6 +1181,32 @@ class Brain:
         async with self._heartbeat_lock:
             if self.in_stasis:
                 return await self._reply_stasis_notice()
+
+            # assist-3：跨轮确认（控制消息；确认不进 pending_queue）
+            if self.pending_assist_confirmation is not None:
+                if self._is_reject_cue(text):
+                    self._clear_pending_assist()
+                    now = datetime.now()
+                    await self._deliver_qi_message("好。", now, proactive=False)
+                    return "好。"
+                if self._is_confirm_cue(text):
+                    confirmed_req = self.pending_assist_confirmation
+                    self._clear_pending_assist()
+                    try:
+                        result = await self._execute_confirmed_assist(
+                            confirmed_req
+                        )
+                        if result is not None:
+                            await self._deliver_action_result(
+                                result, datetime.now()
+                            )
+                            return (result.get("qi_line") or "").strip() or None
+                    except Exception:
+                        logger.exception("assist confirmed execute 失败")
+                    return None
+                # 换话题 / 新请求：清旧 pending，落入正常对话
+                self._clear_pending_assist()
+
             if len(self._pending_queue) >= PENDING_QUEUE_MAX:
                 dropped = self._pending_queue.popleft()
                 logger.warning(

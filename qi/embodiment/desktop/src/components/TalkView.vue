@@ -2,6 +2,7 @@
 import { nextTick, onMounted, ref, watch } from "vue";
 import type { TalkDayGroup } from "../composables/useQi";
 import ActionCard from "./ActionCard.vue";
+import AssistConfirmCard from "./AssistConfirmCard.vue";
 import ExploreCard from "./ExploreCard.vue";
 
 const WAITING_LINES = ["……", "嗯……", "我在想。", "稍等……"] as const;
@@ -9,6 +10,10 @@ const WAITING_LINES = ["……", "嗯……", "我在想。", "稍等……"] as
 const props = defineProps<{
   groups: TalkDayGroup[];
   typing?: boolean;
+}>();
+
+const emit = defineEmits<{
+  send: [text: string];
 }>();
 
 const body = ref<HTMLElement | null>(null);
@@ -77,6 +82,12 @@ watch(
             <ExploreCard
               v-else-if="m.card.type === 'explore_drift'"
               :card="m.card"
+            />
+            <AssistConfirmCard
+              v-else-if="m.card.type === 'assist_confirm_request'"
+              :card="m.card"
+              @confirm="emit('send', '看吧')"
+              @cancel="emit('send', '不用')"
             />
             <div class="when">{{ timeLabel(m.at) }}</div>
           </div>

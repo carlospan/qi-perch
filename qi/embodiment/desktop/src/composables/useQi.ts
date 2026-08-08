@@ -8,6 +8,7 @@ import { computed, ref } from "vue";
 import { useEmotion } from "./useEmotion";
 import type {
   ActionPayload,
+  AssistConfirmCard,
   AvatarState,
   CreationCard,
   EmotionSnapshot,
@@ -25,10 +26,12 @@ function uid(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function cardKey(card: CreationCard | ExploreCard): string {
-  return card.type === "creation_card"
-    ? `c${card.creation_id}`
-    : `e${card.action_id}`;
+type AnyTalkCard = CreationCard | ExploreCard | AssistConfirmCard;
+
+function cardKey(card: AnyTalkCard): string {
+  if (card.type === "creation_card") return `c${card.creation_id}`;
+  if (card.type === "explore_drift") return `e${card.action_id}`;
+  return `a${card.action_id ?? card.target_path}`;
 }
 
 function sameDay(a: Date, b: Date) {
@@ -96,7 +99,7 @@ function createQi() {
     return emotion.value.mode || avatar.value.posture || "awake";
   });
 
-  function appendCard(card: CreationCard | ExploreCard, at?: number) {
+  function appendCard(card: AnyTalkCard, at?: number) {
     const key = cardKey(card);
     if (cards.value.some((c) => cardKey(c.card) === key)) return;
     cards.value.push({
@@ -108,7 +111,7 @@ function createQi() {
   }
 
   function applyHistoryCards(
-    raw: Array<(CreationCard | ExploreCard) & { at?: number }>
+    raw: Array<(CreationCard | ExploreCard | AssistConfirmCard) & { at?: number }>
   ) {
     const hydrated: TalkCardItem[] = [];
     const seen = new Set<string>();
@@ -153,6 +156,27 @@ function createQi() {
           sandbox: String(row.sandbox || ""),
         };
         if (!Number.isFinite(card.action_id) || card.action_id <= 0) continue;
+        const key = cardKey(card);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        hydrated.push({
+          id: uid("card"),
+          kind: "card",
+          card,
+          at: typeof row.at === "number" ? row.at : Date.now(),
+        });
+        continue;
+      }
+      if (row?.type === "assist_confirm_request") {
+        const path = String(row.target_path || "").trim();
+        if (!path) continue;
+        const card: AssistConfirmCard = {
+          type: "assist_confirm_request",
+          target_path: path,
+          summary: String(row.summary || "").trim(),
+          qi_line: row.qi_line,
+          action_id: row.action_id,
+        };
         const key = cardKey(card);
         if (seen.has(key)) continue;
         seen.add(key);
@@ -395,8 +419,14 @@ function createQi() {
           if (okSource && Array.isArray(entries) && entries.length > 0) {
             appendCard(payload);
           }
+          return;
         }
-        // tend_mark / 空手：到达不报错、不渲染
+        if (payload?.type === "assist_confirm_request") {
+          if (String(payload.target_path || "").trim()) {
+            appendCard(payload);
+          }
+        }
+        // tend_mark / assist_result / 空手：到达不报错、不渲染
       });
     }
 

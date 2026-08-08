@@ -55,9 +55,22 @@ export type ExploreCard = {
   sandbox: string;
 };
 
-/** 后端 action 三种 payload；谈区渲染 creation_card + 外部 explore_drift */
+/** assist-3：读文件确认请求（对齐 assist.py _confirm_gate） */
+export type AssistConfirmCard = {
+  type: "assist_confirm_request";
+  target_path: string;
+  summary: string;
+  qi_line?: string | null;
+  speak?: boolean;
+  outcome?: string;
+  needs_confirmation?: boolean;
+  action_id?: number;
+};
+
+/** 后端 action payload；谈区渲染 creation / explore / assist 确认 */
 export type ActionPayload =
   | CreationCard
+  | AssistConfirmCard
   | {
       type: "tend_mark";
       occasion: string;
@@ -100,7 +113,7 @@ export type ServerMessage =
       payload: {
         messages: TalkMessage[];
         /** 创作卡 + 见闻卡回灌（可选；旧后端无此字段） */
-        cards?: Array<(CreationCard | ExploreCard) & { at?: number }>;
+        cards?: Array<(CreationCard | ExploreCard | AssistConfirmCard) & { at?: number }>;
       };
     }
   | { type: "journal"; payload: { entries: JournalEntry[] } }
@@ -112,7 +125,7 @@ export type ServerMessage =
 export type TalkCardItem = {
   id: string;
   kind: "card";
-  card: CreationCard | ExploreCard;
+  card: CreationCard | ExploreCard | AssistConfirmCard;
   at: number;
 };
 export type TalkItem = (TalkMessage & { kind: "text" }) | TalkCardItem;
