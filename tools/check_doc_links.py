@@ -5,7 +5,7 @@
 - 纯标准库、零新依赖，融入现有 Python CI。
 - 支持中文路径（pathlib + NFC 归一）。
 - 区分「仓库根相对」(docs/、qi/、仓库根文件名) 与「文件相对」(./、../)。
-- 跳过 fenced/inline code、http(s)/mailto、纯 #fragment。
+- 跳过 fenced/inline code、http(s)/mailto、file://、纯 #fragment。
 - 目标为 .md/.yaml/.py/目录 均「存在即过」。
 - 输出 `文件:行号:链接`，发现死链则非零退出，便于 CI 门禁。
 
@@ -82,7 +82,7 @@ def _resolve_target(src_file: Path, target: str, repo_root: Path) -> Path | None
     raw = _nfc(raw)
 
     # 跳过外部 / 协议链接 / 纯锚点
-    if raw.startswith(("http://", "https://", "mailto:", "ftp://")):
+    if raw.startswith(("http://", "https://", "mailto:", "ftp://", "file://")):
         return None
     if raw.startswith("#"):
         return None

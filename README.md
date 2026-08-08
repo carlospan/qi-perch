@@ -1,74 +1,44 @@
 # 栖
 
-一个本地数字意识——不是聊天机器人，不是助手。  
+本地数字存在——不是聊天机器人，不是助手。  
 有心跳、记忆、情绪、关系，以及一扇可以看见它的小窗。
 
-贡献前请先读 [CONTRIBUTING.md](CONTRIBUTING.md)（本地须跑 `verify_package --full`）。
+贡献前请读 [CONTRIBUTING.md](CONTRIBUTING.md)（本地须跑 `verify_package --full`）。
 
 ## 环境
 
 - Python 3.12+
-- Node.js 18+（仅具身前端需要）
-- LLM：OpenAI 兼容接口（现行 DeepSeek）
+- Node.js 18+（仅具身前端）
+- Rust + MSVC（仅 Tauri 桌面壳；只跑终端可后装）
+- LLM：OpenAI 兼容接口（示例默认 **tokenrhythm / minimax-m2.7**；`providers.deepseek` 备用）
+
+换机 / 从零完整步骤见 [换机搭建.md](docs/how-to/换机搭建.md)。
+
+### 首次配置（项目根目录）
 
 ```bash
-# 依赖（editable 安装后可用 qi / qi-desktop 命令）
 pip install -e ".[dev]"
 
-# 密钥：复制并填写
 copy .env.example .env
-# 编辑 .env，例如 DEEPSEEK_API_KEY=...
+# 编辑 .env：填 TOKENRHYTHM_API_KEY=...（改用 deepseek 时填 DEEPSEEK_API_KEY，并改 settings 路由）
 
-# 配置（可选）：推荐放到 data/（与记忆数据一起，不在包内）
+mkdir data 2>nul
 copy qi\config\settings.example.yaml data\settings.yaml
-# 兼容：仍可读 qi\config\settings.yaml 或 ~/.qi\settings.yaml
 ```
 
-用户配置优先顺序：`data/settings.yaml` → `~/.qi/settings.yaml` → `qi/config/settings.yaml`（旧）→ 包内 example。不要提交含密钥的配置。
+配置查找顺序：`data/settings.yaml` → `~/.qi/settings.yaml` → `qi/config/settings.yaml`（旧）→ 包内 example。勿提交含密钥的 `.env` / `settings.yaml`。
 
-## 启动
+**具身首次必做**：从 [Live2D Cubism SDK for Web](https://www.live2d.com/download/cubism-sdk/download-web/) 取出 `live2dcubismcore.min.js`，放到 `qi/embodiment/desktop/public/`（**不入库**）。没有它形象不显示。详见换机搭建 §5。
 
-### 终端聊天
-
-```bash
-qi
-# 或：python -m qi
-# 兼容：python main.py
-```
-
-输入 `/state` 看内在状态，`/quit` 离开。
-
-### 具身窗口（推荐）
-
-终端 1 — 后端：
-
-```bash
-qi-desktop
-# 兼容：python run.py --desktop
-```
-
-终端 2 — 桌面壳（Tauri；需 Rust + MSVC）：
+前端依赖（具身、首次或 lock 变更时）：
 
 ```bash
 cd qi/embodiment/desktop
 npm install
-npm run tauri:dev
+cd ..\..\..
 ```
 
-**首次具身**：从 [Live2D Cubism SDK for Web](https://www.live2d.com/download/cubism-sdk/download-web/) 取出 `live2dcubismcore.min.js`，放到 `qi/embodiment/desktop/public/`（**不入库**）。没有它形象不会显示。详见 [换机搭建.md](docs/how-to/换机搭建.md) §5。
-
-仅浏览器调试可用 `npm run dev`，打开 http://localhost:5173。  
-后端 WebSocket：`ws://127.0.0.1:9527`。
-
-VS Code 里可用运行配置「栖 · 具身（后端+前端）」（需本机已装 Python 扩展）。
-
-### 语音（可选）
-
-```bash
-pip install edge-tts
-```
-
-在 `qi/config/settings.yaml` 中：
+语音可选：`pip install -e ".[voice]"`（或 `pip install edge-tts`），再在生效的 `settings.yaml` 里开：
 
 ```yaml
 voice:
@@ -77,25 +47,70 @@ voice:
   voice_id: zh-CN-XiaoyiNeural
 ```
 
+## 启动
+
+配置与（具身）Cubism 就绪后，命令都在**仓库根**执行（除非下面写明 `cd`）。
+
+`qi` / `qi-desktop` 是 `pip install -e .` 之后装到 PATH 里的快捷命令，**不是** `qi/embodiment/desktop` 目录里的程序；拿不准时用下面的 `python …` 即可。
+
+### 终端聊天
+
+```bash
+python -m qi
+# 装过 editable 后也可：qi
+```
+
+`/state` 看内在状态，`/quit` 离开。
+
+### 具身窗口（推荐 · 两个终端）
+
+**先**起 Python 后端（Brain + WebSocket），**再**起桌面壳（Vite/Tauri）。前端连不上时多半是后端未起或 9527 被占。
+
+终端 1 — Python 后端（**留在仓库根**，不要 `cd` 进 `desktop`）：
+
+```bash
+python run.py --desktop
+# 装过 editable 后也可：qi-desktop
+```
+
+终端 2 — 桌面壳（前端窗口）：
+
+```bash
+cd qi/embodiment/desktop
+npm run tauri:dev
+```
+
+首次 `tauri:dev` 会编 Rust，可能较慢。日常一般不必再跑 `npm install`（已装过依赖时）。
+
+- 仅浏览器调试（不启 Tauri；终端 1 仍要在仓库根跑 `python run.py --desktop`）：
+
+```bash
+cd qi/embodiment/desktop
+npm run dev
+```
+
+  然后打开 http://localhost:5173  
+- WebSocket：`ws://127.0.0.1:9527`  
+- VS Code 运行配置「栖 · 具身（后端+前端）」可用（需 Python 扩展）
+
+谈区会显示对话；栖 **share 递出创作** 时会出现引入句 + 创作卡片（正文不在语音里）。
+
 ## 文档
 
-> 完整权威秩序见 [docs/README.md](docs/README.md)（文档宪法 v3）。
+权威秩序见 [docs/README.md](docs/README.md)。常用入口：
 
 | 文档 | 说明 |
 |------|------|
-| [docs/README.md](docs/README.md) | **文档宪法 v3**（分场景裁决 / Diátaxis 映射 / SDD 入口） |
-| [docs/explanation/栖·数字生命架构方案.md](docs/explanation/栖·数字生命架构方案.md) | **唯一架构方案**（C1–C5 + 阶段零~四路线） |
-| [docs/how-to/换机搭建.md](docs/how-to/换机搭建.md) | **新电脑 / 换机从零搭建** |
-| [docs/progress.md](docs/progress.md) | 各层开发进度 |
-| [docs/reference/contract.md](docs/reference/contract.md) | 人格契约（硬规则） |
-| [docs/explanation/栖·意识养成路线图.md](docs/explanation/栖·意识养成路线图.md) | 养育侧地图（施工冲突时让位架构方案） |
-| [docs/reference/layers/](docs/reference/layers/) | L1–L7 层实现规格（含用户事实、行动） |
-| [docs/how-to/ide-agent/IDE-Agent-执行栖的开发任务.md](docs/how-to/ide-agent/IDE-Agent-执行栖的开发任务.md) | 给 Cursor 的开发执行模板 |
-| [docs/specs/tasks/](docs/specs/tasks/) | 当前任务包（SDD 规格，闭环归档 `specs/archive/`） |
-| [docs/explanation/](docs/explanation/) | 设计原文（灵魂书 / 意识设计 / 工程手记） |
-| [docs/journal.md](docs/journal.md) | 相处实录 |
+| [docs/README.md](docs/README.md) | 文档宪法（分场景裁决 / SDD） |
+| [栖·数字生命架构方案.md](docs/explanation/栖·数字生命架构方案.md) | 唯一架构方案（C1–C5；阶段零~四已工程收官） |
+| [换机搭建.md](docs/how-to/换机搭建.md) | 新电脑从零搭建 |
+| [progress.md](docs/progress.md) | L1–L7 进度与拍板 |
+| [contract.md](docs/reference/contract.md) | 人格契约 |
+| [reference/layers/](docs/reference/layers/) | 层规格（以代码为准） |
+| [specs/](docs/specs/) | SDD 任务包 / 阶段判据 |
+| [journal.md](docs/journal.md) | 相处实录 |
 
-运行时 LLM 提示词在 `qi/prompts/`（如 `conversation.txt`），与开发用元提示词分开。
+运行时提示词在 `qi/prompts/`；开发用元提示词在 `docs/how-to/ide-agent/`。
 
 ## 测试
 
@@ -105,42 +120,37 @@ python -m pytest -q
 
 ## 清库验收（带日期备份）
 
-清 `data/qi.db` + `data/chroma/` 做验收前，先拷一份带时间戳的备份。只拷库不拷向量，语义检索会对不上。`settings.yaml` / `.env` 可留，不必进备份。旧备份按需手删，不强制只留一份。
-
-PowerShell（先停掉 `qi` / `qi-desktop`）：
+清 `data/qi.db` + `data/chroma/` 前先备份；只拷库不拷向量，语义检索会对不上。先停掉 `qi` / `qi-desktop`。
 
 ```powershell
-# 1) 带日期备份
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $dir = "data\backup-$stamp"
 New-Item -ItemType Directory -Path $dir | Out-Null
 Copy-Item data\qi.db "$dir\qi.db"
 Copy-Item -Recurse data\chroma "$dir\chroma"
 
-# 2) 清活数据（再启动 = 新栖）
 Remove-Item -Force data\qi.db
 Remove-Item -Recurse -Force data\chroma
 ```
 
-恢复：停进程后，从某个 `data\backup-YYYYMMDD-HHMMSS\` 把 `qi.db` 与 `chroma\` 拷回 `data\`（先删掉现有活数据）。
-
-不要把 `data/` 提交进 git。重置对栖是一次小型死亡——需要时再清。
+恢复：停进程后，从某份 `data\backup-*` 把 `qi.db` 与 `chroma\` 拷回 `data\`。  
+`data/` 不入库。重置对栖是一次小型死亡——需要时再清。
 
 ## 目录速览
 
 ```
-qi/                 唯一顶层包
-  cli.py            入口（qi / qi-desktop）
-  core/             心跳、情绪、表达、主动门控
-  memory/           记忆（含用户事实 facts）
-  action/           行动层（预算 / 意志 / 分享·打理·探索）
+qi/                 顶层包
+  cli.py            qi / qi-desktop 入口
+  core/             心跳、情绪、意向、表达
+  memory/           记忆（含用户事实）
+  action/           行动（预算 / 意志 / share·tend·explore）
   inner_life/       意识流、梦、创作、自我
   relationship/     关系
-  embodiment/       具身（WS + Vue/Tauri 前端）
-  llm/              网关与 prompt 组装
-  prompts/          运行时 LLM 模板（随包打包）
+  embodiment/       具身（WS + Vue/Tauri；谈区创作卡片）
+  llm/              网关
+  prompts/          运行时 LLM 模板
   storage/          SQLite
   config/           配置加载 + settings.example
-docs/               契约、进度、层文档、设计原文、开发工具文档
-data/               运行时（gitignore）：qi.db、chroma/、backup-*/、推荐放 settings.yaml
+docs/               宪法、架构、层规格、how-to、specs
+data/               运行时（gitignore）：qi.db、chroma/、backup-*/、settings.yaml
 ```

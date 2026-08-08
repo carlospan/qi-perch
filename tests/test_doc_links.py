@@ -94,6 +94,7 @@ def test_directory_link(tmp_path: Path):
         "[ext](https://openai.com/docs)",
         "[mail](mailto:a@b.com)",
         "[anchor](#section-1)",
+        "[file](file:///d:/qi-perch/docs/x.md)",
     ],
 )
 def test_skip_external_and_anchor(tmp_path: Path, link: str):
