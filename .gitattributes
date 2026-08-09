@@ -2,6 +2,22 @@
 # 避免依赖本机 core.autocrlf，消除 CRLF↔LF 假脏。
 * text=auto eol=lf
 
+# 显式钉死常见文本（与上行等价，给不读通配的工具/Agent 看）
+*.md text eol=lf
+*.py text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.vue text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.txt text eol=lf
+*.svg text eol=lf
+
 # 显式二进制（防误当文本做换行转换）
 *.png binary
 *.jpg binary

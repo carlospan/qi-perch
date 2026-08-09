@@ -7,7 +7,11 @@
 - Python **3.12+**；具身前端另需 Node **18+**
 - 密钥：复制 `.env.example` → `.env`（勿提交）
 - 配置：推荐 `data/settings.yaml`（由 `settings.example.yaml` 复制）
-- **换行**：仓库用 LF（见 `.gitattributes` / `.editorconfig`）。本仓库建议 `git config core.autocrlf false`（只改本仓；勿依赖系统 `autocrlf=true`），避免 Windows 上「有 M 无 diff」假脏
+- **换行**：仓库与工作区一律 **LF**（`.gitattributes` `eol=lf` + `.editorconfig` + `.vscode/settings.json` `files.eol`）。
+  - 本仓：`git config core.autocrlf false`（已建议；勿开全局 `autocrlf=true`）
+  - Cursor / VS Code：打开本仓即用工作区 `files.eol=\n`；若仍假脏，检查用户设置勿把 `files.eol` 设成 `\r\n`
+  - Trae / 其他 Agent：须尊重 EditorConfig，或在该 IDE 把默认换行设为 LF——**假脏几乎都是它们把任务 md 存成 CRLF**
+  - 一旦再现「一堆 M、diff 为空、CRLF will be replaced」：`git restore -- path`（或 `git restore docs/specs/tasks/`），不要当成内容改动去提交
 
 ## 必跑验收
 

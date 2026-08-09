@@ -35,7 +35,8 @@ embodiment/desktop/src-tauri/target/
 
 # IDE
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
 *.swp
 
 # 环境变量
