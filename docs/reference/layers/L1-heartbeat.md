@@ -50,7 +50,7 @@ qi/prompts/conversation.txt      # 对话 prompt
 ### Step 1：数据库 + 配置
 
 - 建 `qi/storage/database.py`：初始化 SQLite，建 `emotion_states` 和 `messages` 表
-- 建 `qi/config/settings.yaml`：LLM provider（默认 deepseek，OpenAI 兼容协议）、API key（从环境变量读）、心跳间隔
+- 建 `qi/config/settings.yaml`：LLM provider（example 默认 **tokenrhythm / minimax-m2.7**，`providers.deepseek` 备用；OpenAI 兼容协议）、API key（从环境变量读）、心跳间隔
 - 验收：`python -c "from qi.storage.database import Database; ..."` 不报错
 
 <details>
@@ -137,6 +137,7 @@ emotion:
 # qi/core/emotion.py —— L1 用到的类型与衰减/冲击（与代码逐字一致）
 # <!-- 回写(2026-07)：description/apply_decay(model_copy) 对齐 emotion.py；
 #      Brain 经 step_emotion 调用衰减+耦合+天气+节律，详见 L3 -->
+# <!-- 回写(2026-08-09)：apply_decay + baseline_for(relationship_stage)；详见 L3 -->
 
 from pydantic import BaseModel
 from enum import Enum
@@ -414,6 +415,7 @@ class PromptBuilder:
 #      first_time 先回复再独白 / 情绪落盘节流 / waking；依据：qi/core/brain.py -->
 # <!-- 回写(2026-07-26)：PromptContext / BackgroundTasks；混合冲击；body_hint；
 #      _interacted_this_session；/why 痕迹；忆推送。依据：brain.py -->
+# <!-- 回写(2026-08-09)：idle 默认 GWS（gws.enabled=true）；legacy 为对照路径。依据：brain.py -->
 
 PENDING_QUEUE_MAX = 8
 EMOTION_SAVE_MIN_INTERVAL = 30.0
@@ -533,12 +535,15 @@ class Brain:
         4. _track_expression_threshold() → want_express
         5. 无 pending：inner_life.tick(after_first_time=False)；_broadcast_journal_entries()
            （有 pending 时本步不跑，避免同拍独白启动）
-        6a. 有 pending：_gather_prompt_context → expression.express
+        6a. 有 pending：_gather_prompt_context → build_intention_card → expression.express
             → 写入 _pending_speech（锁外再 deliver）
             → 若 triggered_first：再 inner_life.tick(after_first_time=True)；推送 journal
-        6b. 无 pending：先 action.tick（动了手则不再主动言语）；
-            否则 pick_proactive_kind → express → _pending_speech(proactive=True)
-            → record / persist gate
+        6b. 无 pending（idle）：
+            · 默认 gws.enabled=true → 传感/世界/账本压力 → collect_contenders → arbitrate
+              → _heartbeat_gws_idle（action:/proactive:/close_loop/report/curiosity/idle…）
+            · legacy（gws 关）：先 action.tick（动手则跳过主动言语）；
+              否则 pick_proactive_kind → express → _pending_speech(proactive=True)
+            → record / persist gate；assist 跨轮确认超时清理等同拍旁路
         7. _sync_avatar；若 triggered_first：_notify_first_time()；
            _record_trace(...)；_maybe_save_emotion(force=有 pending)
         """

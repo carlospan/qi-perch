@@ -11,7 +11,8 @@
 > explore：内部深读（d-3-2，读记忆叙事 + LLM digest + speak + 见闻卡）+ 外部联网（d-1）已收口；d-2 外部 hits 消化 + d-3-1 见闻卡片已收口。C 方案工程交付完成，相处复验中。assist 三包已落地（`qi/action/assist.py`）；irreversible 未做。
 > <!-- 演进指向(2026-08-01)：行动框架（预算/门控）保留；方向为 N1 执行器真实化（真读、有后果）与 N3 动机驱动（学习进度/内稳态压力替代随机意向）。见 docs/explanation/栖·数字生命架构方案.md §四 N1/N3。 -->
 > <!-- 演进指向(2026-08-08)：包 10 curiosity 候选注入回退（空赢仲裁堵死自主行动，已解；见解堵包）。 -->
-> <!-- 演进指向(2026-08-08)：explore 真搜索 C 方案 d-1~d-3-2 工程已交付（外部 Tavily + digest；内部 narratives 深读；ExploreCard）；相处复验中。assist / irreversible 仍待做。 -->
+> <!-- 演进指向(2026-08-08)：explore 真搜索 C 方案 d-1~d-3-2 工程已交付（外部 Tavily + digest；内部 narratives 深读；ExploreCard）；相处复验中。 -->
+> <!-- 回写(2026-08-09)：assist 三包已落地；仅 irreversible 仍待做（见下条演进指向）。 -->
 > <!-- 演进指向(2026-08-08)：explore C 方案收尾——d-2 外部 hits→digest；d-3-1 见闻卡片（web）；d-3-2 内部 narratives→digest + speak + 见闻卡（journal）；工程交付完成，相处复验中。 -->
 > <!-- 演进指向(2026-08-09)：explore 补 N3 动机接线——pressure 软调制 explore 概率（常量 K=0.5/0.6），force 下限 0.2。 -->
 > <!-- 演进指向(2026-08-09)：伤疤失败接线——layer._maybe_save_scar；severity 0.3/0.7；origin `[action:{kind}]`；骨架触发源待 assist/irreversible 真实产出。 -->
@@ -233,12 +234,13 @@ class TendAction:
     async def tend(self, occasion: str, emotion, season, *, speak=False) -> dict: ...
 
 # qi/action/explore.py
-# <!-- 回写(2026-07-23)：ExploreAction.drift；多数拍 None；飘出时 found 恒 None（不编造搜索结果）；
-#      只留「走神看一眼」的 actions 痕迹。搜索/HTTP 未实现。依据：qi/action/explore.py -->
+# <!-- 回写(2026-08-09)：删除过时「搜索/HTTP 未实现」；外部 Tavily + 内部 narratives 深读均已落地。 -->
 # <!-- 回写(2026-08-08)：d-1 外部分支——curiosity≥0.8+冷却6h+概率0.05+web/llm → Tavily；
-#      空手 found=None / failed_capability / speak+qi_line；内部不变仍不说。依据：explore.py / explore_web.py -->
+#      空手 found=None / failed_capability / speak+qi_line。依据：explore.py / explore_web.py -->
 # <!-- 回写(2026-08-08)：d-3-2 内部分支——list_recent_narratives → _digest_internal → speak+qi_line；
 #      source=journal；见闻卡与外部对称；删沙箱列目录死码。依据：explore.py -->
+# <!-- 回写(2026-08-09)：N3 pressure 软调制 PRESSURE_THROTTLE_K=0.5 / PRESSURE_REST_K=0.6；
+#      force 路径双压满时下限 0.2。伤疤 severity 0.3/0.7 在 layer._maybe_save_scar，勿与 K 混写。 -->
 
 class ExploreAction:
     async def drift(self, curiosity, emotion, season, *, season_scale, force=False) -> dict | None:

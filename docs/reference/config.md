@@ -1,7 +1,7 @@
 # config.md · 配置项参考
 
 > **定位**：所有 `settings` 配置项 + 默认值 + 语义的**技术参考**。
-> **真源**：`qi/config/settings.example.yaml` —— 本文件是**配置快照（索引说明）**，以 yaml 为准，非第二权威（宪法第四节同步纪律；日限 1/3/20 教训）。yaml 改动后须同步本文件对应行；禁止在文档其它处手抄这些值当第二权威。下表默认值抓取于 2026-08-08 的 example，若与 yaml 不符以 yaml 为准。
+> **真源**：`qi/config/settings.example.yaml` —— 本文件是**配置快照（索引说明）**，以 yaml 为准，非第二权威（宪法第四节同步纪律；日限 1/3/20 教训）。yaml 改动后须同步本文件对应行；禁止在文档其它处手抄这些值当第二权威。下表默认值抓取于 2026-08-09 的 example，若与 yaml 不符以 yaml 为准。
 > **现行路径**：`reference/config.md`（2026-08-02 重构新增）。
 
 ---
@@ -89,6 +89,12 @@
 |----|--------|------|
 | `action.autonomous_daily_limit` | **20** | 自主行动日限（安全阀，远高真实触发上限；已拍板维持 20，不回退 3） |
 | `action.season_scale` | spring 1.0 / summer 0.8 / autumn 0.5 / winter 0.2 | 季节活跃度缩放 |
+| `action.explore_external.enabled` | **false** | 外部分支总闸（Tavily）；关则只走内部深读 |
+| `action.explore_external.provider` | `tavily` | 外部检索提供方 |
+| `action.explore_external.api_key` | `${TAVILY_API_KEY}` | 密钥走 env |
+| `action.explore_external.cooldown_hours` | 6 | 外部探索冷却 |
+| `action.explore_external.probability` | 0.05 | 满足 curiosity 门后的触发概率 |
+| `action.explore_external.exclude_domains` | `[]` | 可选域名过滤 |
 
 ## relationship
 

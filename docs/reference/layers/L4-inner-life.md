@@ -118,7 +118,7 @@ CONSCIOUSNESS_PROBABILITY = 0.05
 AMBIENT_DRIFT_FACTOR = 0.2
 STREAM_COOLDOWN_MINUTES = 45
 EMOTION_SURGE_THRESHOLD = 0.3
-SILENCE_TRIGGER_HOURS = 4
+SILENCE_TRIGGER_HOURS = 3  # 与 journal/report 3h 对齐
 META_COGNITION_PROBABILITY = 0.01
 META_SIMILARITY_THRESHOLD = 0.6
 META_MIN_LENGTH = 15
@@ -137,7 +137,7 @@ def should_trigger_consciousness(
     after_first_time=False, probability=CONSCIOUSNESS_PROBABILITY,
     ambient_factor=AMBIENT_DRIFT_FACTOR,
 ) -> tuple[bool, str]:
-    # first_time → emotion_surge(|Δ|>0.3) → silence(>4h 且非 awake)
+    # first_time → emotion_surge(|Δ|>0.3) → silence(>3h 且非 awake)
     # → solitary random(probability) → ambient_drift(probability * ambient_factor)
     ...
 
@@ -168,21 +168,23 @@ class ConsciousnessStream:
 ### Step 3：梦境引擎
 
 - 建 `qi/inner_life/dream.py`
-- 触发条件：梦境模式下，每次心跳 10% 概率
-- 调用 LLM（temperature 1.1），用 `qi/prompts/dream.txt` 模板
-- 输出存入 dreams 表，标记情绪标签
+- 触发条件：`mode==dreaming` 且存在未巩固 episode，且 `curiosity ≥ DREAM_CURIOSITY_MIN`（**不再**用每拍 10% 随机当动机）
+- 调用 LLM（temperature 1.1），用 `qi/prompts/dream.txt` 模板；失败走模板拼装
+- 输出存入 dreams 表，标记情绪标签；巩固后标记 episode.dreamed
 - 梦的余韵：下次 awake 时，梦的情绪标签影响初始情绪（±0.05~0.1）
 - 梦的衰减：retention 按 6 小时半衰期衰减
 - 主动提起：`maybe_mention_hint`——bonded + 12% + retention>0.3 → **注入对话 prompt hint**（非 proactive 推送）
-- 验收：离线 4 小时后，dreams 表有记录；下次对话时栖可能说"我做了个梦"
+- 验收：做梦模式且好奇过阈、有积压 episode 时 dreams 有记录；下次对话可能提起
 
 **实现规格：**
 
 ```python
 # qi/inner_life/dream.py
 # <!-- 回写(2026-07)：update_dream_retention 签名；maybe_mention_hint，依据：dream.py -->
+# <!-- 回写(2026-08-09)：积压+curiosity 门取代每拍 10%；依据：dream.py -->
 
-DREAM_PROBABILITY = 0.1
+DREAM_CONSOLIDATION_PROBABILITY = 0.3  # 史料/配置残留键；WHETHER 已改 curiosity
+DREAM_CURIOSITY_MIN = 0.55
 DREAM_HALF_LIFE_HOURS = 6
 DREAM_SHARE_PROBABILITY = 0.12
 # purpose=dream, temperature=1.1；模板 qi/prompts/dream.txt
@@ -200,7 +202,9 @@ def update_dream_retention(
 
 
 class DreamEngine:
-    async def maybe_dream(emotion) -> ...:  # mode==dreaming 且 random < 0.1
+    async def maybe_dream(emotion) -> ...:
+        # mode==dreaming；list_undreamed_episodes 非空；curiosity>=0.55
+        # → pick_episode_weighted → generate
         ...
     async def decay_all() -> None: ...  # brain 每小时后台调用
     def apply_afterglow(emotion, dream) -> EmotionState: ...  # 进入 awake 时一次

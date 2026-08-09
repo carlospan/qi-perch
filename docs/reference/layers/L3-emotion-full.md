@@ -85,6 +85,20 @@ BASELINES = {
     "attachment": 0.3,
 }
 
+# security/attachment 随关系阶段的稳态锚（其余维仍用 BASELINES）
+STAGE_BASELINES = {
+    "stranger": {"security": 0.5, "attachment": 0.3},
+    "acquaintance": {"security": 0.55, "attachment": 0.38},
+    "friend": {"security": 0.62, "attachment": 0.48},
+    "bonded": {"security": 0.72, "attachment": 0.62},
+}
+# <!-- 回写(2026-08-09)：STAGE_BASELINES + baseline_for；依据：emotion.py -->
+
+
+def baseline_for(dim: str, relationship_stage: str | None = None) -> float:
+    """维度稳态目标：security/attachment 随阶段；其余用全局 BASELINES。"""
+    ...
+
 
 def apply_coupling(
     emotion: EmotionState,
@@ -99,10 +113,10 @@ def apply_coupling(
     for (src, dst), weight in COUPLING.items():
         if src == "attachment_unmet":
             src_val = 1.0 - new.attachment
-            src_baseline = 1.0 - BASELINES["attachment"]
+            src_baseline = 1.0 - baseline_for("attachment", relationship_stage)
         else:
             src_val = getattr(new, src)
-            src_baseline = BASELINES[src]
+            src_baseline = baseline_for(src, relationship_stage)
         deviation = src_val - src_baseline
         deltas[dst] = deltas.get(dst, 0.0) + weight * deviation * 0.1 * scale
 
@@ -285,15 +299,26 @@ def step_emotion(
     now: datetime,
     decay_multiplier: float = 1.0,
     relationship_stage: str | None = None,
+    *,
+    energy_baseline_offset: float = 0.0,
 ) -> EmotionState:
-    """衰减 → 耦合(可按阶段缩放) → 天气 → 节律 → clamp_emotion。"""
-    e = apply_decay(emotion, dt=1.0, multiplier=decay_multiplier)
+    """衰减(阶段锚) → 耦合 → 天气 → 节律 →（可选）账本能量偏移趋近 → clamp_emotion。"""
+    e = apply_decay(
+        emotion,
+        dt=1.0,
+        multiplier=decay_multiplier,
+        relationship_stage=relationship_stage,
+    )
     e = apply_coupling(e, relationship_stage=relationship_stage)
     e = apply_mood_cycle(e, now)
     e = apply_circadian(e, now.hour)
+    if energy_baseline_offset:
+        # 朝 (circadian 目标 + offset) 趋近；STASIS_APPROACH_RATE=0.05
+        ...
     return clamp_emotion(e)
 ```
 # <!-- 回写(2026-07-26)：step_emotion 透传 relationship_stage；依据：emotion.py -->
+# <!-- 回写(2026-08-09)：decay 阶段锚 + energy_baseline_offset；依据：emotion.py -->
 
 ### Step 5：模式切换 + 心跳频率
 

@@ -16,7 +16,7 @@
 - **形态**：单进程异步 agent loop（心跳）+ 可选 WebSocket 具身通道 + Live2D 前端
 - **认知来源**：OpenAI 兼容协议的远程 LLM（现行 **tokenrhythm / minimax-m2.7**；`providers.deepseek` 备用），按 `purpose` 路由
 - **持久化**：SQLite（`data/qi.db`，17 张表）+ ChromaDB（`data/chroma/`，BGE 语义向量）
-- **测试规模**：约 **556** 条 pytest（`pytest` 全绿，2026-08-09；explore C 收口时约 500、阶段四退出时约 405）
+- **测试规模**：约 **561** 条 pytest（`pytest` 全绿，2026-08-09；explore C 收口时约 500、L7 收口后约 556、阶段四退出时约 405）
 - **协议**：MIT
 
 项目当前处于"阶段四退出"状态（架构方案 §五 的阶段零~四中，阶段零~四工程判据已过，72h 无人测试作为后台稳定性观察继续累积）。详细进度见 [docs/progress.md](../progress.md)。
@@ -37,7 +37,7 @@
 | L4 内在生命 | ✅（表演层） | N2/N3 | 意识流/梦/反思，待内生化 |
 | L5 关系 | ✅ | N0/N4 | 阶段/信任/伤疤/季节 |
 | L6 具身 | ✅ | N1/N5 | Live2D 前端 |
-| L7 行动 | ✅ | N1 | share/tend/explore 自主行动 |
+| L7 行动 | 🌱（explore/assist 已落地；irreversible 未做） | N1 | share/tend/explore/assist；irreversible 待建 |
 
 `L` 是代码里真实存在的功能分层；`N` 是架构方案 §四 的目标本体分层（施工期目标）。施工期两套并存。
 
@@ -148,9 +148,9 @@ requirements.lock   锁定版本（CI 用）
 | [brain_trace.py](../../qi/core/brain_trace.py) | 心跳决策痕迹记录（`broadcast_traces` 表），供 `/why` 排障，不进 prompt |
 | [brain_types.py](../../qi/core/brain_types.py) | 共享类型与常量：`PromptContext` / `_PendingSpeech` / `PENDING_QUEUE_MAX=8`（待处理队列上限）。注意：共振阈值/前瞻窗口等节奏参数不在本文件，而在 `rhythm.py` / `proactive.py` 的实现中 |
 | [emotion.py](../../qi/core/emotion.py) | **情绪动力学**——`EmotionState`(6 维 + mode)、衰减/耦合/天气/节律/阶段锚/nudge/夹紧 |
-| [expression.py](../../qi/core/expression.py) | **表达层**——意向卡 → LLM 措辞；失败/空走 `render_template` 模板降级 |
+| [expression.py](../../qi/core/expression.py) | **表达层**——意向卡 → LLM 措辞；HARD/空走模板；模板不贴 memory 原文；去重撞车吐安全句 |
 | [perception.py](../../qi/core/perception.py) | **感知层**——冲击评估（LLM JSON 主路径 + 关键词回退 + 短路）、intent 调制、安全感 hint |
-| [intention.py](../../qi/core/intention.py) | **意向卡规则引擎**——`IntentionCard` / `build_intention_card`，零 LLM 产出导演指示 |
+| [intention.py](../../qi/core/intention.py) | **意向卡规则引擎**——`IntentionCard` / `build_intention_card`；了解多少→facts；元状态不灌叙事；free_talk 仅粗相关 memory |
 | [proactive.py](../../qi/core/proactive.py) | **主动行为门控**——日限/冷却/陌生期不打扰；`pick_proactive_kind` 选主动开口类型 |
 | [gws.py](../../qi/core/gws.py) | **全局工作空间仲裁**——`arbitrate` 按 salience 选最响者；respond 永不被压过；shadow 对照 |
 | [rhythm.py](../../qi/core/rhythm.py) | **节奏**——`determine_mode` 判定意识模式（awake/ambient/solitary/dreaming）；`next_interval` 心跳间隔 |
@@ -171,6 +171,7 @@ requirements.lock   锁定版本（CI 用）
 | [episodic.py](../../qi/memory/episodic.py) | **情景记忆**——episodes 表（topic/summary/key_facts/role_map），根治编织角色织反 |
 | [first_time.py](../../qi/memory/first_time.py) | **第一次记忆**——首遇事件，可被主动提起（≤每周一次） |
 | [open_loops.py](../../qi/memory/open_loops.py) | **未闭合念头队列**——上限 5，waking/对话首轮优先闭合，闭合后沉淀为 narrative |
+| [weave_guard.py](../../qi/memory/weave_guard.py) | **编织护栏**——`sanitize_woven_narrative`（role_map / 施教反转措辞清洗） |
 
 **记忆筛选规则**（`should_remember` / `compute_attention_weight`）：基于关键词表（`_SELF_DISCLOSURE` / `_STRONG_EMOTION` / `_RELATIONSHIP` / `_PROMISE` / `_HELP_HEALTH`）+ 情绪强度，决定是否落 raw_events 及注意力权重。
 
@@ -244,7 +245,7 @@ requirements.lock   锁定版本（CI 用）
 | [desktop/](../../qi/embodiment/desktop/) | **桌面端**——Tauri + Vue 3 + Live2D 前端（详见 §五） |
 
 **WebSocket 消息协议**：
-- 服务端→前端：`state` / `speech` / `typing` / `emotion_update` / `journal` / `journal_entry` / `history` / `audio` / `ping`
+- 服务端→前端：`state` / `speech` / `typing` / `emotion_update` / `journal` / `journal_entry` / `history` / `audio` / `ping` / `action`（creation_card / explore_drift / assist_confirm_request；另可含 `wake_result`）
 - 前端→服务端：`user_message` / `presence` / `pong` / `command`（`/state` `/history` `/journal`）
 
 ### 3.7 `qi/llm/` — LLM 网关（N5 语言器官）
@@ -401,7 +402,7 @@ pydantic BaseModel，6 维 + 意识模式。
 | `_handler(websocket)` | 连接处理——首推 state，接收 user_message/presence/pong/command |
 | `broadcast(message)` | 广播给所有前端连接 |
 | `send_speech` / `send_typing` / `send_state_change` / `send_emotion_update` / `send_audio` / `notify_journal_entry` | 各类推送 |
-| `_send_history(websocket)` / `_send_journal(websocket)` | 拉取 SQLite 全量对话/内在日记 |
+| `_send_history(websocket)` / `_send_journal(websocket)` | 拉取最近 `HISTORY_WINDOW=200` 条对话（+同窗创作/见闻卡）/ 内在日记 |
 
 ### 4.9 `GWS` 仲裁（[qi/core/gws.py](../../qi/core/gws.py)）
 
@@ -451,9 +452,13 @@ desktop/
       Live2DView.vue        Live2D 形象
       SceneView.vue         场景背景（黄昏的枝）
       StatusBar.vue         状态栏（mode/season/connected）
-      TalkView.vue          「谈」对话视图（按天分组）
+      TalkView.vue          「谈」对话视图（按天分组；含 ActionCard/ExploreCard/AssistConfirmCard）
       ViewTabs.vue          视图切换（still/talk/journal）
       WhisperView.vue       「静」轻语气泡
+      ActionCard.vue        创作分享卡
+      ExploreCard.vue       见闻卡（web|journal）
+      AssistConfirmCard.vue 协助确认卡
+      WindowControls.vue    无边框窗控
     composables/
       useQi.ts              WS 接线 + 消息/历史状态（单例）
       useEmotion.ts         情绪快照轮询
@@ -468,12 +473,13 @@ desktop/
 
 ### 5.3 前端状态流（`useQi`）
 
-- 连接后：`presence online=true` → 请求 `/history`（SQLite 全量对话）+ `/journal`（内在日记）+ 情绪快照
+- 连接后：`presence online=true` → 请求 `/history`（最近 200 条对话 + cards）+ `/journal`（内在日记）+ 情绪快照
 - 收 `speech`：`appendTalk("qi", text)` + 请求情绪快照
 - 收 `typing`：标记正在想
 - 收 `state`：更新 avatar/season/mode
 - 收 `emotion_update`：更新情绪
 - 收 `journal_entry`：unshift 到日记列表
+- 收 `action`：按 payload 挂 ActionCard / ExploreCard / AssistConfirmCard
 - 8 秒轮询情绪快照；`visibilitychange` 推送 presence
 
 ### 5.4 Live2D 模型

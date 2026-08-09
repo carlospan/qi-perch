@@ -108,7 +108,7 @@ class EmbodimentServer:
         # presence → brain.user_online + perception.set_user_presence
         # pong → pass
         # command "/state" → emotion_update（含 stage）
-        # command "/history" → history{messages}（谈：SQLite 全量）
+        # command "/history" → history{messages, cards?}（谈：最近 HISTORY_WINDOW=200）
         # command "/journal" → journal{entries}（忆：独白/梦/第一次）
         # 前端 useQi 连接时 + 每 ~8s 发 command /state 拉情绪快照（Brain 心跳未主动 push emotion_update）
         # 连接后 useQi 另发 /history、/journal
@@ -245,7 +245,7 @@ class AvatarController:
 
 - 窗口：**420×680**，透明无边框；header `data-tauri-drag-region`
 - 主界面按 `docs/how-to/ui/主界面设计-黄昏的枝.md`：
-  - 静 / 谈 / 忆（`ViewTabs`）；谈=连接后 `/history` 灌入 SQLite 全量，本轮继续 append；忆=连接后 `/journal` 拉独白/梦/第一次（库空则诚实空）；运行中 `journal_entry` 单条 prepend
+  - 静 / 谈 / 忆（`ViewTabs`）；谈=连接后 `/history` 灌入最近 **200** 条（`HISTORY_WINDOW`），本轮继续 append；忆=连接后 `/journal` 拉独白/梦/第一次（库空则诚实空）；运行中 `journal_entry` 单条 prepend
   - `SceneView` 氛围 + `useEmotion` §五公式；`WhisperView` 低语（等待态文案符合人设）
   - Live2D 形象见 `docs/how-to/ui/主界面-Live2D接入.md`（`Live2DView` / `useLive2D`）
 - 依赖：`pixi.js@6.5.10` + `pixi-live2d-display@0.4.0`；Cubism Core **不入库**，须本地放入 `public/live2dcubismcore.min.js`
