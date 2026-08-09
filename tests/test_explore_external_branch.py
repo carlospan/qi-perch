@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from qi.action.explore import (
     EXTERNAL_LAST_KEY,
     ExploreAction,

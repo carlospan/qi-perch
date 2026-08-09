@@ -8,7 +8,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from qi.action.budget import ActionBudget
 from qi.action.explore import PRESSURE_REST_K, PRESSURE_THROTTLE_K, ExploreAction
 from qi.action.volition import action_intentions

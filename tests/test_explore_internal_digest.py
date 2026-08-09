@@ -6,10 +6,9 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-
 from qi.action.explore import (
-    ExploreAction,
     _QUERY_PRIVACY_LINE,
+    ExploreAction,
     _clip_entry,
 )
 from qi.action.permission import OUTCOME_SUCCESS

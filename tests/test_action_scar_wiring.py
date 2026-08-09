@@ -6,7 +6,6 @@ from datetime import datetime
 from unittest.mock import AsyncMock
 
 import pytest
-
 from qi.action.layer import ActionLayer
 from qi.action.permission import (
     OUTCOME_FAILED_CAPABILITY,

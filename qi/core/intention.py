@@ -860,11 +860,18 @@ def _key_phrase_in_materials(text: str, materials: list[Material]) -> bool:
     return False
 
 
+_ATTR_CLAIM_QUOTES = frozenset("「『\"“»」』\"”")
+
+
 def _extract_user_attr_claims(text: str) -> list[str]:
     """抽出回复里归因给用户的名词/短语（「你那天说的硬币」→ 硬币）。"""
     out: list[str] = []
     for m in _USER_ATTR_CLAIM_RE.finditer(text or ""):
-        c = (m.group(1) or "").strip("「『\"“»」』\"”")
+        c = m.group(1) or ""
+        while c and c[0] in _ATTR_CLAIM_QUOTES:
+            c = c[1:]
+        while c and c[-1] in _ATTR_CLAIM_QUOTES:
+            c = c[:-1]
         if len(c) >= 1 and c not in out:
             out.append(c)
     return out

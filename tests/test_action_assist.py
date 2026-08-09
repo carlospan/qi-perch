@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
-
 from qi.action.assist import AssistAction
 from qi.action.layer import ActionLayer
 from qi.action.permission import OUTCOME_FAILED_CAPABILITY, OUTCOME_SUCCESS

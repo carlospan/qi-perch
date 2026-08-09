@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-
 from qi.action.explore import ExploreAction
 from qi.action.explore_web import SearchHit
 from qi.action.permission import OUTCOME_SUCCESS

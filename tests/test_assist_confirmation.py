@@ -8,7 +8,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from qi.action.layer import ActionLayer
 from qi.action.volition import AssistRequest, parse_assist_request
 from qi.core.brain import Brain
