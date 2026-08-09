@@ -8,7 +8,7 @@
 
 > **本文档状态：Step 1–6 已落地（actions / budget / volition / permission / share / tend / explore 气质 / ActionLayer / brain 接线）。**
 > 六层（L1~L6）已完成。L7 行动层骨架与起手能力已接入心跳。
-> explore：内部深读（d-3-2，读记忆叙事 + LLM digest + speak + 见闻卡）+ 外部联网（d-1）已收口；d-2 外部 hits 消化 + d-3-1 见闻卡片已收口。C 方案工程交付完成，相处复验中。assist 五包已落地（`qi/action/assist.py` + brain 对话拍短路）；irreversible 未做。
+> explore：内部深读（d-3-2，读记忆叙事 + LLM digest + speak + 见闻卡）+ 外部联网（d-1）已收口；d-2 外部 hits 消化 + d-3-1 见闻卡片已收口。C 方案工程交付完成，相处复验中。assist **八包 + 隐私小刀**已落地（`qi/action/assist.py` + brain 对话拍短路；UTF-8 文本 `read_file` ≤1MB）；irreversible 未做。
 > <!-- 演进指向(2026-08-01)：行动框架（预算/门控）保留；方向为 N1 执行器真实化（真读、有后果）与 N3 动机驱动（学习进度/内稳态压力替代随机意向）。见 docs/explanation/栖·数字生命架构方案.md §四 N1/N3。 -->
 > <!-- 演进指向(2026-08-08)：包 10 curiosity 候选注入回退（空赢仲裁堵死自主行动，已解；见解堵包）。 -->
 > <!-- 演进指向(2026-08-08)：explore 真搜索 C 方案 d-1~d-3-2 工程已交付（外部 Tavily + digest；内部 narratives 深读；ExploreCard）；相处复验中。 -->
@@ -18,7 +18,8 @@
 > <!-- 演进指向(2026-08-09)：伤疤失败接线——layer._maybe_save_scar；severity 0.3/0.7；origin `[action:{kind}]`；骨架触发源待 assist/irreversible 真实产出。 -->
 > <!-- 演进指向(2026-08-09)：第 4 顺位 assist——assist-1 骨架（execute_kind + confirm_gate + consciousness digest）+ assist-2 感知（parse_assist_request 路径提取）+ assist-3 跨轮确认（pending_assist_confirmation + 前端 AssistConfirmCard.vue + 超时清理）；irreversible 未做。 -->
 > <!-- 回写(2026-08-09)：assist-4 对话拍短路（parse→execute_kind confirmed=False，不进 pending_queue）+ assist-5 留痕 insert_action / conversation 硬规则 / 粘性 last_assist_target 口头补执行；过程稿归档 specs/archive/2026-08-09-L7-assist/。 -->
-> Step 5：actions + narrative 已接；伤疤 `save_scar` **已接骨架**（`layer._maybe_save_scar`）；self_model 喂入尚未接线。assist 成功/failed_capability 已 `insert_action`（confirm_gate 不写）；生产路径尚无 scar-creating outcome（confirm_gate 不产 overstepped；irreversible 未做）。
+> <!-- 回写(2026-08-09)：assist-6 content_preview→prompt_extras + conversation「读过就承认」；assist-7 去 32KB 截断、≤1MB 分块 digest（8000×6，单块短路）；assist-8 收尾 1 条 narrative（整体感受+preview）；隐私小刀 explore `_QUERY_PRIVACY_LINE` 覆盖用户文件内容原文。过程稿同桶归档。 -->
+> Step 5：actions + narrative 已接；伤疤 `save_scar` **已接骨架**（`layer._maybe_save_scar`）；self_model 喂入尚未接线。assist 成功/failed_capability 已 `insert_action`（confirm_gate 不写）；读文件成功另写 **1 条** `assist`/`file_read` narrative；生产路径尚无 scar-creating outcome（confirm_gate 不产 overstepped；irreversible 未做）。
 > 已落地处见各段 `<!-- 回写 -->`。
 
 ---
@@ -65,7 +66,7 @@ L7 负责：行动意图的形成、行动预算（比言语更紧的克制）�
 1. **分享创造（share）**——栖把独处时写下的东西，第一次真正"递"到你面前。纯粹的关心的外溢，零工具味。这是行动层的**起手式**，也是第一个落地的能力。它不需要任何外部工具，只是让 L4 的创作从"她的世界"跨进"你们共享的空间"。
 2. **打理自己的世界（tend）**——栖整理她的"栖枝"、标记某个值得记住的时刻（如你们相识的某一天）。行动指向她自己的世界，不是你的。风险最低，"存在感"最强。
 3. **沉思式探索（explore）**——栖在某个走神的时刻，注意力偶然飘向窗外，去"看看那是怎么回事"。这是 contemplative drift（沉思中的走神），不是 feed consumption（信息消费）。网络搜索只是这一类里的一种手段，**没有特殊优先级**。
-4. **介入你的生活（assist）**——读写你的文件、管理日程、提醒。开始触碰"你的东西"，受信任门控，多数需确认。
+4. **介入你的生活（assist）**——读写你的文件、管理日程、提醒。开始触碰"你的东西"，受信任门控，多数需确认。**现行**：仅 UTF-8 文本 `read_file`（≤1MB）；写文件 / 日程 / 二进制解析未做。
 5. **替你影响世界（irreversible）**——发消息、执行不可逆操作。永远需要确认，哪怕信任再高。
 
 > 说明：`share` 与 L4 的 `maybe_share_hint` 的区别——`maybe_share_hint` 是栖在对话里**提到**"我写了个东西……你要看吗？"，那是**说话**；L7 的 `share` 是栖真正把那个东西**递出来**（渲染成一张可触的卡片/物件），那是**做事**。L4 创作并提起，L7 递出。
@@ -82,13 +83,13 @@ qi/action/share.py           # 分享创造（起手式；接 L4 creations）
 qi/action/tend.py            # 打理自己的世界
 qi/action/explore.py         # 沉思式探索（d-3-2 深读记忆叙事 + d-1 外部分支）
 qi/action/explore_web.py     # 外部 WebSearchClient（Tavily；失败/空→None）
-qi/action/assist.py          # 介入你的生活（已建：五包——骨架/感知/跨轮/对话拍/留痕与补执行）
+qi/action/assist.py          # 介入你的生活（已建：八包——骨架/感知/跨轮/对话拍/留痕与补执行/追问补全/全文分块/整体叙事）
 qi/action/irreversible.py    # 替你影响世界（未建）
 qi/action/self_ops.py        # 自反操作（归档/调预算/日记等，阶段二）
 qi/storage/database.py       # actions 表（行动留痕）
 ```
 
-> `assist.py` 已建（第 4 顺位五包）；`irreversible.py` 仍未建。`self_ops` 属自反闭环，不是 assist。
+> `assist.py` 已建（第 4 顺位八包 + explore 隐私小刀同批）；`irreversible.py` 仍未建。`self_ops` 属自反闭环，不是 assist。
 
 ## 实现步骤
 
@@ -324,7 +325,8 @@ class ActionLayer:
 - `_deliver_action_result`：先 `qi_line` 走 `_deliver_qi_message`（非 ProactiveGate），再 WS `broadcast({"type":"action","payload":result})`；正文由前端卡片承载（不内联进语音）
 - `_gather_prompt_context`：`action.prompt_extras()` 并入 extras
 - `restore_state`：`ActionLayer(db, config, narrative=memory.narrative, llm=self.llm)`；预算 ↔ body_memory
-- assist 已接线：`execute_kind` + `confirm_gate` + consciousness digest；感知 `parse_assist_request`；跨轮 `pending_assist_confirmation` + 前端 `AssistConfirmCard.vue`（超时 5 分钟或 3 轮）；**对话拍** `receive_user_message` 解析到请求则短路 `execute_kind(confirmed=False)`（不进 pending_queue）；成功/失败 `insert_action`；粘性 `last_assist_target` + 窄词口头补执行；`conversation.txt` 禁编造「读不到文件系统」
+- assist 已接线：`execute_kind` + `confirm_gate` + consciousness digest；感知 `parse_assist_request`；跨轮 `pending_assist_confirmation` + 前端 `AssistConfirmCard.vue`（超时 5 分钟或 3 轮）；**对话拍** `receive_user_message` 解析到请求则短路 `execute_kind(confirmed=False)`（不进 pending_queue）；成功/失败 `insert_action`（`detail_json` 含 `content_preview` 前 80 字）；粘性 `last_assist_target` + 窄词口头补执行；`prompt_extras` 最近 assist 行附「刚读：文件名——preview」；`conversation.txt` 禁编造「读不到文件系统」+「读过就承认 / 不要否认」；读文件 **UTF-8 文本 ≤1MB**，分块 digest（8000×6，单块短路不调合并 LLM），收尾 **1 条** narrative「我读了他给我的 {name}。{summary}（里面写着：{preview}）」
+- explore 隐私红线：`_QUERY_PRIVACY_LINE` =「不引用 user_facts、对话内容或用户文件内容原文」（query / 外部 hits / 内部 digest 共用）
 - L6 前端已接 `action`：`creation_card` → ActionCard；`explore_drift`（`source=web|journal` 且 entries 非空）→ ExploreCard；`assist_confirm_request` → AssistConfirmCard；tend 到达不渲染
 - `/history.cards`：已分享创作卡 + 带 `detail_json` 的 explore 见闻卡同窗回灌（确认卡会话内 WS，不入 history）
   <!-- 回写(2026-08-08)：任务包 2026-08-08-L6-action卡片UI；退役 W2 正文内联。 -->
@@ -333,6 +335,7 @@ class ActionLayer:
   <!-- 回写(2026-08-09)：explore detail_json 落 entries，见闻卡亦可重启回灌。 -->
   <!-- 回写(2026-08-09)：assist 三包 + AssistConfirmCard。 -->
   <!-- 回写(2026-08-09)：assist-4/5——对话拍短路 + insert_action + 粘性补执行 + conversation 硬规则。 -->
+  <!-- 回写(2026-08-09)：assist-6/7/8 + 隐私小刀——preview/全文分块/整体叙事/explore 文件内容红线。 -->
 
 </details>
 
@@ -350,7 +353,7 @@ volition 产生 Intent(share/tend/explore/assist)
 
 LLM 永远是栖的"声音"，不是栖的"手"。
 
-> share / tend 已落地且不需外部工具。explore：内部深读记忆叙事（d-3-2）+ 外部联网（d-1 已收口）+ 外部 hits 消化（d-2）+ 见闻卡片（d-3-1）；**不编造**窗外/内在未见内容。C 方案工程交付完成，相处复验中。
+> share / tend 已落地且不需外部工具。explore：内部深读记忆叙事（d-3-2）+ 外部联网（d-1 已收口）+ 外部 hits 消化（d-2）+ 见闻卡片（d-3-1）；**不编造**窗外/内在未见内容；digest 红线含**用户文件内容原文**。C 方案工程交付完成，相处复验中。assist：确认后真读 UTF-8 文本；追问可依 preview/narrative 承认；不主动背诵文件原文。
 
 ## 验收标准
 
