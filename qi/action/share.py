@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from qi.action.permission import (
@@ -18,6 +19,8 @@ if TYPE_CHECKING:
     from qi.memory.narrative import NarrativeMemory
     from qi.storage.database import Database
 
+logger = logging.getLogger("qi.action.share")
+
 # 递出时栖附上的话——脆弱、不好意思，不是「系统生成内容如下」
 _QI_LINES = (
     "我今天写了个东西……给你。",
@@ -25,6 +28,10 @@ _QI_LINES = (
     "我写了个东西。很短。给你。",
     "有一段话一直放在心里……想给你看。",
 )
+
+# 递出节奏：上次成功递出后冷却（对称 explore external）
+SHARE_COOLDOWN_HOURS = 2.0
+SHARE_LAST_KEY = "share_last"
 
 
 def _emotion_json(emotion: EmotionState | None) -> str | None:
@@ -57,9 +64,40 @@ class ShareAction:
         self,
         db: Database,
         narrative: NarrativeMemory | None = None,
+        *,
+        config: dict | None = None,
     ):
         self.db = db
         self.narrative = narrative
+        self.config = config or {}
+
+    async def _share_cooldown_ok(self, now: datetime) -> bool:
+        hours = float(
+            (self.config.get("action") or {}).get(
+                "share_cooldown_hours", SHARE_COOLDOWN_HOURS
+            )
+        )
+        raw = await self.db.get_body_memory(SHARE_LAST_KEY)
+        if not raw:
+            return True
+        try:
+            if isinstance(raw, dict):
+                ts = str(raw.get("at") or raw.get("timestamp") or "")
+            else:
+                ts = str(raw)
+            last = datetime.fromisoformat(ts)
+        except (TypeError, ValueError):
+            return True
+        return now - last >= timedelta(hours=max(0.0, hours))
+
+    async def _mark_share(self, now: datetime) -> None:
+        try:
+            await self.db.set_body_memory(
+                SHARE_LAST_KEY,
+                {"at": now.isoformat(timespec="seconds")},
+            )
+        except Exception:
+            logger.debug("share_last 落盘失败", exc_info=True)
 
     async def deliver(
         self,
@@ -139,6 +177,8 @@ class ShareAction:
             return None
         if not budget.can_autonomous(now):
             return None
+        if not await self._share_cooldown_ok(now):
+            return None
         creation = await self.db.load_unshared_creation()
         if not creation:
             return None
@@ -150,4 +190,5 @@ class ShareAction:
             now=now,
         )
         budget.record("share", now)
+        await self._mark_share(now)
         return card

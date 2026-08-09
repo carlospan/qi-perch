@@ -65,7 +65,7 @@ class ActionLayer:
         self.config = config or {}
         self.llm = llm
         self.budget = ActionBudget(self.config)
-        self.share = ShareAction(db, narrative=narrative)
+        self.share = ShareAction(db, narrative=narrative, config=self.config)
         self.tend = TendAction(db, narrative=narrative)
         web = self._build_explore_web()
         self.explore = ExploreAction(

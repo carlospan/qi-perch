@@ -87,6 +87,7 @@ gws:
 # 行动层（L7）：自主行动日限（远高真实触发上限，仅作安全阀）
 action:
   autonomous_daily_limit: 20
+  share_cooldown_hours: 2       # 递出后冷却（默认 2h，与 explore_external 对称）
   season_scale:
     spring: 1.0
     summer: 0.8
