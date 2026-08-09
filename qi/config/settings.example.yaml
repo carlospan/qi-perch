@@ -1,7 +1,8 @@
 # LLM 配置（OpenAI 兼容协议）
-# 现行路由：custom tokenrhythm / minimax-m2.7；deepseek 保留在 providers 备用
+# 现行示例：火山方舟 ark（DeepSeek-V4 Flash）；tokenrhythm / deepseek 备用
+# 密钥放仓库根 .env：ARK_API_KEY=...
 llm:
-  default_provider: "tokenrhythm"
+  default_provider: "ark"
   providers:
     deepseek:
       base_url: "https://api.deepseek.com"
@@ -10,6 +11,12 @@ llm:
         fast: "deepseek-v4-flash"
         strong: "deepseek-v4-flash"
   custom_providers:
+    ark:
+      base_url: "https://ark.cn-beijing.volces.com/api/v3"
+      api_key: "${ARK_API_KEY}"
+      models:
+        fast: "deepseek-v4-flash-ga-260731"
+        strong: "deepseek-v4-flash-ga-260731"
     tokenrhythm:
       base_url: "https://tokenrhythm.studio/v1"
       api_key: "${TOKENRHYTHM_API_KEY}"
@@ -17,13 +24,13 @@ llm:
         fast: "minimax-m2.7"
         strong: "minimax-m2.7"
   model_routing:
-    conversation: "tokenrhythm:fast"
-    narrative: "tokenrhythm:strong"
-    consciousness: "tokenrhythm:fast"
-    dream: "tokenrhythm:fast"
-    creation: "tokenrhythm:fast"
-    reflection: "tokenrhythm:strong"
-    fact: "tokenrhythm:fast"
+    conversation: "ark:fast"
+    narrative: "ark:strong"
+    consciousness: "ark:fast"
+    dream: "ark:fast"
+    creation: "ark:fast"
+    reflection: "ark:strong"
+    fact: "ark:fast"
 
 # 心跳配置
 rhythm:
