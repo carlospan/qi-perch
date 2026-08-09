@@ -143,6 +143,8 @@ async def test_assist_digest_uses_llm(db, tmp_path):
         season="spring",
         now=datetime(2026, 8, 9),
     )
+    # R5 / B1 定案 a：短文件仅 1 次块 digest（无合并 LLM）
+    assert len(llm.calls) == 1
     assert llm.calls[0]["purpose"] == "consciousness"
     assert result["qi_line"] == "看到了你今天的开心。"
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import random
 from datetime import datetime
@@ -75,7 +76,7 @@ class ActionLayer:
             llm=llm,
         )
         self.self_ops = SelfOps(db)
-        self.assist = AssistAction(db, llm=llm)
+        self.assist = AssistAction(db, llm=llm, narrative=narrative)
         self.last_result: dict | None = None
         self.last_closed_loop: dict[str, Any] | None = None
 
@@ -442,8 +443,31 @@ class ActionLayer:
         lines = []
         for row in rows:
             summary = str(row.get("summary") or "").strip()
-            if summary:
-                lines.append(f"- {summary}")
+            if not summary:
+                continue
+            line = f"- {summary}"
+            # assist-6：assist 行附「刚读的文件 + 内容概览」，追问可诚实回答
+            if row.get("kind") == "assist":
+                detail = row.get("detail_json")
+                if detail:
+                    try:
+                        d = json.loads(str(detail))
+                    except (json.JSONDecodeError, TypeError):
+                        d = {}
+                    tp = str(d.get("target_path") or "").strip()
+                    preview = str(d.get("content_preview") or "").strip()
+                    if tp or preview:
+                        name = (
+                            tp.replace("\\", "/").rsplit("/", 1)[-1]
+                            if tp
+                            else ""
+                        )
+                        note = "（刚读：" + name
+                        if preview:
+                            note += "——" + preview
+                        note += "）"
+                        line += " " + note
+            lines.append(line)
         if not lines:
             return {"recent_actions": "（最近没有特别伸过手）"}
         body = "\n".join(lines)

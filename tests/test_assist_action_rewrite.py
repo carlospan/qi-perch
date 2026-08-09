@@ -46,6 +46,28 @@ async def test_assist_success_inserts_action(db, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_assist_detail_has_content_preview(db, tmp_path):
+    f = tmp_path / "note.txt"
+    body = "今天天气不错\n第二行也算字"
+    f.write_text(body, encoding="utf-8")
+    assist = AssistAction(db, llm=_FakeLLM())
+    await assist.execute(
+        "read_file",
+        str(f),
+        relationship_stage="friend",
+        trust=0.7,
+        confirmed=True,
+        season="spring",
+        now=datetime(2026, 8, 9, 12, 0),
+    )
+    rows = await db.list_recent_actions(limit=5)
+    assist_rows = [r for r in rows if r.get("kind") == "assist"]
+    detail = json.loads(assist_rows[0]["detail_json"] or "{}")
+    expected = body[:80].replace("\n", " ")
+    assert detail.get("content_preview") == expected
+
+
+@pytest.mark.asyncio
 async def test_assist_fail_inserts_action(db, tmp_path):
     assist = AssistAction(db, llm=_FakeLLM("不该"))
     result = await assist.execute(

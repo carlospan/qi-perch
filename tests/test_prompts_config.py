@@ -27,6 +27,10 @@ def test_read_prompt_conversation():
     assert "读文件" in text
     assert "读不到你的文件系统" in text
     assert "隔着玻璃" in text
+    # assist-6：读过就承认（按实际措辞断言）
+    assert "recent_actions" in text
+    assert "不要否认" in text
+    assert "只是心意" in text
 
 
 def test_stranger_stage_hint_enforces_distance():
