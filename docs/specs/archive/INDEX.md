@@ -23,6 +23,7 @@
 | [`2026-08-07-n5-hard-gate/`](2026-08-07-n5-hard-gate/INDEX.md) | N5 硬闸扩展 | ✅ 闭环 |
 | [`2026-08-07-n5-retrieval-gate/`](2026-08-07-n5-retrieval-gate/INDEX.md) | N5-b 检索相关门 | 🔧 编码完成，待方案验收 |
 | [`2026-08-07-teach-hardcode-cleanup/`](2026-08-07-teach-hardcode-cleanup/INDEX.md) | 施教硬编码清理 + 机制收束 | 🔧 文案墙待终验；机制收束 ✅ |
+| [`2026-08-09-L7-assist/`](2026-08-09-L7-assist/INDEX.md) | L7 assist 五包（骨架/感知/跨轮/对话拍/集成修复） | ✅ 闭环 |
 
 ## 归档纪律
 
@@ -32,4 +33,4 @@
 
 ---
 
-*总索引 · 2026-08-07 回写（增 N5-b 检索相关门桶）*
+*总索引 · 2026-08-09 回写（增 L7-assist 五包桶）*

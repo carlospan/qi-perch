@@ -23,6 +23,10 @@ def test_read_prompt_conversation():
     assert "阶段约束优先于" in text
     assert "{identity_snapshot}" in text
     assert "过渡脚手架" in text
+    # assist-5：读文件语义硬规则
+    assert "读文件" in text
+    assert "读不到你的文件系统" in text
+    assert "隔着玻璃" in text
 
 
 def test_stranger_stage_hint_enforces_distance():

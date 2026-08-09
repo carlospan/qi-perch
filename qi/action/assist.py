@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -52,23 +53,27 @@ class AssistAction:
         now: datetime | None = None,
     ) -> dict[str, Any]:
         """执行协助操作。返回 result dict（含 outcome / qi_line / summary）。"""
-        _ = now or datetime.now()
+        now = now or datetime.now()
 
         if op != "read_file":
-            return self._fail(
+            return await self._fail(
                 "我还不会做这个。",
                 "不支持的协助类型",
                 OUTCOME_FAILED_CAPABILITY,
+                season=season,
+                now=now,
             )
 
         allowed, needs_confirm = can_read_user_file(
             relationship_stage, trust, scars
         )
         if not allowed:
-            return self._fail(
+            return await self._fail(
                 "这个我得先跟你熟一点再说。",
                 f"关系不够：{relationship_stage}",
                 OUTCOME_FAILED_CAPABILITY,
+                season=season,
+                now=now,
             )
         if needs_confirm and not confirmed:
             return self._confirm_gate(target_path)
@@ -76,28 +81,47 @@ class AssistAction:
         try:
             path = Path(target_path).expanduser().resolve()
             if not path.is_file():
-                return self._fail(
+                return await self._fail(
                     "你说的那个文件我没找到。",
                     f"不是可读文件：{target_path}",
                     OUTCOME_FAILED_CAPABILITY,
+                    season=season,
+                    now=now,
                 )
             content = path.read_text(encoding="utf-8", errors="ignore")[
                 :_MAX_READ_BYTES
             ]
         except FileNotFoundError:
-            return self._fail(
+            return await self._fail(
                 "你说的那个文件我没找到。",
                 f"文件不存在：{target_path}",
                 OUTCOME_FAILED_CAPABILITY,
+                season=season,
+                now=now,
             )
         except OSError as e:
-            return self._fail(
+            return await self._fail(
                 "我打不开那个文件。",
                 f"读取失败：{e}",
                 OUTCOME_FAILED_CAPABILITY,
+                season=season,
+                now=now,
             )
 
         summary = await self._digest_file(target_path, content)
+        action_id = await self.db.insert_action(
+            "assist",
+            summary,
+            target="user",
+            outcome=OUTCOME_SUCCESS,
+            emotion_context=None,
+            season=season,
+            detail_json=json.dumps(
+                {"op": op, "target_path": target_path, "digest": summary},
+                ensure_ascii=False,
+            ),
+            now=now,
+        )
         return {
             "type": "assist_result",
             "op": op,
@@ -107,6 +131,7 @@ class AssistAction:
             "speak": True,
             "outcome": OUTCOME_SUCCESS,
             "season": season,
+            "action_id": action_id,
         }
 
     async def _digest_file(self, path: str, content: str) -> str:
@@ -151,9 +176,24 @@ class AssistAction:
             "needs_confirmation": True,
         }
 
-    def _fail(
-        self, qi_line: str, summary: str, outcome: str
+    async def _fail(
+        self,
+        qi_line: str,
+        summary: str,
+        outcome: str,
+        *,
+        season: str = "spring",
+        now: datetime | None = None,
     ) -> dict[str, Any]:
+        if outcome == OUTCOME_FAILED_CAPABILITY:
+            await self.db.insert_action(
+                "assist",
+                summary,
+                target="user",
+                outcome=OUTCOME_FAILED_CAPABILITY,
+                season=season,
+                now=now,
+            )
         return {
             "type": "assist_result",
             "summary": summary,

@@ -3,12 +3,13 @@
 # IDE Agent 同步栖的层文档代码块 · 提示词模板
 
 > 与 `IDE-Agent-执行栖的开发任务.md` 配套。那份是"按层文档写代码"，这份是反过来——"按代码回写层文档里的实现规格代码块"。
-> 背景：层文档实现规格须与代码一致。代码是现状权威。测试规模约 **561**（以 `progress.md` / `pytest` 为准）。
+> 背景：层文档实现规格须与代码一致。代码是现状权威。测试规模约 **576**（以 `progress.md` / `pytest` 为准）。
 > <!-- 回写(2026-07-25)：测试数 67→132；范围扩至 L7 / L2-user-facts；补 2026-07-25 brain 时序。
 >      续：L2 MemoryManager facts；L3 mood md5 + DECAY_RATES + YAML threshold；
 >      L6 history/journal/action 协议；L7 narrative 恒织 + mode 门控 + _deliver_action_result。 -->
 > <!-- 回写(2026-08-09)：测试规模→556；L7 补 assist/explore_web；L6 action 前端已接卡片。 -->
 > <!-- 回写(2026-08-09)：测试规模→561；layers/wiki/config 对齐现码（梦门/阶段锚/GWS idle/history=200 等）。 -->
+> <!-- 回写(2026-08-09)：测试规模→576；assist-4/5 对话拍短路 + insert_action + 粘性补执行。 -->
 
 ---
 
@@ -67,7 +68,7 @@ gateway 内部用 qi/llm/providers/openai_compat.py 做协议适配。
        qi/embodiment/avatar/states.py, qi/embodiment/voice/tts.py, qi/cli.py,
        qi/embodiment/desktop/（前端，仅在文档涉及处参考）
   L7 → qi/action/（layer/budget/permission/share/tend/explore/explore_web/assist 等；
-       irreversible 未建）, brain 接线（含 pending_assist_confirmation）
+       irreversible 未建）, brain 接线（含 pending_assist_confirmation / last_assist_target）
 
 ---
 
@@ -159,7 +160,7 @@ L6 具身：
 L7 行动：
 - share/tend 恒织 narrative（0.78 / 0.7）；explore 不织。
 - tick 仅 solitary|ambient；awake 不自主伸手；_deliver_action_result 推 WS action。
-- assist 三包已落地（读文件 + confirm_gate + 跨轮确认）；irreversible 未做；伤疤 save_scar 骨架已接。
+- assist 五包已落地（读文件 + confirm_gate + 跨轮确认 + 对话拍短路 + 留痕/口头补执行）；irreversible 未做；伤疤 save_scar 骨架已接。
 
 ---
 

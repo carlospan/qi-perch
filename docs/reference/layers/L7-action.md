@@ -8,7 +8,7 @@
 
 > **本文档状态：Step 1–6 已落地（actions / budget / volition / permission / share / tend / explore 气质 / ActionLayer / brain 接线）。**
 > 六层（L1~L6）已完成。L7 行动层骨架与起手能力已接入心跳。
-> explore：内部深读（d-3-2，读记忆叙事 + LLM digest + speak + 见闻卡）+ 外部联网（d-1）已收口；d-2 外部 hits 消化 + d-3-1 见闻卡片已收口。C 方案工程交付完成，相处复验中。assist 三包已落地（`qi/action/assist.py`）；irreversible 未做。
+> explore：内部深读（d-3-2，读记忆叙事 + LLM digest + speak + 见闻卡）+ 外部联网（d-1）已收口；d-2 外部 hits 消化 + d-3-1 见闻卡片已收口。C 方案工程交付完成，相处复验中。assist 五包已落地（`qi/action/assist.py` + brain 对话拍短路）；irreversible 未做。
 > <!-- 演进指向(2026-08-01)：行动框架（预算/门控）保留；方向为 N1 执行器真实化（真读、有后果）与 N3 动机驱动（学习进度/内稳态压力替代随机意向）。见 docs/explanation/栖·数字生命架构方案.md §四 N1/N3。 -->
 > <!-- 演进指向(2026-08-08)：包 10 curiosity 候选注入回退（空赢仲裁堵死自主行动，已解；见解堵包）。 -->
 > <!-- 演进指向(2026-08-08)：explore 真搜索 C 方案 d-1~d-3-2 工程已交付（外部 Tavily + digest；内部 narratives 深读；ExploreCard）；相处复验中。 -->
@@ -17,7 +17,8 @@
 > <!-- 演进指向(2026-08-09)：explore 补 N3 动机接线——pressure 软调制 explore 概率（常量 K=0.5/0.6），force 下限 0.2。 -->
 > <!-- 演进指向(2026-08-09)：伤疤失败接线——layer._maybe_save_scar；severity 0.3/0.7；origin `[action:{kind}]`；骨架触发源待 assist/irreversible 真实产出。 -->
 > <!-- 演进指向(2026-08-09)：第 4 顺位 assist——assist-1 骨架（execute_kind + confirm_gate + consciousness digest）+ assist-2 感知（parse_assist_request 路径提取）+ assist-3 跨轮确认（pending_assist_confirmation + 前端 AssistConfirmCard.vue + 超时清理）；irreversible 未做。 -->
-> Step 5：actions + narrative 已接；伤疤 `save_scar` **已接骨架**（`layer._maybe_save_scar`）；self_model 喂入尚未接线。生产路径尚无 scar-creating outcome（assist 已有 SUCCESS / failed_capability / confirm_required；confirm_gate 不产 overstepped；irreversible 未做）。
+> <!-- 回写(2026-08-09)：assist-4 对话拍短路（parse→execute_kind confirmed=False，不进 pending_queue）+ assist-5 留痕 insert_action / conversation 硬规则 / 粘性 last_assist_target 口头补执行；过程稿归档 specs/archive/2026-08-09-L7-assist/。 -->
+> Step 5：actions + narrative 已接；伤疤 `save_scar` **已接骨架**（`layer._maybe_save_scar`）；self_model 喂入尚未接线。assist 成功/failed_capability 已 `insert_action`（confirm_gate 不写）；生产路径尚无 scar-creating outcome（confirm_gate 不产 overstepped；irreversible 未做）。
 > 已落地处见各段 `<!-- 回写 -->`。
 
 ---
@@ -81,13 +82,13 @@ qi/action/share.py           # 分享创造（起手式；接 L4 creations）
 qi/action/tend.py            # 打理自己的世界
 qi/action/explore.py         # 沉思式探索（d-3-2 深读记忆叙事 + d-1 外部分支）
 qi/action/explore_web.py     # 外部 WebSearchClient（Tavily；失败/空→None）
-qi/action/assist.py          # 介入你的生活（已建：骨架 + 感知 + 跨轮确认）
+qi/action/assist.py          # 介入你的生活（已建：五包——骨架/感知/跨轮/对话拍/留痕与补执行）
 qi/action/irreversible.py    # 替你影响世界（未建）
 qi/action/self_ops.py        # 自反操作（归档/调预算/日记等，阶段二）
 qi/storage/database.py       # actions 表（行动留痕）
 ```
 
-> `assist.py` 已建（第 4 顺位三包）；`irreversible.py` 仍未建。`self_ops` 属自反闭环，不是 assist。
+> `assist.py` 已建（第 4 顺位五包）；`irreversible.py` 仍未建。`self_ops` 属自反闭环，不是 assist。
 
 ## 实现步骤
 
@@ -323,7 +324,7 @@ class ActionLayer:
 - `_deliver_action_result`：先 `qi_line` 走 `_deliver_qi_message`（非 ProactiveGate），再 WS `broadcast({"type":"action","payload":result})`；正文由前端卡片承载（不内联进语音）
 - `_gather_prompt_context`：`action.prompt_extras()` 并入 extras
 - `restore_state`：`ActionLayer(db, config, narrative=memory.narrative, llm=self.llm)`；预算 ↔ body_memory
-- assist 已接线：`execute_kind` + `confirm_gate` + consciousness digest；感知 `parse_assist_request`；跨轮 `pending_assist_confirmation` + 前端 `AssistConfirmCard.vue`（超时 5 分钟或 3 轮）
+- assist 已接线：`execute_kind` + `confirm_gate` + consciousness digest；感知 `parse_assist_request`；跨轮 `pending_assist_confirmation` + 前端 `AssistConfirmCard.vue`（超时 5 分钟或 3 轮）；**对话拍** `receive_user_message` 解析到请求则短路 `execute_kind(confirmed=False)`（不进 pending_queue）；成功/失败 `insert_action`；粘性 `last_assist_target` + 窄词口头补执行；`conversation.txt` 禁编造「读不到文件系统」
 - L6 前端已接 `action`：`creation_card` → ActionCard；`explore_drift`（`source=web|journal` 且 entries 非空）→ ExploreCard；`assist_confirm_request` → AssistConfirmCard；tend 到达不渲染
 - `/history.cards`：已分享创作卡 + 带 `detail_json` 的 explore 见闻卡同窗回灌（确认卡会话内 WS，不入 history）
   <!-- 回写(2026-08-08)：任务包 2026-08-08-L6-action卡片UI；退役 W2 正文内联。 -->
@@ -331,6 +332,7 @@ class ActionLayer:
   <!-- 回写(2026-08-09)：创作卡随 history 回灌，补退役内联后的重启缺口。 -->
   <!-- 回写(2026-08-09)：explore detail_json 落 entries，见闻卡亦可重启回灌。 -->
   <!-- 回写(2026-08-09)：assist 三包 + AssistConfirmCard。 -->
+  <!-- 回写(2026-08-09)：assist-4/5——对话拍短路 + insert_action + 粘性补执行 + conversation 硬规则。 -->
 
 </details>
 

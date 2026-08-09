@@ -125,6 +125,9 @@ class Brain:
         self.pending_assist_confirmation = None  # AssistRequest | None
         self.pending_assist_confirmation_at: datetime | None = None
         self.pending_assist_heartbeats: int = 0
+        # assist-5：粘性目标（确认成功后保留，供口头补执行）
+        self.last_assist_target: str | None = None
+        self.last_assist_target_at: datetime | None = None
         self.world = WorldModel()
         self.last_world = None  # dict | None（包 9：世界模型旁路快照）
         # 包 14：优雅停钩子（库内不 sys.exit；CLI 可注入）
@@ -483,6 +486,8 @@ class Brain:
                 self.pending_assist_confirmation = None
                 self.pending_assist_confirmation_at = None
                 self.pending_assist_heartbeats = 0
+                self.last_assist_target = None
+                self.last_assist_target_at = None
         try:
             self.ledger.tick_window(self.heartbeat_count)
         except Exception:
@@ -1116,6 +1121,16 @@ class Brain:
         return notice
 
     _CONFIRM_CUES = ("看吧", "好", "行", "确认", "可以", "嗯", "yes", "ok")
+    # assist-5：pending 已消费后补执行的确认词（短语级，不含裸「好/行/嗯/可以/yes/ok」）
+    _CONFIRM_CUES_REEXEC = (
+        "看吧",
+        "你读吧",
+        "好你读吧",
+        "读吧",
+        "确认",
+        "ok 看吧",
+        "行 看吧",
+    )
     # 「不用看」须先于「不用」；英文 no 只整句匹配（避免 notes 误伤）
     _REJECT_CUES = ("不用看", "不用", "算了", "不要", "取消")
     _NEW_ASSIST_MARKERS = ("帮我看", "帮我读", "帮我看一下", "帮我读一下")
@@ -1126,6 +1141,16 @@ class Brain:
         if any(m in t for m in self._NEW_ASSIST_MARKERS):
             return False
         return any(cue in t for cue in self._CONFIRM_CUES)
+
+    def _is_confirm_reexec_cue(self, text: str) -> bool:
+        """assist-5：pending 已消费后的窄确认词。"""
+        t = text.strip().lower()
+        return any(cue in t for cue in self._CONFIRM_CUES_REEXEC)
+
+    def _assist_target_fresh(self, now: datetime) -> bool:
+        if self.last_assist_target_at is None:
+            return False
+        return now - self.last_assist_target_at <= timedelta(minutes=5)
 
     def _is_reject_cue(self, text: str) -> bool:
         t = text.strip().lower()
@@ -1138,10 +1163,16 @@ class Brain:
         self.pending_assist_confirmation_at = None
         self.pending_assist_heartbeats = 0
 
-    async def _execute_assist_on_request(self, assist_req: object) -> dict | None:
-        """assist-4：对话拍直接 execute_kind(assist, confirmed=False)。
+    def _clear_assist_target(self) -> None:
+        self.last_assist_target = None
+        self.last_assist_target_at = None
 
-        与 _execute_confirmed_assist 同构，差别在 confirmed=False。
+    async def _execute_assist_on_request(
+        self, assist_req: object, *, confirmed_override: bool = False
+    ) -> dict | None:
+        """assist-4/5：对话拍直接 execute_kind(assist)。
+
+        默认 confirmed=False；assist-5 补执行传 confirmed_override=True。
         """
         if self.action is None:
             return None
@@ -1171,7 +1202,7 @@ class Brain:
             trust=trust,
             op=getattr(assist_req, "op", None),
             target_path=getattr(assist_req, "target_path", None),
-            confirmed=False,
+            confirmed=confirmed_override,
         )
 
     async def _execute_confirmed_assist(self, confirmed_req: object) -> dict | None:
@@ -1222,12 +1253,14 @@ class Brain:
             if self.pending_assist_confirmation is not None:
                 if self._is_reject_cue(text):
                     self._clear_pending_assist()
+                    self._clear_assist_target()
                     now = datetime.now()
                     await self._deliver_qi_message("好。", now, proactive=False)
                     return "好。"
                 if self._is_confirm_cue(text):
                     confirmed_req = self.pending_assist_confirmation
                     self._clear_pending_assist()
+                    # assist-5：确认成功后保留 last_assist_target（粘性补执行）
                     try:
                         result = await self._execute_confirmed_assist(
                             confirmed_req
@@ -1240,8 +1273,33 @@ class Brain:
                     except Exception:
                         logger.exception("assist confirmed execute 失败")
                     return None
-                # 换话题 / 新请求：清旧 pending，落入正常对话
+                # 换话题 / 新请求：清旧 pending + 粘性 target，落入正常对话
                 self._clear_pending_assist()
+                self._clear_assist_target()
+
+            # assist-5：pending 已消费但用户仍短语确认——粘性目标补执行
+            if self.last_assist_target is not None and self._is_confirm_reexec_cue(
+                text
+            ):
+                now = datetime.now()
+                if self._assist_target_fresh(now):
+                    from qi.action.volition import AssistRequest
+
+                    target = self.last_assist_target
+                    self._clear_assist_target()
+                    result = await self._execute_assist_on_request(
+                        AssistRequest(op="read_file", target_path=target),
+                        confirmed_override=True,
+                    )
+                    if result is not None:
+                        await self._deliver_action_result(
+                            result, datetime.now()
+                        )
+                        return (result.get("qi_line") or "").strip() or None
+                await self._deliver_qi_message(
+                    "嗯？你想让我看什么？", datetime.now(), proactive=False
+                )
+                return "嗯？你想让我看什么？"
 
             # assist-4：对话拍有 assist 请求时，assist 开口 = respond（不走 conversation LLM）
             self.last_user_message = text
@@ -1254,6 +1312,11 @@ class Brain:
                 logger.debug("assist_request 解析失败", exc_info=True)
                 assist_req = None
             self.last_assist_request = assist_req
+            if assist_req is not None:
+                self.last_assist_target = getattr(
+                    assist_req, "target_path", None
+                )
+                self.last_assist_target_at = datetime.now()
 
             if assist_req is not None:
                 # 不进 pending_queue、不跑 respond LLM、不跑 _heartbeat

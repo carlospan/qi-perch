@@ -101,6 +101,7 @@ def _brain_for_assist(tmp: str) -> Brain:
     rel = MagicMock()
     rel.state.stage = "friend"
     rel.state.trust = 0.7
+    rel.state.season = "spring"
     brain.relationship = rel
     return brain
 
