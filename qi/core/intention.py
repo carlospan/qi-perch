@@ -15,6 +15,18 @@ LAST_INTENTION_KEY = "last_intention"
 _REMEMBER_RE = re.compile(r"还记得|记得吗|记不记得|你还记得")
 # 方法/施教类追问（仅 has_mem 时转 recall）
 _METHOD_RECALL_RE = re.compile(r"教过我|教了我|你教过|教你过|教过你|我教你|怎么做的|那个方法")
+# 「你对我了解多少」类：应走 user_facts，禁止叙事旧忆劫持
+_KNOWLEDGE_PROBE_RE = re.compile(
+    r"了解多少|对我了解|了解我吗|知道我什么|你认识我|记得我什么|你知道我多少"
+)
+# 元状态/纠偏：不应被语义检索到的旧叙事绑架
+_META_STATE_RE = re.compile(
+    r"答非所问|跑题了|你怎么了|你坏了吗|是不是坏了|你卡住了|你卡了吗"
+)
+# 粗相关停用（过短或无信息）
+_RELEVANCE_STOP = frozenset(
+    "的了吗呢吧啊呀我你他她它是在有和与就都也还没不很太吗？?！!，,。、 "
+)
 
 # 叙事第一人称「我」=栖；「我教了他」→ taught_by_qi（复核钉死）
 _TAUGHT_BY_QI_RE = re.compile(r"我教了|我教过|栖教|教了他|教了你|教过他|教过你")
@@ -168,6 +180,47 @@ def looks_like_method_recall(text: str) -> bool:
 
 def looks_like_recall_probe(text: str) -> bool:
     return looks_like_remember_question(text) or looks_like_method_recall(text)
+
+
+def looks_like_knowledge_probe(text: str) -> bool:
+    """问栖「对我了解多少」——应用 facts，而非叙事检索。"""
+    return bool(_KNOWLEDGE_PROBE_RE.search(text or ""))
+
+
+def looks_like_meta_state(text: str) -> bool:
+    """纠偏/元状态问句——禁止用旧叙事当唯一素材。"""
+    return bool(_META_STATE_RE.search(text or ""))
+
+
+def _content_bigrams(text: str) -> set[str]:
+    chars = [c for c in (text or "") if c not in _RELEVANCE_STOP and not c.isspace()]
+    if len(chars) < 2:
+        return set()
+    return {chars[i] + chars[i + 1] for i in range(len(chars) - 1)}
+
+
+def memory_topically_relevant(utterance: str, memory: str) -> bool:
+    """用户句与叙事是否粗相关（共享 ≥2 个二字块）。防语义检索噪声进卡。"""
+    u = _content_bigrams(utterance)
+    m = _content_bigrams(memory)
+    if not u or not m:
+        return False
+    return len(u & m) >= 2
+
+
+def _fact_lines_for_card(facts: str, *, limit: int = 3) -> list[str]:
+    out: list[str] = []
+    for raw in (facts or "").splitlines():
+        s = raw.strip().lstrip("- ").strip()
+        if not s or s.startswith("（"):
+            continue
+        # 去掉 "preference：" 类前缀噪音，保留可读事实
+        if "：" in s[:24]:
+            s = s.split("：", 1)[-1].strip() or s
+        out.append(s[:100])
+        if len(out) >= limit:
+            break
+    return out
 
 
 def infer_recall_relation(memories: list[dict] | None) -> str | None:
@@ -495,6 +548,8 @@ def build_intention_card(
         source_parts.append(f"intent={intent or 'none'}")
         default_act = _INTENT_DEFAULT_ACT.get(intent or "neutral", "free_talk")
         remember_q = looks_like_recall_probe(text)
+        knowledge_q = looks_like_knowledge_probe(text)
+        meta_q = looks_like_meta_state(text)
         has_mem = bool(memories)
         facts = extras.get("user_facts") or ""
         facts_useful = bool(
@@ -505,6 +560,20 @@ def build_intention_card(
             act = "answer"
             materials.append(Material(tag="none", text=""))
             source_parts.append("remember_miss")
+        elif knowledge_q and facts_useful:
+            # 「了解多少」→ facts 进卡；禁止叙事旧忆劫持（#1483）
+            act = "answer"
+            for line in _fact_lines_for_card(facts, limit=3):
+                materials.append(Material(tag="fact", text=line))
+            source_parts.append(f"knowledge_facts={len(materials)}")
+            if not materials:
+                materials.append(Material(tag="none", text=""))
+                source_parts.append("knowledge_miss")
+        elif meta_q:
+            # 「答非所问/你怎么了」→ 空素材诚实接住，勿灌旧叙事（#1485/#1487）
+            act = "acknowledge" if default_act in ("acknowledge", "free_talk") else default_act
+            materials.append(Material(tag="none", text=""))
+            source_parts.append("meta_no_mem")
         elif has_mem and (intent == "request" or remember_q):
             act = "recall"
             for m in memories[:2]:
@@ -521,14 +590,9 @@ def build_intention_card(
                 source_parts.append(f"rel={recall_relation}")
         elif intent == "request" and facts_useful and not has_mem:
             act = "answer"
-            line = ""
-            for raw in facts.splitlines():
-                s = raw.strip().lstrip("- ").strip()
-                if s and not s.startswith("（"):
-                    line = s[:100]
-                    break
-            if line:
-                materials.append(Material(tag="fact", text=line))
+            lines = _fact_lines_for_card(facts, limit=1)
+            if lines:
+                materials.append(Material(tag="fact", text=lines[0]))
             else:
                 materials.append(Material(tag="none", text=""))
         else:
@@ -556,8 +620,8 @@ def build_intention_card(
             if fact_rel and topic_teach:
                 recall_relation = fact_rel
                 source_parts.append(f"fact_rel={fact_rel}")
-            # N5：有检索命中则必须进卡（free_talk 也不例外）；仅 answer 才注入是旧洞
-            # 若存档真值钉了方向而检索文含反转措辞，改用 facts 行进卡（防污染叙事当事实源）
+            # N5：有检索命中且与本轮粗相关才进卡（防语义噪声劫持 free_talk）
+            # 若存档真值钉了方向而检索文含反转措辞，改用 facts 行进卡
             if has_mem and act in ("free_talk", "acknowledge", "answer"):
                 content = mem0.strip()[:80]
                 use_fact_instead = (
@@ -575,9 +639,17 @@ def build_intention_card(
                             materials.append(Material(tag="fact", text=s[:100]))
                             source_parts.append("fact_over_polluted_mem")
                             break
-                if not materials and content:
+                relevant = bool(content) and (
+                    memory_topically_relevant(text, content)
+                    or remember_q
+                    or intent == "request"
+                    or topic_teach
+                )
+                if not materials and content and relevant:
                     materials.append(Material(tag="memory", text=content))
                     source_parts.append("mem=1")
+                elif not materials and content and not relevant:
+                    source_parts.append("mem_skip_irrelevant")
             # 近聊/话题触及施教且无 mem 时，用 facts 真值进卡（防空卡编共同史）
             if (
                 not materials

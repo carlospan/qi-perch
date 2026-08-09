@@ -39,6 +39,9 @@ _FACT_CONSISTENCY_CONSTRAINT = (
     "事实必须来自意向卡素材。不要编造卡外共同回忆（如「那天你问…」「那晚我说…」）；"
     "不要引入素材中没有的具体人名。不确定就说不确定，或用意象/比喻。"
 )
+# free_talk 模板勿粘贴 memory 原文（曾致 #1483/#1485 答非所问 + 恰 84 字截断感）
+_FREE_TALK_SAFE = "……嗯。我好像没对准你刚问的。你再说一遍好吗？"
+_DEDUP_SAFE = "……我好像卡住重复了。你刚才那句，能再说一次吗？"
 
 _TEACH_VIOLATION_TAGS = ("施教关系反转", "空卡编造共同回忆")
 
@@ -135,7 +138,17 @@ def render_template(card: IntentionCard) -> str:
     elif act == "honest_hurt":
         text = "……这句话，我接住了。"
     elif act == "free_talk":
-        text = f"……嗯。{primary}" if primary else "……嗯。"
+        # memory 原文当整句回复 = 答非所问；fact/state/cue 仍可短引
+        if any(m.tag == "memory" for m in card.materials) and (
+            not primary
+            or any(
+                m.tag == "memory" and (m.text or "").strip() == primary
+                for m in card.materials
+            )
+        ):
+            text = _FREE_TALK_SAFE
+        else:
+            text = f"……嗯。{primary}" if primary else "……嗯。"
     elif act == "silence":
         return ""
     else:
@@ -242,11 +255,11 @@ class Expression:
             # 跨轮复读：若本拍已为 HARD 用过重试预算 → 直接模板，不再打第三次 LLM
             if used_retry:
                 templated = render_template(intention)
-                if templated:
+                if templated and not is_duplicate_reply(templated, hist):
                     intention.outcome = "template"
                     return templated
-                intention.outcome = "empty"
-                return ""
+                intention.outcome = "template"
+                return _DEDUP_SAFE
             regen_messages = list(messages)
             if regen_messages:
                 sys0 = dict(regen_messages[0])
@@ -263,17 +276,21 @@ class Expression:
             if again and not is_duplicate_reply(again, hist):
                 again_hard = _hard_violations(again, intention)
                 if again_hard:
+                    fb = _build_fallback(intention, again_hard)
+                    if fb and not is_duplicate_reply(fb, hist):
+                        intention.outcome = "template"
+                        return fb
                     intention.outcome = "template"
-                    return _build_fallback(intention, again_hard)
+                    return _DEDUP_SAFE
                 intention.outcome = "llm"
                 return again
-            # 仍重复 → 模板降级（acknowledge/share_state 简版路径）
+            # 仍重复 → 模板；若模板也撞车则安全句（防 #1485≡#1487）
             templated = render_template(intention)
-            if templated:
+            if templated and not is_duplicate_reply(templated, hist):
                 intention.outcome = "template"
                 return templated
-            intention.outcome = "empty"
-            return ""
+            intention.outcome = "template"
+            return _DEDUP_SAFE
 
         # UNREACHABLE / EMPTY：一律模板开口（契约演进）
         templated = render_template(intention)

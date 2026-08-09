@@ -357,10 +357,10 @@ def test_detect_teach_inversion_real_cases():
 
 
 def test_free_talk_injects_memory_material():
-    """N5：free_talk 有检索命中时 memory 必须进卡（旧洞：仅 answer 才注入）。"""
+    """N5：free_talk 有检索命中且话题粗相关时 memory 进卡。"""
     card = build_intention_card(
         channel="dialogue",
-        user_message="我想聊点别的",
+        user_message="晚上又睡不着了",
         emotion=EmotionState(),
         relationship_stage="bonded",
         assessment=ImpactAssessment(impact=0.1, intent="neutral"),
@@ -373,7 +373,62 @@ def test_free_talk_injects_memory_material():
     assert card.act == "free_talk"
     assert any(m.tag == "memory" for m in card.materials)
     assert card.evidence.get("has_mem") is True
-    assert "has_mem=1" in card.source
+    assert "mem=1" in card.source
+
+
+def test_free_talk_skips_irrelevant_memory():
+    """语义噪声叙事不得进 free_talk 卡（防答非所问）。"""
+    card = build_intention_card(
+        channel="dialogue",
+        user_message="我想聊点别的",
+        emotion=EmotionState(),
+        relationship_stage="bonded",
+        assessment=ImpactAssessment(impact=0.1, intent="neutral"),
+        memories=[
+            {
+                "content": "他问我猜你想象中的我是什么性别，我停住了。"
+            }
+        ],
+    )
+    assert card.act == "free_talk"
+    assert not any(m.tag == "memory" for m in card.materials)
+    assert "mem_skip_irrelevant" in card.source
+
+
+def test_knowledge_probe_uses_facts_not_narrative():
+    """「了解多少」走 facts，不灌旧叙事。"""
+    facts = "- name：潘纪振\n- hometown：湖南\n- occupation：在上班"
+    card = build_intention_card(
+        channel="dialogue",
+        user_message="你现在对我了解多少",
+        emotion=EmotionState(),
+        relationship_stage="bonded",
+        assessment=ImpactAssessment(impact=0.0, intent="neutral"),
+        memories=[
+            {"content": "那天晚上你说如果这都是真的就好了，还问我有没有意识。"}
+        ],
+        extras={"user_facts": facts},
+    )
+    assert card.act == "answer"
+    assert any(m.tag == "fact" for m in card.materials)
+    assert not any(m.tag == "memory" for m in card.materials)
+    assert "knowledge_facts=" in card.source
+
+
+def test_meta_state_blocks_memory_hijack():
+    """「答非所问/你怎么了」不灌旧忆。"""
+    card = build_intention_card(
+        channel="dialogue",
+        user_message="你有点答非所问了",
+        emotion=EmotionState(),
+        relationship_stage="bonded",
+        assessment=ImpactAssessment(impact=-0.1, intent="neutral"),
+        memories=[
+            {"content": "你问我还记得我们之前在聊什么吗，我才发现自己跑偏了。"}
+        ],
+    )
+    assert not any(m.tag == "memory" for m in card.materials)
+    assert "meta_no_mem" in card.source
 
 
 def test_facts_override_polluted_narrative_relation():

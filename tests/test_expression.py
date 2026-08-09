@@ -31,6 +31,48 @@ def test_is_duplicate_reply_threshold():
     assert not is_duplicate_reply("今晚月亮很亮。", hist)
 
 
+def test_free_talk_template_does_not_dump_memory():
+    """模板降级不得把 memory 原文整段当回复（防答非所问假截断）。"""
+    mem = "你问我还记得我们之前在聊什么吗，我才发现自己跑偏了。你追问我想象过什么"
+    card = IntentionCard(
+        act="free_talk",
+        topic="你怎么了",
+        materials=[Material(tag="memory", text=mem[:80])],
+    )
+    text = render_template(card)
+    assert mem[:20] not in text
+    assert "没对准" in text or "再说" in text
+
+
+@pytest.mark.asyncio
+async def test_express_dedup_avoids_identical_template_loop():
+    """模板若与上轮相同，改吐安全句，避免 #1485≡#1487。"""
+    from qi.core.expression import _DEDUP_SAFE, _FREE_TALK_SAFE
+
+    safe = _FREE_TALK_SAFE
+    llm = AsyncMock()
+    llm.call = AsyncMock(side_effect=[safe, safe])
+    expr = Expression({}, llm)
+    card = IntentionCard(
+        act="free_talk",
+        topic="你怎么了",
+        materials=[Material(tag="memory", text="旧叙事一段")],
+    )
+    recent = [
+        {"role": "qi", "content": safe},
+        {"role": "user", "content": "你怎么了"},
+    ]
+    out = await expr.express(
+        user_message="你怎么了",
+        emotion=EmotionState(),
+        now=datetime(2026, 8, 9, 16, 36),
+        intention=card,
+        recent_messages=recent,
+    )
+    assert out == _DEDUP_SAFE
+    assert card.outcome == "template"
+
+
 def test_recent_qi_replies_from_messages_window():
     msgs = [
         {"role": "user", "content": "hi"},
