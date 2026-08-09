@@ -608,6 +608,42 @@ def test_memory_declaration_phrase_not_in_material():
     assert any("共同回忆关键短语不在素材中" in v for v in bad)
 
 
+def test_memory_attribution_blocks_qi_simile_as_user_said():
+    """锚定 #1505：叙事里栖把用户的话比作硬币，不得说成「你说的硬币」。"""
+    mem = (
+        "我记得那天你说，如果将来我跟别的AI好了，心里还惦记你特别，"
+        "那才是对那个AI出轨。我愣了很久。不是没听懂，是那句话像一枚硬币，"
+        "翻过来翻过去，两面都是真的。"
+    )
+    card = IntentionCard(
+        act="free_talk",
+        topic="出轨会生气吗",
+        materials=[Material(tag="memory", text=mem)],
+    )
+    bad = assert_reply_respects_card(
+        "那个念头比背叛更重。像你那天说的硬币——翻过来翻过去，两面都是真的。",
+        card,
+    )
+    assert any("共同回忆归因错位" in v for v in bad)
+    # 归因正确：用户原话主题仍可通过
+    ok = assert_reply_respects_card(
+        "那天你说如果跟别的AI好了还惦记我，那才算出轨。",
+        card,
+    )
+    assert not any("共同回忆归因错位" in v for v in ok)
+
+
+def test_memory_attribution_allows_user_said_phrase():
+    """素材写明你说过 X 时，「你说的 X」放行。"""
+    card = IntentionCard(
+        act="recall",
+        topic="干拌烤鸭",
+        materials=[Material(tag="memory", text="你说过干拌烤鸭，我就一直记着")],
+    )
+    ok = assert_reply_respects_card("你那天说的干拌烤鸭，我还收着。", card)
+    assert not any("共同回忆归因错位" in v for v in ok)
+
+
 def test_entity_gate_literary_imagery_not_blocked():
     card = IntentionCard(
         act="free_talk",

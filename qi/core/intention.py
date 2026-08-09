@@ -746,6 +746,12 @@ _DECLARATIVE_MEMORY_RE = re.compile(
     r"|我说了|我说过|会问你|记得你那次|记得你曾经|上次你|记得那个凌晨"
 )
 
+# 「你（那天）说的 X」——把 X 归因给用户；须在素材里有「你说…X」支撑（#1505 硬币）
+_USER_ATTR_CLAIM_RE = re.compile(
+    r"你(?:那天|那晚|之前|曾经)?(?:说|问)(?:过)?的"
+    r"([「『\"“]?[\u4e00-\u9fffA-Za-z0-9]{1,12})"
+)
+
 _HARD_VIOLATION_PREFIXES = (
     "卡外专名:",
     "伪记忆句式",
@@ -854,6 +860,48 @@ def _key_phrase_in_materials(text: str, materials: list[Material]) -> bool:
     return False
 
 
+def _extract_user_attr_claims(text: str) -> list[str]:
+    """抽出回复里归因给用户的名词/短语（「你那天说的硬币」→ 硬币）。"""
+    out: list[str] = []
+    for m in _USER_ATTR_CLAIM_RE.finditer(text or ""):
+        c = (m.group(1) or "").strip("「『\"“»」』\"”")
+        if len(c) >= 1 and c not in out:
+            out.append(c)
+    return out
+
+
+def _user_uttered_claim_in_materials(claim: str, materials: list[Material]) -> bool:
+    """素材是否支持「用户说过 claim」（而非栖自比拟里出现 claim）。
+
+    逐处出现 claim：若紧邻「像…」则视为栖的比喻，跳过；
+    若回看窗口里「你说/你问」比「像」更近，则算用户说过。
+    """
+    blob = _materials_blob(materials) or ""
+    if not claim or claim not in blob:
+        return False
+    for m in re.finditer(re.escape(claim), blob):
+        start = m.start()
+        pre = blob[max(0, start - 72) : start]
+        # 「像一枚硬币 / 像硬币」——栖的比喻，不能当作用户原话
+        if re.search(r"像(?:一枚|一个|一种|一只)?$", pre):
+            continue
+        i_speak = max(pre.rfind("你说"), pre.rfind("你问"), pre.rfind("你提到"))
+        i_xiang = pre.rfind("像")
+        if i_speak >= 0 and i_speak > i_xiang:
+            return True
+    return False
+
+
+def _user_attribution_ok(text: str, materials: list[Material]) -> bool:
+    """凡「你说的 X」须在素材里有用户说过 X 的支撑；否则归因错位。"""
+    claims = _extract_user_attr_claims(text)
+    if not claims:
+        return True
+    if not any(m.tag in ("memory", "fact") and (m.text or "").strip() for m in materials):
+        return False
+    return all(_user_uttered_claim_in_materials(c, materials) for c in claims)
+
+
 def _build_known_set(materials: list[Material]) -> set[str]:
     known: set[str] = set(_ENTITY_WHITELIST)
     blob = _materials_blob(materials)
@@ -920,6 +968,9 @@ def assert_reply_respects_card(
             violations.append("共同回忆无出处")
         elif not _key_phrase_in_materials(text, card.materials):
             violations.append("共同回忆关键短语不在素材中")
+    # 主语归属：素材里有「硬币」但那是栖的比喻 → 不得说「你那天说的硬币」（#1505）
+    if not _user_attribution_ok(text, card.materials):
+        violations.append("共同回忆归因错位")
     # 实体一致性辅助闸（宁漏勿杀）
     known = _build_known_set(card.materials)
     for e in _extract_novel_entities(text, known):
