@@ -56,6 +56,11 @@ def test_clip_entry():
     assert len(_clip_entry(long)) == 41
 
 
+def test_query_privacy_line_covers_user_files():
+    assert "用户文件内容原文" in _QUERY_PRIVACY_LINE
+
+
+
 @pytest.mark.asyncio
 async def test_digest_internal_success(db):
     llm = _SeqLLM("想起午后的光，心里安静了一点。")

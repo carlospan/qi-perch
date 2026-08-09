@@ -1,4 +1,4 @@
-"""assist-7：全文分块 digest + narrative 内化。"""
+"""assist-7/8：全文分块 digest + 整体叙事内化。"""
 
 from __future__ import annotations
 
@@ -65,7 +65,8 @@ class _FakeNarrative:
 @pytest.mark.asyncio
 async def test_assist_short_file_single_digest(db, tmp_path):
     f = tmp_path / "note.txt"
-    f.write_text("短短一封信。", encoding="utf-8")
+    body = "短短一封信。"
+    f.write_text(body, encoding="utf-8")
     llm = _CountingLLM("读到了那封短信。")
     narr = _FakeNarrative()
     assist = AssistAction(db, llm=llm, narrative=narr)
@@ -87,12 +88,15 @@ async def test_assist_short_file_single_digest(db, tmp_path):
     assert "assist" in narr.saved[0]["tags"]
     assert "file_read" in narr.saved[0]["tags"]
     assert "note.txt" in narr.saved[0]["content"]
+    preview = body[: assist_mod._CONTENT_PREVIEW_LEN].replace("\n", " ")
+    assert f"里面写着：{preview}" in narr.saved[0]["content"]
 
 
 @pytest.mark.asyncio
 async def test_assist_long_file_chunked(db, tmp_path):
     f = tmp_path / "long.txt"
-    f.write_text("字" * 20_000, encoding="utf-8")
+    body = "字" * 20_000
+    f.write_text(body, encoding="utf-8")
     llm = _CountingLLM("一块感受。", "合起来了。")
     narr = _FakeNarrative()
     assist = AssistAction(db, llm=llm, narrative=narr)
@@ -119,14 +123,20 @@ async def test_assist_long_file_chunked(db, tmp_path):
     ]
     assert len(merge_calls) == 1
     assert result["qi_line"] == "合起来了。"
-    assert len(narr.saved) == 3
+    # assist-8：恰好 1 条整体叙事
+    assert len(narr.saved) == 1
+    blob = narr.saved[0]["content"]
+    assert "合起来了。" in blob
+    preview = body[: assist_mod._CONTENT_PREVIEW_LEN].replace("\n", " ")
+    assert f"里面写着：{preview}" in blob
 
 
 @pytest.mark.asyncio
 async def test_assist_oversize_chunks_truncated(db, tmp_path):
     f = tmp_path / "huge_text.txt"
     # 7 块：7 * 8000 = 56000 字符
-    f.write_text("长" * (assist_mod._DIGEST_CHUNK_LEN * 7), encoding="utf-8")
+    body = "长" * (assist_mod._DIGEST_CHUNK_LEN * 7)
+    f.write_text(body, encoding="utf-8")
     llm = _CountingLLM("块。", "总。")
     narr = _FakeNarrative()
     assist = AssistAction(db, llm=llm, narrative=narr)
@@ -142,8 +152,11 @@ async def test_assist_oversize_chunks_truncated(db, tmp_path):
     assert result["outcome"] == OUTCOME_SUCCESS
     # 6 块 + 1 合并
     assert len(llm.calls) == 7
-    assert len(narr.saved) == 6
+    assert len(narr.saved) == 1
     assert "只读完了前面一部分" in result["qi_line"]
+    assert "只读完了前面一部分" in narr.saved[0]["content"]
+    preview = body[: assist_mod._CONTENT_PREVIEW_LEN].replace("\n", " ")
+    assert f"里面写着：{preview}" in narr.saved[0]["content"]
 
 
 @pytest.mark.asyncio
@@ -194,5 +207,34 @@ async def test_assist_narrative_not_fulltext(db, tmp_path):
     assert narr.saved
     blob = narr.saved[0]["content"]
     assert "心里暖了一下" in blob
+    assert "里面写着：" in blob
     assert full not in blob
     assert "绝密正文ABCDEFG" * 20 not in blob
+
+
+@pytest.mark.asyncio
+async def test_assist_narrative_single_event(db, tmp_path):
+    """assist-8：多块文件 → 恰好 1 条记忆事件 + preview 锚点。"""
+    f = tmp_path / "letter.txt"
+    body = "爱" * 16_000
+    f.write_text(body, encoding="utf-8")
+    llm = _CountingLLM("一块。", "整封信读完了。")
+    narr = _FakeNarrative()
+    assist = AssistAction(db, llm=llm, narrative=narr)
+    result = await assist.execute(
+        "read_file",
+        str(f),
+        relationship_stage="friend",
+        trust=0.7,
+        confirmed=True,
+        season="spring",
+        now=datetime(2026, 8, 9, 22, 5),
+    )
+    assert result["outcome"] == OUTCOME_SUCCESS
+    assert result["qi_line"] == "整封信读完了。"
+    assert len(narr.saved) == 1
+    blob = narr.saved[0]["content"]
+    assert blob.startswith("我读了他给我的 letter.txt。")
+    assert "整封信读完了。" in blob
+    preview = body[: assist_mod._CONTENT_PREVIEW_LEN].replace("\n", " ")
+    assert f"（里面写着：{preview}）" in blob

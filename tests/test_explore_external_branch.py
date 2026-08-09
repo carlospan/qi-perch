@@ -127,7 +127,7 @@ async def test_external_when_gates_pass(db):
     digest_joined = " ".join(
         str(m.get("content") or "") for m in llm.calls[1]["messages"]
     )
-    assert "不引用 user_facts / 对话内容" in digest_joined
+    assert "不引用 user_facts、对话内容或用户文件内容原文" in digest_joined
 
 
 @pytest.mark.asyncio

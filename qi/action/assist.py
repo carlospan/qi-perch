@@ -122,7 +122,7 @@ class AssistAction:
                 now=now,
             )
 
-        summary = await self._read_and_digest(target_path, content, season, now)
+        summary = await self._read_and_digest(target_path, content)
         action_id = await self.db.insert_action(
             "assist",
             summary,
@@ -223,11 +223,8 @@ class AssistAction:
             merged = f"{merged}（你给我的文件很长，我只读完了前面一部分）"
         return merged
 
-    async def _read_and_digest(
-        self, target_path: str, content: str, season: str, now: datetime
-    ) -> str:
-        """分块消化全文 + narrative 内化。返回开口 qi_line / summary。"""
-        _ = (season, now)  # 对齐调用方签名；叙事 period 不在此写入
+    async def _read_and_digest(self, target_path: str, content: str) -> str:
+        """分块消化全文。返回开口 qi_line / summary。"""
         name = Path(target_path).name
         chunks = [
             content[i : i + _DIGEST_CHUNK_LEN]
@@ -241,15 +238,18 @@ class AssistAction:
             d = await self._digest_chunk(name, chunk)
             if d:
                 digests.append(d)
-                if self.narrative is not None:
-                    await self.narrative.save(
-                        f"我读了他给我的 {name}。{d}",
-                        importance=0.65,
-                        tags=["assist", "file_read"],
-                    )
         if not digests:
             return f"我看了看 {name}。"
-        return await self._merge_digests(name, digests, truncated)
+        summary = await self._merge_digests(name, digests, truncated)
+        if self.narrative is not None:
+            # assist-8：读一个文件 = 一个记忆事件（整体感受 + 内容概要锚点）
+            preview = content[:_CONTENT_PREVIEW_LEN].replace("\n", " ")
+            await self.narrative.save(
+                f"我读了他给我的 {name}。{summary}（里面写着：{preview}）",
+                importance=0.65,
+                tags=["assist", "file_read"],
+            )
+        return summary
 
     def _confirm_gate(self, target_path: str) -> dict[str, Any]:
         """未确认 → 不执行，请求确认。"""

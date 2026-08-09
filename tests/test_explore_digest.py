@@ -58,7 +58,7 @@ async def test_digest_hits_success(db):
     assert digest == "落叶好像停在没人看见的角落。"
     assert llm.calls and llm.calls[0]["purpose"] == "consciousness"
     joined = " ".join(str(m.get("content") or "") for m in llm.calls[0]["messages"])
-    assert "不引用 user_facts / 对话内容" in joined
+    assert "不引用 user_facts、对话内容或用户文件内容原文" in joined
     assert "窗边的鸟" in joined
     assert "不编造" in joined
 

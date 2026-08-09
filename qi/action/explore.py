@@ -28,7 +28,7 @@ EXTERNAL_CURIOSITY_MIN = 0.8
 EXTERNAL_PROBABILITY = 0.05
 EXTERNAL_COOLDOWN_HOURS = 6.0
 EXTERNAL_LAST_KEY = "explore_external_last"
-_QUERY_PRIVACY_LINE = "不引用 user_facts / 对话内容"
+_QUERY_PRIVACY_LINE = "不引用 user_facts、对话内容或用户文件内容原文"
 # 仅 _make_query 展示用；全局 season 码仍是英文（不碰 season.py）
 _SEASON_ZH = {
     "spring": "春",
