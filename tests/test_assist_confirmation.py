@@ -118,11 +118,19 @@ async def test_b3_new_request_not_treated_as_confirm(tmp_path):
 
         brain._heartbeat = fake_heartbeat  # type: ignore[method-assign]
         # 用无空格绝对路径，避免 Windows temp 路径空格打断正则
-        with patch("qi.core.brain.asyncio.sleep", new_callable=AsyncMock):
+        with (
+            patch("qi.core.brain.asyncio.sleep", new_callable=AsyncMock),
+            patch.object(
+                brain, "_deliver_action_result", new_callable=AsyncMock
+            ),
+        ):
             await brain.receive_user_message("帮我看一下 D:/notes/y.txt")
-        assert brain.pending_assist_confirmation is None
-        assert brain.last_assist_request is not None
-        assert brain.last_assist_request.target_path == "D:/notes/y.txt"
+        # assist-4：新请求清旧 pending 后走对话拍 assist，存新 pending（不当确认）
+        assert brain.pending_assist_confirmation is not None
+        assert (
+            brain.pending_assist_confirmation.target_path == "D:/notes/y.txt"
+        )
+        assert brain.last_assist_request is None
         await brain._db.close()
 
 

@@ -22,6 +22,8 @@ venv/
 dist/
 build/
 .pytest_cache/
+# pytest --basetemp 若指到仓库内，勿提交
+.pytest_tmp*/
 
 # 前端（Vue / Vite / Tauri）
 node_modules/

@@ -1138,6 +1138,42 @@ class Brain:
         self.pending_assist_confirmation_at = None
         self.pending_assist_heartbeats = 0
 
+    async def _execute_assist_on_request(self, assist_req: object) -> dict | None:
+        """assist-4：对话拍直接 execute_kind(assist, confirmed=False)。
+
+        与 _execute_confirmed_assist 同构，差别在 confirmed=False。
+        """
+        if self.action is None:
+            return None
+        now = datetime.now()
+        scars = None
+        if self._db is not None:
+            try:
+                scars = await self._db.list_scars()
+            except Exception:
+                scars = None
+        trust = 0.5
+        if self.relationship is not None:
+            trust = float(
+                getattr(self.relationship.state, "trust", 0.5) or 0.5
+            )
+        return await self.action.execute_kind(
+            "assist",
+            self.emotion,
+            self.relationship_stage,
+            self._current_season(),
+            now,
+            mode=self.emotion.mode.value,
+            user_online=self.user_online,
+            scars=scars,
+            sensing=self.last_sensing,
+            pressure=self.last_pressure_response,
+            trust=trust,
+            op=getattr(assist_req, "op", None),
+            target_path=getattr(assist_req, "target_path", None),
+            confirmed=False,
+        )
+
     async def _execute_confirmed_assist(self, confirmed_req: object) -> dict | None:
         """B2：用户确认后直接 execute_kind(confirmed=True)，不走 GWS。"""
         if self.action is None:
@@ -1207,6 +1243,40 @@ class Brain:
                 # 换话题 / 新请求：清旧 pending，落入正常对话
                 self._clear_pending_assist()
 
+            # assist-4：对话拍有 assist 请求时，assist 开口 = respond（不走 conversation LLM）
+            self.last_user_message = text
+            assist_req = None
+            try:
+                from qi.action.volition import parse_assist_request
+
+                assist_req = parse_assist_request(text)
+            except Exception:
+                logger.debug("assist_request 解析失败", exc_info=True)
+                assist_req = None
+            self.last_assist_request = assist_req
+
+            if assist_req is not None:
+                # 不进 pending_queue、不跑 respond LLM、不跑 _heartbeat
+                try:
+                    result = await self._execute_assist_on_request(assist_req)
+                    if result is not None:
+                        # B1：与 GWS 路径同构——confirm_gate 后存 pending（局部 assist_req）
+                        if result.get("needs_confirmation") or (
+                            result.get("outcome") == "confirm_required"
+                        ):
+                            self.pending_assist_confirmation = assist_req
+                            self.pending_assist_confirmation_at = datetime.now()
+                            self.pending_assist_heartbeats = 0
+                        self.last_assist_request = None
+                        await self._deliver_action_result(
+                            result, datetime.now()
+                        )
+                        return (result.get("qi_line") or "").strip() or None
+                except Exception:
+                    logger.exception("assist 对话拍 execute 失败")
+                return None
+
+            # 正常对话路径（无 assist 请求）
             if len(self._pending_queue) >= PENDING_QUEUE_MAX:
                 dropped = self._pending_queue.popleft()
                 logger.warning(
@@ -1214,14 +1284,6 @@ class Brain:
                     dropped[:40],
                 )
             self._pending_queue.append(text)
-            self.last_user_message = text
-            try:
-                from qi.action.volition import parse_assist_request
-
-                self.last_assist_request = parse_assist_request(text)
-            except Exception:
-                logger.debug("assist_request 解析失败", exc_info=True)
-                self.last_assist_request = None
             await self._heartbeat()
             speech = self._take_pending_speech()
         if self.in_stasis and speech is None:
