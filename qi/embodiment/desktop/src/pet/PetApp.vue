@@ -19,7 +19,14 @@ const CLICK_NOTICE_MS = 2600;
 const CLICK_HOLD_MS = 3000;
 const SPEECH_NOTICE_MS = 1000;
 const SPEECH_HOLD_MS = 1400;
+const RETURN_NOTICE_MS = 900;
+const RETURN_HOLD_MS = 1200;
+const TYPING_HOLD_MS = 900;
 const DRAG_HOLD_MS = 500;
+/** 离开至少这么久再回来，才轻轻看一眼（避免切窗刷屏） */
+const AWAY_MIN_MS = 45_000;
+
+let awaySince: number | null = null;
 
 function clearResumeTimer() {
   if (resumeTimer) {
@@ -106,6 +113,20 @@ onMounted(async () => {
     petWs.on("speech", () => {
       pet?.notice(SPEECH_NOTICE_MS);
       pauseRoamFor(SPEECH_HOLD_MS);
+    });
+    petWs.on("typing", () => {
+      pauseRoamFor(TYPING_HOLD_MS);
+    });
+    petWs.on("presence", (payload: { online?: boolean }) => {
+      if (payload?.online) {
+        if (awaySince != null && Date.now() - awaySince >= AWAY_MIN_MS) {
+          pet?.notice(RETURN_NOTICE_MS);
+          pauseRoamFor(RETURN_HOLD_MS);
+        }
+        awaySince = null;
+        return;
+      }
+      awaySince = awaySince ?? Date.now();
     });
     petWs.connect();
   } catch (err) {

@@ -328,8 +328,14 @@ class EmbodimentServer:
                 )
         elif msg_type == "presence":
             online = bool(payload.get("online", True))
+            prev = bool(getattr(self.brain, "user_online", True))
             self.brain.user_online = online
             self.brain.perception.set_user_presence(online)
+            # 广播给桌宠等旁听端；仅在状态变化时推，避免刷屏
+            if online != prev:
+                await self.broadcast(
+                    {"type": "presence", "payload": {"online": online}}
+                )
         elif msg_type == "pong":
             pass
         elif msg_type == "command":

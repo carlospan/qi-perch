@@ -27,6 +27,43 @@ async def test_notify_journal_entry_broadcasts_payload():
 
 
 @pytest.mark.asyncio
+async def test_presence_change_broadcasts_to_listeners():
+    """在场变化时广播，供桌宠「你回来了」微存在；同值不重复推。"""
+
+    class _Perc:
+        def set_user_presence(self, online: bool) -> None:
+            self.online = online
+
+    class _Brain:
+        def __init__(self) -> None:
+            self.user_online = True
+            self.perception = _Perc()
+
+    server = EmbodimentServer(brain=_Brain())  # type: ignore[arg-type]
+    server.broadcast = AsyncMock()
+
+    await server._handle_client_message(
+        {"type": "presence", "payload": {"online": False}}
+    )
+    server.broadcast.assert_awaited_once_with(
+        {"type": "presence", "payload": {"online": False}}
+    )
+
+    server.broadcast.reset_mock()
+    await server._handle_client_message(
+        {"type": "presence", "payload": {"online": False}}
+    )
+    server.broadcast.assert_not_awaited()
+
+    await server._handle_client_message(
+        {"type": "presence", "payload": {"online": True}}
+    )
+    server.broadcast.assert_awaited_once_with(
+        {"type": "presence", "payload": {"online": True}}
+    )
+
+
+@pytest.mark.asyncio
 async def test_first_time_sets_last_recorded():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         db = Database(str(Path(tmp) / "qi.db"))

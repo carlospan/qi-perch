@@ -105,6 +105,7 @@ export type ServerMessage =
       };
     }
   | { type: "typing"; payload: Record<string, never> }
+  | { type: "presence"; payload: { online: boolean } }
   | { type: "emotion_update"; payload: EmotionSnapshot }
   | { type: "ping"; payload: { ts: number } }
   | { type: "audio"; payload: { data: string; mime?: string } }
