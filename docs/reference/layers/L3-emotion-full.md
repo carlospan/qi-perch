@@ -365,7 +365,7 @@ def determine_mode(
     if silence < timedelta(seconds=AWAKE_SILENCE_SECONDS):
         return ConsciousnessMode.AWAKE
 
-    # 沉默过久视为离线（终端场景没有独立 presence）
+    # 沉默过久视为离线（无独立 presence 时的兜底；桌面壳另有 presence 上报）
     effectively_online = user_online and silence < timedelta(hours=DREAMING_OFFLINE_HOURS)
 
     if not effectively_online:

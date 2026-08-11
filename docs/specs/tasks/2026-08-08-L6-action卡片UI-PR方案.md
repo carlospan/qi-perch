@@ -152,7 +152,7 @@ const talkByDay = computed<TalkDayGroup[]>(() => {
 
 - 后端：`pytest tests/test_pending_queue.py tests/test_action_l7.py -q` → 全绿；全量 `pytest` 无回归（重点排查依赖 `_deliver_qi_message` 语音文本的断言）。
 - 前端：`cd qi/embodiment/desktop && npm run build`；`npx vue-tsc --noEmit`（类型零错）。
-- 手动：`qi-desktop` + `npm run tauri:dev`，触发 share（关系 friend+、有未递出创作、独处拍 solitary/ambient）→ 见 qi_line 气泡 + 卡片。
+- 手动：`qi` + `npm run tauri:dev`（或仅 `tauri:dev`，开发期可自动拉起大脑），触发 share（关系 friend+、有未递出创作、独处拍 solitary/ambient）→ 见 qi_line 气泡 + 卡片。
 - 验收勾选清单 = 任务包「验收」栏（7 项）。
 
 ## 五、风险、不确定点、拍板项

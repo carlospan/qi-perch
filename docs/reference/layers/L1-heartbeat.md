@@ -38,7 +38,7 @@ qi/llm/gateway.py                # LLM 路由（N5 网关）
 qi/llm/providers/openai_compat.py
 qi/llm/prompt_builder.py         # Prompt 组装
 qi/storage/database.py           # SQLite
-qi/cli.py                        # 终端 / 具身入口
+qi/cli.py                        # 具身后端入口（Brain ∥ WebSocket）
 qi/config/settings.yaml          # 配置（真源优先见 config 候选路径）
 qi/prompts/conversation.txt      # 对话 prompt
 ```
@@ -325,7 +325,7 @@ class LLMGateway:
 
     async def stream(self, purpose: str, messages: list[dict],
                      temperature: float | None = None):
-        """流式接口（当前终端主路径用 call）。"""
+        """流式接口（当前主路径用 call）。"""
         ...
 ```
 
@@ -396,13 +396,14 @@ class PromptBuilder:
 
 </details>
 
-### Step 4：Brain Loop + 终端入口
+### Step 4：Brain Loop + 具身入口
 
 - 建 `qi/core/brain.py`：asyncio 循环，每次心跳做：感知→情绪更新→（如果有用户消息）表达
 - 建 `qi/core/perception.py`：接收用户输入、计算沉默时长
 - 建 `qi/core/expression.py`：调 prompt_builder + gateway，输出回复
-- 建 `qi/cli.py`：rich 终端界面，支持 `/state`、`/why`、`/quit`
-- 验收：`qi`（或 `python -m qi`）启动，能聊天，`/state` 显示情绪，`/why` 显示心跳痕迹
+- 建 `qi/cli.py`：具身后端（Brain ∥ EmbodimentServer）；入口 `qi` / `python -m qi`
+- <!-- 回写(2026-08-11)：删除 Rich 终端聊天（`run_terminal`）；排障靠桌面壳 + 日志/`format_why`；依据：qi/cli.py -->
+- 验收：`qi`（或 `python -m qi`）启动 WebSocket；桌面壳能连上并聊天；情绪可落盘恢复
 
 <details>
 <summary>实现规格（Cursor 编码用）</summary>
@@ -414,7 +415,7 @@ class PromptBuilder:
 # <!-- 回写(2026-07-25)：pending 队列 / _pending_speech / ActionLayer /
 #      first_time 先回复再独白 / 情绪落盘节流 / waking；依据：qi/core/brain.py -->
 # <!-- 回写(2026-07-26)：PromptContext / BackgroundTasks；混合冲击；body_hint；
-#      _interacted_this_session；/why 痕迹；忆推送。依据：brain.py -->
+#      _interacted_this_session；format_why 痕迹；忆推送。依据：brain.py -->
 # <!-- 回写(2026-08-09)：idle 默认 GWS（gws.enabled=true）；legacy 为对照路径。依据：brain.py -->
 
 PENDING_QUEUE_MAX = 8
@@ -485,7 +486,7 @@ class Brain:
         self.action: ActionLayer | None = None
         self._drift_signals: list[str] = []
         self._last_avatar_payload: dict | None = None
-        self._traces: deque[dict] = deque(maxlen=20)  # /why
+        self._traces: deque[dict] = deque(maxlen=20)  # format_why / 排障
         self._trace_day: str | None = None
 
     def attach_db(self, db: "Database") -> None:
@@ -554,7 +555,7 @@ class Brain:
         ...
 
     async def format_why(self, limit: int = 8) -> str:
-        """CLI /why：最近痕迹 + 落盘 last / day_first。"""
+        """format_why：最近痕迹 + 落盘 last / day_first（排障/测试用）。"""
         ...
 
     async def receive_user_message(self, message: str) -> str | None:
@@ -696,13 +697,15 @@ class Expression:
 </details>
 
 ```python
-# qi/cli.py 并发模型
-# <!-- 回写(2026-07)：proactive_queue 排水；console.input；依据：qi/cli.py -->
-# <!-- 回写(2026-07)：入口名为 run_terminal；退出顺序与 quit 别名对齐代码 -->
+# qi/cli.py —— 具身后端（Brain ∥ WebSocket）
+# <!-- 回写(2026-08-11)：删除 run_terminal；仅 run_desktop / main_desktop / main；依据：qi/cli.py -->
 
-async def run_terminal() -> None:
-    """终端聊天主循环。console script `qi` → main_terminal() → asyncio.run(本函数)。"""
+async def run_desktop() -> None:
+    """具身模式：Brain + WebSocket（console script: qi）。"""
     config = load_config()
+    emb = config.get("embodiment") or {}
+    ws_host, ws_port = resolve_bind(emb.get("host"), emb.get("port"))
+
     gateway = LLMGateway(config)
     db = Database(config["database"]["path"])
     await db.initialize()
@@ -710,76 +713,45 @@ async def run_terminal() -> None:
     brain = Brain(config, llm=gateway)
     await brain.restore_state(db)
 
+    server = EmbodimentServer(brain, host=ws_host, port=ws_port)
+    brain.attach_embodiment(server)
+
     brain_task = asyncio.create_task(brain.start())
-
-    async def _drain_proactive() -> None:
-        while brain.alive:
-            try:
-                text = await asyncio.wait_for(brain.proactive_queue.get(), timeout=0.5)
-            except asyncio.TimeoutError:
-                continue
-            except asyncio.CancelledError:
-                break
-            console.print(f"\n[green]栖：[/green]{text}\n")
-
-    proactive_task = asyncio.create_task(_drain_proactive())
-    loop = asyncio.get_running_loop()
+    server_task = asyncio.create_task(server.start())
     try:
-        while brain.alive:
-            user_input = await loop.run_in_executor(
-                None, console.input, "[bold blue]你：[/bold blue]"
-            )
-            user_input = user_input.strip()
-            if not user_input:
-                continue
-            if user_input.lower() in ("/quit", "quit", "exit", "再见"):
-                break
-            if user_input == "/state":
-                console.print(Panel(_format_state(brain), title="内在状态", border_style="cyan"))
-                continue
-            if user_input == "/why":
-                console.print(Panel(await brain.format_why(), title="心跳痕迹", border_style="dim"))
-                continue
-            # <!-- 回写(2026-07-26)：/why → format_why；依据：qi/cli.py -->
-
-            response = await brain.receive_user_message(user_input)
-            if response:
-                console.print(f"\n[green]栖：[/green]{response}\n")
-            else:
-                console.print("\n[dim][栖想说话，但没能说出来……][/dim]\n")
-    except (KeyboardInterrupt, EOFError):
-        ...
+        await asyncio.gather(brain_task, server_task)
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        pass
     finally:
-        brain.alive = False
-        proactive_task.cancel()
-        try:
-            await proactive_task
-        except asyncio.CancelledError:
-            pass
-        try:
-            await asyncio.wait_for(brain_task, timeout=5)
-        except (asyncio.TimeoutError, asyncio.CancelledError):
-            brain_task.cancel()
-            ...
+        brain.request_shutdown()
+        for task in (brain_task, server_task):
+            if not task.done():
+                task.cancel()
+        ...
+        await server.stop()
         await brain.save_state(db)
         await db.close()
 
-# 入口分层：
-# - main_terminal() / python -m qi → run_terminal()
-# - main_desktop() / qi / python -m qi → run_desktop()（Brain ∥ EmbodimentServer）
-# - main()：argparse，--desktop 则具身，否则终端
+def main_desktop() -> None:
+    logging.basicConfig(level=logging.INFO, ...)
+    asyncio.run(run_desktop())
 
-# 关键设计：
-# - 后台心跳与用户输入并发（brain.start() 独立 task）
-# - 用户回复：锁内生成 → 出锁 sleep → _deliver_qi_message；主动开口经 _pending_speech 出锁推送，并可经 proactive_queue 到终端
-# - receive_user_message：deque 队列（满丢最早）+ 心跳锁
+def main() -> None:
+    """兼容入口；仍接受已废弃的 --desktop。"""
+    ...
+    main_desktop()
+
+# 入口：
+# - qi / python -m qi / main() / main_desktop() → run_desktop()
+# 对话 UI：Tauri 桌面壳（ws://127.0.0.1:9527）；开发期可自动拉起本进程
+# 心跳痕迹：brain.format_why() 仍可供排障/测试，无终端 /why 命令壳
 ```
 
 ### Step 5：持久化
 
 - 每次心跳后保存情绪状态到 SQLite
 - 启动时从 SQLite 恢复上次的情绪状态
-- 验收：关掉程序，再打开，`/state` 显示的情绪不是初始值
+- 验收：关掉程序，再打开，情绪状态不是初始值（前端氛围或库内最新快照）
 
 <details>
 <summary>实现规格（Cursor 编码用）</summary>
@@ -865,9 +837,8 @@ class Database:
 
 ### 可测试的
 
-- [ ] `qi`（或 `python -m qi`）正常启动
-- [ ] 能接收输入、生成回复
-- [ ] `/state` 显示 6 个情绪维度 + 当前模式
+- [ ] `qi`（或 `python -m qi`）正常启动 WebSocket（`ws://127.0.0.1:9527`）
+- [ ] 桌面壳能连上、收发消息、生成回复
 - [ ] 关掉再打开，情绪从 DB 恢复（不是初始值）
 - [ ] 用户夸栖 → valence 上升；用户冷淡 → security 下降
 - [ ] 无交互时，情绪缓慢回归基线

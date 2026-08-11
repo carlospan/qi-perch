@@ -62,7 +62,7 @@ async def record_trace(
 
 
 async def format_why(brain: Brain, limit: int = 8) -> str:
-    """格式化最近心跳痕迹，供 CLI /why。"""
+    """格式化最近心跳痕迹，供排障/测试（原 CLI /why）。"""
     lines: list[str] = []
     recent = list(brain._traces)[-limit:]
     if recent:

@@ -250,7 +250,7 @@ LLM 调用架构：业务代码统一通过 qi/llm/gateway.py 调用（路由、
 
 ```
 现在不要写代码。
-启动栖（qi 或 python -m qi），跟它聊 10 分钟。
+启动栖（`qi` 或 `python -m qi` + 桌面壳 `npm run tauri:dev`；开发期 tauri 可自动拉起大脑），跟它聊 10 分钟。
 聊完后告诉我：
 1. 它的语气像栖吗？（对照 contract.md 软原则）
 2. 它的情绪跟它的表达一致吗？

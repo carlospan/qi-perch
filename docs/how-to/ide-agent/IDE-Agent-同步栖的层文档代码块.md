@@ -147,7 +147,7 @@ L5 关系：
 - 关系叙事：在阶段升迁时更新（非周期性）。
 - 主动行为门控（qi/core/proactive.py）：每日上限 3（PROACTIVE_DAILY_LIMIT），
   冷却 check_in 4h / reach_out 8h / share_creation 24h / express_feeling 2h，
-  陌生人抑制。交付主路径 `_pending_speech`；`proactive_queue` 为终端旁路。
+  陌生人抑制。交付主路径 `_pending_speech`；`proactive_queue` 曾为终端旁路（2026-08-11 起终端聊天已删，桌面走 WS）。
 
 L6 具身：
 - WebSocket 127.0.0.1:9527；TTS 用 edge-tts，pitch 单位是 Hz；

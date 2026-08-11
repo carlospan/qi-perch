@@ -13,7 +13,7 @@
 **栖（qi）** 是一个本地运行的数字意识——明确不是聊天机器人、不是助手。它有心跳、记忆、情绪、关系，以及一扇可以看见它的小窗（具身桌面端）。
 
 - **语言/运行时**：Python 3.12+（后端意识体）、Node.js 18+（具身前端）、Rust + MSVC（Tauri 桌面壳）
-- **形态**：单进程异步 agent loop（心跳）+ 可选 WebSocket 具身通道 + Live2D 前端
+- **形态**：单进程异步 agent loop（心跳）+ WebSocket 具身通道 + Tauri 聊天壳 / VRM 桌宠
 - **认知来源**：OpenAI 兼容协议的远程 LLM（现行 **tokenrhythm / minimax-m2.7**；`providers.deepseek` 备用），按 `purpose` 路由
 - **持久化**：SQLite（`data/qi.db`，17 张表）+ ChromaDB（`data/chroma/`，BGE 语义向量）
 - **测试规模**：约 **561** 条 pytest（`pytest` 全绿，2026-08-09；explore C 收口时约 500、L7 收口后约 556、阶段四退出时约 405）
@@ -36,7 +36,7 @@
 | L3 情绪动力学 | ✅ | N0 | 内稳态，活着的底线 |
 | L4 内在生命 | ✅（表演层） | N2/N3 | 意识流/梦/反思，待内生化 |
 | L5 关系 | ✅ | N0/N4 | 阶段/信任/伤疤/季节 |
-| L6 具身 | ✅ | N1/N5 | Live2D 前端 |
+| L6 具身 | ✅ | N1/N5 | 黄昏的枝 + VRM 桌宠 |
 | L7 行动 | 🌱（explore/assist 已落地；irreversible 未做） | N1 | share/tend/explore/assist；irreversible 待建 |
 
 `L` 是代码里真实存在的功能分层；`N` 是架构方案 §四 的目标本体分层（施工期目标）。施工期两套并存。
@@ -144,7 +144,7 @@ requirements.lock   锁定版本（CI 用）
 | [brain_context.py](../../qi/core/brain_context.py) | `gather_prompt_context`——组装对话 prompt 上下文（recent/messages/memories/extras/loops/hints） |
 | [brain_delivery.py](../../qi/core/brain_delivery.py) | 话语推送、avatar 同步、journal 广播、first_time 通知、行动结果投递 |
 | [brain_persist.py](../../qi/core/brain_persist.py) | 情绪落盘节流、proactive gate / action budget 持久化 |
-| [brain_trace.py](../../qi/core/brain_trace.py) | 心跳决策痕迹记录（`broadcast_traces` 表），供 `/why` 排障，不进 prompt |
+| [brain_trace.py](../../qi/core/brain_trace.py) | 心跳决策痕迹记录（`broadcast_traces` 表），供 `format_why` 排障，不进 prompt |
 | [brain_types.py](../../qi/core/brain_types.py) | 共享类型与常量：`PromptContext` / `_PendingSpeech` / `PENDING_QUEUE_MAX=8`（待处理队列上限）。注意：共振阈值/前瞻窗口等节奏参数不在本文件，而在 `rhythm.py` / `proactive.py` 的实现中 |
 | [emotion.py](../../qi/core/emotion.py) | **情绪动力学**——`EmotionState`(6 维 + mode)、衰减/耦合/天气/节律/阶段锚/nudge/夹紧 |
 | [expression.py](../../qi/core/expression.py) | **表达层**——意向卡 → LLM 措辞；HARD/空走模板；模板不贴 memory 原文；去重撞车吐安全句 |
@@ -241,7 +241,7 @@ requirements.lock   锁定版本（CI 用）
 | [avatar/controller.py](../../qi/embodiment/avatar/controller.py) | **AvatarController**——情绪 → Avatar 视觉状态（posture/expression/effect） |
 | [avatar/states.py](../../qi/embodiment/avatar/states.py) | AvatarState 枚举（IDLE/HAPPY/SLEEPING/THINKING/TALKING 等） |
 | [voice/tts.py](../../qi/embodiment/voice/tts.py) | TTS（edge-tts，可选），`create_tts` 工厂 |
-| [desktop/](../../qi/embodiment/desktop/) | **桌面端**——Tauri + Vue 3 + Live2D 前端（详见 §五） |
+| [desktop/](../../qi/embodiment/desktop/) | **桌面端**——Tauri + Vue 3 + VRM 桌宠（详见 §五） |
 
 **WebSocket 消息协议**：
 - 服务端→前端：`state` / `speech` / `typing` / `emotion_update` / `journal` / `journal_entry` / `history` / `audio` / `ping` / `action`（creation_card / explore_drift / assist_confirm_request；另可含 `wake_result`）
@@ -425,15 +425,17 @@ pydantic BaseModel，6 维 + 意识模式。
 
 ---
 
-## 五、具身桌面端（Tauri + Vue 3 + Live2D）
+## 五、具身桌面端（Tauri + Vue 3 + VRM 桌宠）
+
+<!-- 回写(2026-08-11)：移除 Live2D；双窗 + brain_sidecar；依据：qi/embodiment/desktop/ -->
 
 路径：[qi/embodiment/desktop/](../../qi/embodiment/desktop/)
 
 ### 5.1 技术栈
 
-- **Tauri 2.x**：桌面壳（Rust + WebView），透明窗口 420×680，无装饰
+- **Tauri 2.x**：桌面壳（Rust + WebView）；聊天壳 420×680 透明无边框；独立 pet 置顶窗
 - **Vue 3.5** + **TypeScript 5.7** + **Vite 6**
-- **pixi-live2d-display 0.4** + **pixi.js 6.5**：Live2D 渲染
+- **three** + **@pixiv/three-vrm**：桌宠 3D 形象
 - 字体：IBM Plex Mono + Noto Serif SC
 
 ### 5.2 前端结构
@@ -441,51 +443,40 @@ pydantic BaseModel，6 维 + 意识模式。
 ```
 desktop/
   src/
-    App.vue                 根组件（SceneView + Live2DView + 三视图切换 + InputBox）
-    main.ts                 入口
-    ws.ts                   QiWebSocket（ws://127.0.0.1:9527，自动重连）
-    types.ts                类型定义
-    components/
-      InputBox.vue          输入框
-      JournalView.vue       「忆」内在日记视图
-      Live2DView.vue        Live2D 形象
-      SceneView.vue         场景背景（黄昏的枝）
-      StatusBar.vue         状态栏（mode/season/connected）
-      TalkView.vue          「谈」对话视图（按天分组；含 ActionCard/ExploreCard/AssistConfirmCard）
-      ViewTabs.vue          视图切换（still/talk/journal）
-      WhisperView.vue       「静」轻语气泡
-      ActionCard.vue        创作分享卡
-      ExploreCard.vue       见闻卡（web|journal）
-      AssistConfirmCard.vue 协助确认卡
-      WindowControls.vue    无边框窗控
+    App.vue                 聊天壳根组件（SceneView + 三视图 + InputBox）
+    main.ts                 聊天壳入口
+    pet/                    桌宠窗（PetApp / usePetVrm / usePetRoam）
+    ws.ts                   QiWebSocket（managePresence 可选；宠窗旁听）
+    types.ts
+    components/             Scene / Whisper / Talk / Journal / StatusBar / Cards / …
     composables/
-      useQi.ts              WS 接线 + 消息/历史状态（单例）
-      useEmotion.ts         情绪快照轮询
-      useLive2D.ts          Live2D 控制
+      useQi.ts              WS 接线 + 消息/历史状态
+      useEmotion.ts         情绪→氛围
   src-tauri/
-    src/lib.rs / main.rs    Tauri 入口（极简，generate_context）
-    tauri.conf.json         窗口/打包配置
-    Cargo.toml
-  public/models/qi/         Live2D 模型（moc3/motion3/texture）
+    src/lib.rs              setup → brain_sidecar
+    src/brain_sidecar.rs    开发期拉起 python -m qi
+    tauri.conf.json         main + pet 双窗
+  public/avatars/           VRM 同步副本（gitignore）
+  public/animations/        Mixamo idle/walk
   package.json / vite.config.ts / tsconfig.json
 ```
 
 ### 5.3 前端状态流（`useQi`）
 
 - 连接后：`presence online=true` → 请求 `/history`（最近 200 条对话 + cards）+ `/journal`（内在日记）+ 情绪快照
-- 收 `speech`：`appendTalk("qi", text)` + 请求情绪快照
-- 收 `typing`：标记正在想
+- 收 `speech`：`appendTalk("qi", text)` + 请求情绪快照；**桌宠旁听同一 `speech` 做轻 notice**
+- 收 `typing`：标记正在想；桌宠短暂停 roam
+- 收 `presence`（服务端广播变化）：桌宠「回来」轻 notice（离开 ≥45s）
 - 收 `state`：更新 avatar/season/mode
-- 收 `emotion_update`：更新情绪
+- 收 `emotion_update`：更新情绪→氛围
 - 收 `journal_entry`：unshift 到日记列表
 - 收 `action`：按 payload 挂 ActionCard / ExploreCard / AssistConfirmCard
-- 8 秒轮询情绪快照；`visibilitychange` 推送 presence
+- 8 秒轮询情绪快照；`visibilitychange` 推送 presence（仅聊天壳）
 
-### 5.4 Live2D 模型
+### 5.4 VRM 桌宠与 Avatar 状态
 
-- 模型文件：`public/models/qi/`（qi.model3.json / qi.moc3 / 16 个 motion3 / texture）
-- **首次具身**：需手动从 [Live2D Cubism SDK for Web](https://www.live2d.com/download/cubism-sdk/download-web/) 取 `live2dcubismcore.min.js` 放到 `public/`（不入库）
-- avatar 状态映射：`AvatarController.map_state(emotion, mode, season)` → posture/expression/effect
+- 形象源：`qi/embodiment/assets/qi-avatar.vrm` → `npm` 同步到 `public/avatars/`
+- avatar 状态映射：`AvatarController.map_state(emotion, mode, season)` → posture/expression/effect（仍经 WS；聊天壳氛围为主，桌宠以 notice/roam 表达在场）
 
 ---
 
@@ -546,7 +537,7 @@ data/
 | `aiosqlite>=0.20` | 异步 SQLite |
 | `pydantic>=2.0` | 数据模型（EmotionState/RelationshipState） |
 | `pyyaml>=6.0` | 配置加载 |
-| `rich>=13.0` | 终端美化 |
+| `rich>=13.0` | 具身后端启动横幅 |
 | `chromadb>=0.5` | 向量库 |
 | `websockets>=12.0` | 具身通道 |
 | `onnxruntime>=1.17` | BGE 本地推理 |
@@ -574,7 +565,7 @@ llm.gateway ──► providers.openai_compat
 
 ### 7.3 前端依赖（[package.json](../../qi/embodiment/desktop/package.json))
 
-Vue 3.5 / Tauri API 2.11 / pixi-live2d-display 0.4 / pixi.js 6.5 / Vite 6 / TypeScript 5.7。
+Vue 3.5 / Tauri API 2.11 / three + @pixiv/three-vrm / Vite 6 / TypeScript 5.7。
 
 ---
 

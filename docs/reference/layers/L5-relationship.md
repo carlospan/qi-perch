@@ -501,10 +501,11 @@ def pick_proactive_kind(*, want_express, relationship_stage, emotion_security,
     ...
 ```
 
-**Brain：**无消息心跳——默认 `gws.enabled=true` 走 GWS idle（仲裁后可派 `action:*` / `proactive:*` 等）；legacy 路径才是 **先** `action.tick`（动手则跳过主动言语）→ 再 `pick_proactive_kind` → `expression.express(..., proactive_kind=)` → `gate.record` → `_pending_speech(proactive=True)`。`start()` 出锁后 `_deliver_qi_message`（并 `proactive_queue.put` 供终端排水）。用户回复路径同：锁内生成 → 出锁 sleep → deliver。
+**Brain：**无消息心跳——默认 `gws.enabled=true` 走 GWS idle（仲裁后可派 `action:*` / `proactive:*` 等）；legacy 路径才是 **先** `action.tick`（动手则跳过主动言语）→ 再 `pick_proactive_kind` → `expression.express(..., proactive_kind=)` → `gate.record` → `_pending_speech(proactive=True)`。`start()` 出锁后 `_deliver_qi_message`（并 `proactive_queue.put`；原终端排水旁路，桌面壳改走 WS `speech`）。用户回复路径同：锁内生成 → 出锁 sleep → deliver。
 <!-- 回写(2026-07-23)：行动与主动言语同拍不叠加；依据：qi/core/brain.py -->
 <!-- 回写(2026-07-25)：主交付为 _pending_speech；proactive_queue 为终端旁路；依据：brain.start / _push_proactive_text -->
 <!-- 回写(2026-08-09)：注明默认 GWS idle；legacy 对照。依据：brain.py / settings.example gws.enabled -->
+<!-- 回写(2026-08-11)：终端聊天已删；具身经 EmbodimentServer 广播 speech。依据：qi/cli.py / embodiment/server.py -->
 
 </details>
 

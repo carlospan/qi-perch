@@ -2,7 +2,7 @@
 
 | 层 | 名称 | 状态 | 开始时间 | 完成时间 | 备注 |
 |---|------|------|---------|---------|------|
-| L1 | 心跳 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 代码完成，等感受验证。启动：配置 API key 后 `qi`（默认 provider 以 `settings.yaml` / `settings.example.yaml` 为准，example 现为 **tokenrhythm / minimax-m2.7**，deepseek 备用）。2026-07-25：pending 队列、`_pending_speech`、ActionLayer 同拍优先、first_time 先回复再独白、情绪落盘节流、waking。2026-07-26：`PromptContext`/`BackgroundTasks`、混合冲击、`body_hint`、`/why` 痕迹、F2 `_interacted_this_session`、忆推送接线 |
+| L1 | 心跳 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 代码完成，等感受验证。启动：配置 API key 后 `qi` / `python -m qi`（具身 WS；**已无终端聊天**）。默认 provider 以 `settings.yaml` / example 为准（example 现为 **tokenrhythm / minimax-m2.7**）。2026-07-25：pending 队列、`_pending_speech`、ActionLayer 同拍优先、first_time 先回复再独白、情绪落盘节流、waking。2026-07-26：`PromptContext`/`BackgroundTasks`、混合冲击、`body_hint`、`format_why` 痕迹、F2 `_interacted_this_session`、忆推送接线 |
 | L1.5 | 声音 | ⬜ 未开始 | - | - | Prompt 打磨，不写代码。无独立层文档，仅 prompt 调优，由用户感受判断完成。N1 意象/余烬已落地，仍属在养手感 |
 | L2 | 记忆 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 叙事/向量/工作/身体记忆已接入；**用户事实（fact）已落地**（见 L2-memory-user-facts.md）；名字门控拒「谢谢你」等；`hometown` 籍贯；`body_rhythm_hint` |
 | L3 | 情绪完善 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 耦合/天气/节律/频率/模式切换已接入；日噪声 md5 稳定；expression_threshold 可 YAML 覆盖；`COUPLING_STAGE_SCALE`；阶段锚 `STAGE_BASELINES` + `energy_baseline_offset` |
