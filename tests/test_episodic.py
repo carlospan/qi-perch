@@ -46,6 +46,7 @@ def test_role_map_creator_reveal_not_inverted():
     assert not any("创造者" in s for s in rm["qi_said"])
     hint = format_role_map_hint(rm)
     assert "他说" in hint and "创造者" in hint
+    assert "我说" in hint
     # 他说在我说之前出现于 turns
     assert rm["turns"][0]["speaker"] == "user"
 

@@ -5,8 +5,17 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from qi.memory.episodic import EpisodicMemory, build_role_map, format_role_map_hint
-from qi.memory.weave_guard import sanitize_woven_narrative
+from qi.memory.episodic import (
+    EpisodicMemory,
+    build_role_map,
+    event_speaker,
+    format_role_map_hint,
+)
+from qi.memory.weave_guard import (
+    detect_speaker_inversion,
+    first_person_sketch_from_role_map,
+    sanitize_woven_narrative,
+)
 from qi.prompts import read_prompt
 
 if TYPE_CHECKING:
@@ -160,9 +169,15 @@ class NarrativeMemory:
             return None
 
         template = read_prompt("story_weaving.txt")
-        raw_text = "\n".join(
-            f"- [{e['timestamp']}] ({e['type']}) {e['content']}" for e in batch
-        )
+        # 显式说话人标签，避免 (internal) 等类型名让模型猜错主宾
+        raw_lines: list[str] = []
+        for e in batch:
+            speaker = event_speaker(e)
+            who = "用户" if speaker == "user" else "栖"
+            raw_lines.append(
+                f"- [{e['timestamp']}] ({who}/{e['type']}) {e['content']}"
+            )
+        raw_text = "\n".join(raw_lines)
         emotion_text = emotion.description()
         role_map = build_role_map(batch)
         role_hint = format_role_map_hint(role_map)
@@ -188,6 +203,16 @@ class NarrativeMemory:
         woven_text, fix_tags = sanitize_woven_narrative(woven.strip(), role_map)
         if fix_tags:
             logger.info("编织方向消毒 tags=%s", fix_tags)
+        # 硬闸：消毒后仍颠倒则拒绝 LLM 文，落 role_map 保真草稿
+        if detect_speaker_inversion(woven_text, role_map):
+            sketch = first_person_sketch_from_role_map(role_map)
+            if sketch:
+                logger.warning(
+                    "编织说话人硬闸：仍颠倒，改用 role_map 草稿 batch=%s",
+                    len(batch),
+                )
+                woven_text = sketch
+                fix_tags = list(fix_tags) + ["speaker_direction_hard_gate"]
 
         event_ids = [int(e["id"]) for e in batch]
         impacts = [abs(float(e["emotional_impact"] or 0)) for e in batch]

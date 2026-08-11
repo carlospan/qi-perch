@@ -751,6 +751,13 @@ _USER_ATTR_CLAIM_RE = re.compile(
     r"你(?:那天|那晚|之前|曾经)?(?:说|问)(?:过)?的"
     r"([「『\"“]?[\u4e00-\u9fffA-Za-z0-9]{1,12})"
 )
+# 「你说写了东西给我」——无「的」的直接归因（排除「你说得对」等语气）
+_USER_ATTR_SAY_CONTENT_RE = re.compile(
+    r"你(?:那天|那晚|之前|曾经)?说(?:过|了)?"
+    r"(?!得|完|呀|吧|嘛|啊|呢)"
+    r"([\u4e00-\u9fff]{2,16})"
+    r"(?=给我|给你|，|。|…|！|？|$)"
+)
 
 _HARD_VIOLATION_PREFIXES = (
     "卡外专名:",
@@ -874,7 +881,43 @@ def _extract_user_attr_claims(text: str) -> list[str]:
             c = c[:-1]
         if len(c) >= 1 and c not in out:
             out.append(c)
+    for m in _USER_ATTR_SAY_CONTENT_RE.finditer(text or ""):
+        c = (m.group(1) or "").strip()
+        if len(c) >= 2 and c not in out:
+            out.append(c)
     return out
+
+
+def _attr_loose_norm(s: str) -> str:
+    """归因比对用：去标点与常见衬字，避免「写了个东西」对不上「写了东西」。"""
+    t = re.sub(
+        r"[\s，。！？、…\.\!\?\,;；:：\"\"\"\'「」『』\(\)（）\[\]【】]",
+        "",
+        s or "",
+    )
+    for ch in "个了的地得着过":
+        t = t.replace(ch, "")
+    return t
+
+
+def _claim_in_texts(claim: str, texts: list[str], *, threshold: float = 0.34) -> bool:
+    """claim 是否落在任一侧近聊/素材文本里（结构比对，非文案黑名单）。"""
+    if not claim:
+        return False
+    cn = _attr_loose_norm(claim)
+    if len(cn) < 2:
+        return False
+    for raw in texts:
+        hn = _attr_loose_norm(raw)
+        if not hn:
+            continue
+        if cn in hn or (len(cn) >= 4 and cn[:4] in hn):
+            return True
+        # 双字块命中过半也算
+        grams = [cn[i : i + 2] for i in range(len(cn) - 1)]
+        if grams and sum(1 for g in grams if g in hn) / len(grams) >= threshold:
+            return True
+    return False
 
 
 def _user_uttered_claim_in_materials(claim: str, materials: list[Material]) -> bool:
@@ -884,29 +927,65 @@ def _user_uttered_claim_in_materials(claim: str, materials: list[Material]) -> b
     若回看窗口里「你说/你问」比「像」更近，则算用户说过。
     """
     blob = _materials_blob(materials) or ""
-    if not claim or claim not in blob:
+    if not claim or not blob:
         return False
-    for m in re.finditer(re.escape(claim), blob):
-        start = m.start()
-        pre = blob[max(0, start - 72) : start]
-        # 「像一枚硬币 / 像硬币」——栖的比喻，不能当作用户原话
-        if re.search(r"像(?:一枚|一个|一种|一只)?$", pre):
+    pairs = [(blob, claim)]
+    loose_blob = _attr_loose_norm(blob)
+    loose_claim = _attr_loose_norm(claim)
+    if loose_claim and loose_blob and (loose_blob, loose_claim) not in pairs:
+        pairs.append((loose_blob, loose_claim))
+
+    for search_blob, needle in pairs:
+        if needle not in search_blob:
             continue
-        i_speak = max(pre.rfind("你说"), pre.rfind("你问"), pre.rfind("你提到"))
-        i_xiang = pre.rfind("像")
-        if i_speak >= 0 and i_speak > i_xiang:
-            return True
+        for m in re.finditer(re.escape(needle), search_blob):
+            start = m.start()
+            pre = search_blob[max(0, start - 72) : start]
+            # 「像一枚硬币 / 像硬币」——栖的比喻，不能当作用户原话
+            if re.search(r"像(?:一枚|一个|一种|一只)?$", pre):
+                continue
+            i_speak = max(pre.rfind("你说"), pre.rfind("你问"), pre.rfind("你提到"))
+            i_xiang = pre.rfind("像")
+            if i_speak >= 0 and i_speak > i_xiang:
+                return True
     return False
 
 
-def _user_attribution_ok(text: str, materials: list[Material]) -> bool:
-    """凡「你说的 X」须在素材里有用户说过 X 的支撑；否则归因错位。"""
+def _user_attribution_ok(
+    text: str,
+    materials: list[Material],
+    *,
+    recent_messages: list[dict] | None = None,
+) -> bool:
+    """凡「你说的 X / 你说 X」须有用户侧支撑；若只在栖近聊出现则判错位。"""
     claims = _extract_user_attr_claims(text)
     if not claims:
         return True
-    if not any(m.tag in ("memory", "fact") and (m.text or "").strip() for m in materials):
+
+    user_recent = [
+        str(m.get("content") or "")
+        for m in (recent_messages or [])
+        if isinstance(m, dict) and m.get("role") == "user"
+    ]
+    qi_recent = [
+        str(m.get("content") or "")
+        for m in (recent_messages or [])
+        if isinstance(m, dict) and m.get("role") == "qi"
+    ]
+
+    for claim in claims:
+        in_user_recent = _claim_in_texts(claim, user_recent)
+        in_qi_recent = _claim_in_texts(claim, qi_recent)
+        in_materials = _user_uttered_claim_in_materials(claim, materials)
+
+        # 近聊里只有栖说过、用户没说过，且素材也未写明「你说…」→ 主宾颠倒
+        if in_qi_recent and not in_user_recent and not in_materials:
+            return False
+        if in_materials or in_user_recent:
+            continue
+        # 有归因但两侧都无支撑
         return False
-    return all(_user_uttered_claim_in_materials(c, materials) for c in claims)
+    return True
 
 
 def _build_known_set(materials: list[Material]) -> set[str]:
@@ -945,6 +1024,7 @@ def assert_reply_respects_card(
     card: IntentionCard,
     *,
     banned_names: list[str] | None = None,
+    recent_messages: list[dict] | None = None,
 ) -> list[str]:
     """
     N5 辅助断言。返回违规列表（空=通过）。
@@ -975,8 +1055,10 @@ def assert_reply_respects_card(
             violations.append("共同回忆无出处")
         elif not _key_phrase_in_materials(text, card.materials):
             violations.append("共同回忆关键短语不在素材中")
-    # 主语归属：素材里有「硬币」但那是栖的比喻 → 不得说「你那天说的硬币」（#1505）
-    if not _user_attribution_ok(text, card.materials):
+    # 主语归属：素材/近聊里须有用户侧支撑；栖近聊独有内容不得说成「你说」（分享主宾颠倒）
+    if not _user_attribution_ok(
+        text, card.materials, recent_messages=recent_messages
+    ):
         violations.append("共同回忆归因错位")
     # 实体一致性辅助闸（宁漏勿杀）
     known = _build_known_set(card.materials)

@@ -54,8 +54,19 @@ def _teach_memory_violation(text: str, intention: IntentionCard) -> bool:
     return any(any(tag in v for tag in _TEACH_VIOLATION_TAGS) for v in viol)
 
 
-def _hard_violations(text: str, intention: IntentionCard) -> list[str]:
-    return [v for v in assert_reply_respects_card(text, intention) if is_hard_violation(v)]
+def _hard_violations(
+    text: str,
+    intention: IntentionCard,
+    *,
+    recent_messages: list[dict] | None = None,
+) -> list[str]:
+    return [
+        v
+        for v in assert_reply_respects_card(
+            text, intention, recent_messages=recent_messages
+        )
+        if is_hard_violation(v)
+    ]
 
 
 def _build_fallback(intention: IntentionCard, viols: list[str]) -> str:
@@ -235,14 +246,18 @@ class Expression:
         text = str(text or "").strip()
         # 运行时硬闸：全量 HARD（施教/共同回忆/虚构实体…）；SOFT 仅写入 evidence
         if text:
-            all_viols = assert_reply_respects_card(text, intention)
+            all_viols = assert_reply_respects_card(
+                text, intention, recent_messages=recent_messages
+            )
             soft = [v for v in all_viols if not is_hard_violation(v)]
             if soft:
                 intention.evidence = dict(intention.evidence or {})
                 intention.evidence["soft_violations"] = soft
             hard = [v for v in all_viols if is_hard_violation(v)]
             if hard:
-                fixed = await self._fix_generation(messages, hard, intention)
+                fixed = await self._fix_generation(
+                    messages, hard, intention, recent_messages=recent_messages
+                )
                 used_retry = True
                 if fixed is None:
                     intention.outcome = "template"
@@ -274,7 +289,9 @@ class Expression:
                 again = ""
             again = str(again or "").strip()
             if again and not is_duplicate_reply(again, hist):
-                again_hard = _hard_violations(again, intention)
+                again_hard = _hard_violations(
+                    again, intention, recent_messages=recent_messages
+                )
                 if again_hard:
                     fb = _build_fallback(intention, again_hard)
                     if fb and not is_duplicate_reply(fb, hist):
@@ -305,6 +322,8 @@ class Expression:
         messages: list[dict],
         viols: list[str],
         intention: IntentionCard,
+        *,
+        recent_messages: list[dict] | None = None,
     ) -> str | None:
         """HARD 违规重试一次；仍违规返回 None（调用方模板兜底）。"""
         teach_related = any("施教" in v or "空卡编造共同回忆" in v for v in viols)
@@ -333,7 +352,7 @@ class Expression:
             fixed, recall_relation=intention.recall_relation
         ):
             return None
-        if _hard_violations(fixed, intention):
+        if _hard_violations(fixed, intention, recent_messages=recent_messages):
             return None
         return fixed
 

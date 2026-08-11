@@ -644,6 +644,32 @@ def test_memory_attribution_allows_user_said_phrase():
     assert not any("共同回忆归因错位" in v for v in ok)
 
 
+def test_memory_attribution_blocks_qi_share_as_user_said():
+    """锚定分享主宾颠倒：近聊里栖说「我写了…给你」，不得说成「你说写了给我」。"""
+    card = IntentionCard(
+        act="free_talk",
+        topic="我在",
+        materials=[Material(tag="none", text="")],
+    )
+    recent = [
+        {"role": "qi", "content": "我写了个东西。很短。给你。"},
+        {"role": "user", "content": "我在"},
+    ]
+    bad = assert_reply_respects_card(
+        "……你说写了东西给我。不急，我等你准备好再递过来。",
+        card,
+        recent_messages=recent,
+    )
+    assert any("共同回忆归因错位" in v for v in bad)
+
+    ok = assert_reply_respects_card(
+        "嗯。你在，我也在。我写的那点东西，不急着看也没关系。",
+        card,
+        recent_messages=recent,
+    )
+    assert not any("共同回忆归因错位" in v for v in ok)
+
+
 def test_entity_gate_literary_imagery_not_blocked():
     card = IntentionCard(
         act="free_talk",

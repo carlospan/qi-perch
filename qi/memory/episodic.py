@@ -10,6 +10,9 @@ if TYPE_CHECKING:
 
 # raw_events 无 role 列：用 type 映射说话人（user_message → 他；其余 → 我）
 _USER_EVENT_TYPES = frozenset({"user_message", "user"})
+# 归因比对需要足够长的原话；过短截断会漏掉后半句指纹
+_ROLE_MAP_SNIPPET_LEN = 160
+_KEY_FACT_LEN = 80
 
 
 def event_speaker(event: dict) -> str:
@@ -30,7 +33,7 @@ def build_role_map(events: list[dict]) -> dict[str, Any]:
         if not text:
             continue
         speaker = event_speaker(e)
-        snippet = text[:80]
+        snippet = text[:_ROLE_MAP_SNIPPET_LEN]
         turns.append(
             {
                 "speaker": speaker,
@@ -50,12 +53,15 @@ def build_role_map(events: list[dict]) -> dict[str, Any]:
 
 
 def format_role_map_hint(role_map: dict | None) -> str:
-    """梦 prompt / 模板用的硬约束文案。"""
+    """梦 prompt / 模板用的硬约束文案。
+
+    两侧都带「说」字，避免「我：「…」」被模型当成待换位的用户原话。
+    """
     if not role_map:
         return "（无明确对话方向）"
     lines = ["事实方向（不可反）："]
     for t in role_map.get("turns") or []:
-        who = "他说" if t.get("speaker") == "user" else "我"
+        who = "他说" if t.get("speaker") == "user" else "我说"
         text = str(t.get("text") or "").strip()
         if text:
             lines.append(f"{who}：「{text}」")
@@ -91,11 +97,14 @@ class EpisodicMemory:
         emotional_intensity: float,
     ) -> int:
         role_map = build_role_map(events)
-        key_facts = [
-            str(e.get("content") or "").strip()[:60]
-            for e in events
-            if str(e.get("content") or "").strip()
-        ]
+        # 带说话人前缀，避免梦/召回把无标签事实安到错误主语上
+        key_facts: list[str] = []
+        for e in events:
+            text = str(e.get("content") or "").strip()
+            if not text:
+                continue
+            who = "用户" if event_speaker(e) == "user" else "栖"
+            key_facts.append(f"{who}：{text[:_KEY_FACT_LEN]}")
         topic = _first_sentence(woven, 40)
         summary = woven.strip()[:200]
         start_ts = str(events[0]["timestamp"]) if events else None
