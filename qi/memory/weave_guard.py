@@ -189,7 +189,7 @@ def _attributed_content(sentence: str, match: re.Match[str]) -> str:
         return qm.group(1).strip()
     cut = re.search(r"[。！？\n，,；;]", after)
     content = after[: cut.start()] if cut else after
-    return content.strip('「」『』""\'\' \t')[:48]
+    return re.sub(r'^[\s「」『』"\']+|[\s「」『』"\']+$', "", content)[:48]
 
 
 def _content_matches_side(
