@@ -6,12 +6,13 @@
 >
 > <!-- 演进指向(2026-08-01)：具身层保留；架构方案 N1 将扩展感知-行动闭环（机器状态传感、行动后果回流、前端作为可被自己操作的通道）。见 docs/explanation/栖·数字生命架构方案.md §四 N1。 -->
 > <!-- 回写(2026-08-11)：形象改为独立 VRM 桌宠窗；聊天壳不再嵌 Live2D；开发期 Tauri 可自动拉起 `qi`；删除终端聊天入口。依据：qi/embodiment/desktop/、qi/cli.py -->
+> <!-- 回写(2026-08-12)：聊天壳三栏改为相处/回顾/内在；ReviewView + qi-presence-glow；WhisperView 未接线。依据：App.vue / ViewTabs.vue / types.ts QiView -->
 
 ---
 
 ## 职责
 
-实现栖的具身层：桌面应用（Tauri + Vue3）、「黄昏的枝」聊天壳（静/谈/忆）、**独立透明窗 3D VRM 桌宠**、情绪→聊天壳氛围、语音（TTS 输出；ASR 仍为未来方向）。
+实现栖的具身层：桌面应用（Tauri + Vue3）、「黄昏的枝」聊天壳（**相处 / 回顾 / 内在**）、**独立透明窗 3D VRM 桌宠**、情绪→聊天壳氛围、语音（TTS 输出；ASR 仍为未来方向）。
 
 ## 前置依赖
 
@@ -23,7 +24,7 @@
 - `docs/explanation/archive/栖·意识设计.md` → §八（表达：Avatar 状态映射）、§九（节奏）
 - `docs/explanation/archive/栖·工程手记.md` → §十（部署：Tauri 架构）
 - `docs/reference/contract.md` → 全文
-- `docs/how-to/ui/主界面设计-黄昏的枝.md` → 聊天壳规格（氛围/三视图/令牌）
+- `docs/how-to/ui/主界面设计-黄昏的枝.md` → 聊天壳规格（氛围/三栏/令牌）
 - `qi/embodiment/desktop/README.md` → VRM 桌宠与开发期 sidecar
 - `docs/how-to/ui/主界面-Live2D接入.md` → **已废弃**（历史参考）
 
@@ -31,6 +32,7 @@
 
 ```
 # <!-- 回写(2026-08-11)：VRM 桌宠 + 开发期 brain_sidecar；移除 Live2D；依据：qi/embodiment/desktop/ -->
+# <!-- 回写(2026-08-12)：三栏 presence/review/inner；ReviewView；presence-glow；依据：App.vue -->
 qi/embodiment/
 ├── avatar/
 │   ├── controller.py      # 情绪→动画状态映射（仍推 posture/expression/effect）
@@ -42,17 +44,18 @@ qi/embodiment/
 ├── __init__.py
 └── desktop/               # Tauri 2 + Vue3
     ├── public/
+    │   ├── qi-presence-glow.png      # 相处背景剪影光晕（无 UI）
     │   ├── avatars/                  # 同步自 assets 的 VRM（gitignore 副本）
     │   └── animations/               # Mixamo idle/walk FBX
     ├── src/
-    │   ├── App.vue                   # 黄昏的枝聊天壳
+    │   ├── App.vue                   # 黄昏的枝聊天壳（相处铺 presence-glow）
     │   ├── pet/                      # 独立桌宠窗（VRM + roam + notice）
-    │   ├── components/               # Scene / Whisper / Talk / Journal / …
+    │   ├── components/               # Scene / Talk / Review / Journal / …
     │   ├── composables/              # useEmotion / useQi
     │   ├── ws.ts
-    │   └── types.ts
+    │   └── types.ts                  # QiView = presence | review | inner
     ├── src-tauri/
-    │   └── src/brain_sidecar.rs      # 开发期拉起 python -m qi
+    │   └── src/brain_sidecar.rs      # 开发期拉起 python -m qi；WS 真握手探活
     └── package.json
 qi/cli.py                             # qi：Brain + EmbodimentServer
 ```
@@ -100,8 +103,8 @@ class EmbodimentServer:
         # presence → brain.user_online + perception.set_user_presence
         # pong → pass
         # command "/state" → emotion_update（含 stage）
-        # command "/history" → history{messages, cards?}（谈：最近 HISTORY_WINDOW=200）
-        # command "/journal" → journal{entries}（忆：独白/梦/第一次）
+        # command "/history" → history{messages, cards?}（相处时间线 + 回顾创作/见闻回灌；最近 HISTORY_WINDOW=200）
+        # command "/journal" → journal{entries}（内在：独白/梦/第一次）
         # 前端 useQi 连接时 + 每 ~8s 发 command /state 拉情绪快照（Brain 心跳未主动 push emotion_update）
         # 连接后 useQi 另发 /history、/journal
         ...
@@ -124,7 +127,7 @@ class EmbodimentServer:
 # 协议：
 # 后端→前端：speech | state{avatar_state,season?,mode?} | typing | emotion_update
 #            | ping | audio{data,mime} | history{messages, cards?} | journal{entries}
-#            | journal_entry{kind,text,at,id?}（单条实时；忆 Tab prepend）
+#            | journal_entry{kind,text,at,id?}（单条实时；内在 Tab prepend）
 #            | action{payload}（L7；creation_card → ActionCard；explore_drift web|journal → ExploreCard；
 #              assist_confirm_request → AssistConfirmCard；tend 不渲染）
 # 前端→后端：user_message | presence | pong | command{/state|/history|/journal}
@@ -238,8 +241,12 @@ class AvatarController:
 
 - 聊天壳窗口：**420×680**，透明无边框；header `data-tauri-drag-region`
 - 主界面按 `docs/how-to/ui/主界面设计-黄昏的枝.md`：
-  - 静 / 谈 / 忆（`ViewTabs`）；谈=连接后 `/history` 灌入最近 **200** 条（`HISTORY_WINDOW`），本轮继续 append；忆=连接后 `/journal` 拉独白/梦/第一次（库空则诚实空）；运行中 `journal_entry` 单条 prepend
-  - `SceneView` 氛围 + `useEmotion` §五公式；`WhisperView` 低语（等待态文案符合人设）
+  - **相处 / 回顾 / 内在**（`ViewTabs`；`QiView = presence | review | inner`；默认 `presence`）
+  - **相处** = `TalkView`：连接后 `/history` 灌入最近 **200** 条，本轮继续 append；背后铺 `qi-presence-glow.png`（半透明面板，无 blur）
+  - **回顾** = `ReviewView`：创作卡 + 见闻卡可筛翻阅（来自 `/history.cards` 与会话 `action`）
+  - **内在** = `JournalView`：连接后 `/journal`；运行中 `journal_entry` 单条 prepend
+  - `SceneView` 氛围 + `useEmotion`；相处时 Scene 淡出，改显剪影壁纸
+  - `WhisperView.vue` 仍在仓库，**当前未接入 App**（旧「静·低语」路径）
   - **形象不在聊天壳内**：独立 `pet` 窗加载 VRM（见 `qi/embodiment/desktop/README.md`）
 - 依赖：Vue3 + Three.js + `@pixiv/three-vrm`；无需 Cubism Core
 - 开发期：`brain_sidecar` 自动 `python -m qi`；9527 已占用则沿用
@@ -251,6 +258,7 @@ class AvatarController:
 ```
 # Tauri 项目结构（qi/embodiment/desktop/）
 # <!-- 回写(2026-08-11)：双窗 main+pet；VRM；brain_sidecar -->
+# <!-- 回写(2026-08-12)：Talk/Review/Journal；presence-glow；依据：App.vue -->
 
 desktop/
 ├── index.html / pet.html
@@ -258,18 +266,19 @@ desktop/
 ├── scripts/run-tauri.mjs / sync-avatar.mjs
 ├── vite.config.ts
 ├── public/
+│   ├── qi-presence-glow.png   # 相处背景
 │   ├── avatars/               # qi-avatar.vrm（同步副本）
 │   └── animations/            # idle.fbx / walk.fbx
 ├── src/
-│   ├── App.vue                # 聊天壳
+│   ├── App.vue                # 聊天壳（presence 时铺 glow）
 │   ├── pet/                   # PetApp / usePetVrm / usePetRoam
-│   ├── components/            # Scene / Whisper / Talk / Journal / …
+│   ├── components/            # Scene / Talk / Review / Journal / …
 │   ├── composables/           # useEmotion / useQi
 │   ├── ws.ts                  # managePresence 可选（宠窗 false）
-│   └── types.ts
+│   └── types.ts               # QiView
 └── src-tauri/
     ├── tauri.conf.json        # main 420×680 + pet 置顶透明
-    └── src/brain_sidecar.rs
+    └── src/brain_sidecar.rs   # 拉起 qi；ws_up 做真 WebSocket 握手
 ```
 
 ```json

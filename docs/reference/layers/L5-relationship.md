@@ -281,7 +281,7 @@ def apply_scar_healed_bonus(trust: float) -> float:
 # <!-- 回写(2026-07-25)：收窄 first_compliment——单独「谢谢你」不触发；
 #      需「谢谢你昨晚/陪/愿意/一直」「太谢谢你了」等；防诗意启动与误记夸奖。 -->
 # <!-- 回写(2026-07-26)：RECALL_MIN_AGE / _too_fresh（F1 同拍回声）；
-#      last_recorded 推「忆」；_inner_experience 禁呼吸/心跳（N3b）。依据：first_time.py -->
+#      last_recorded 推「内在」；_inner_experience 禁呼吸/心跳（N3b）。依据：first_time.py -->
 
 RECALL_COOLDOWN = timedelta(days=7)
 RECALL_MIN_AGE = timedelta(minutes=30)  # 刚落库的第一次不作 recall 注入

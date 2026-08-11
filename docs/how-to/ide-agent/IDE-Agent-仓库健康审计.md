@@ -67,7 +67,7 @@
 - 阶段 6｜性能与资源：冷启动耗时Top5、包体积、DB索引/VECTOR使用、向量检索效率、LLM调用频率/token、前端渲染与帧率
   说明：本阶段含真跑测量项。能测则测，给出实测数据；环境受限不能测时改为"静态风险识别 + 测量步骤说明"，不要硬猜。
 - 阶段 7｜CI/CD与工程流程：.github/workflows覆盖、验收闭环、tools接入CI、分支策略、发布流程
-- 阶段 8｜前端与桌面端：tauri.conf/Cargo.toml/capabilities（配置视角：结构合理性，安全归阶段5）、Vue组件质量、TS类型、ws.ts协议一致、Live2D集成、vite/tsconfig构建配置
+- 阶段 8｜前端与桌面端：tauri.conf/Cargo.toml/capabilities（配置视角：结构合理性，安全归阶段5）、Vue组件质量、TS类型、ws.ts协议一致、VRM 桌宠与三栏（相处/回顾/内在）、vite/tsconfig构建配置
 
 【问题分级标准】
 - 🔴 严重 Critical：阻塞功能 / 安全漏洞 / 数据丢失风险——必须立即修

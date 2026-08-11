@@ -3,13 +3,14 @@
 # IDE Agent 同步栖的层文档代码块 · 提示词模板
 
 > 与 `IDE-Agent-执行栖的开发任务.md` 配套。那份是"按层文档写代码"，这份是反过来——"按代码回写层文档里的实现规格代码块"。
-> 背景：层文档实现规格须与代码一致。代码是现状权威。测试规模约 **576**（以 `progress.md` / `pytest` 为准）。
+> 背景：层文档实现规格须与代码一致。代码是现状权威。测试规模约 **606**（以 `progress.md` / `pytest` 为准）。
 > <!-- 回写(2026-07-25)：测试数 67→132；范围扩至 L7 / L2-user-facts；补 2026-07-25 brain 时序。
 >      续：L2 MemoryManager facts；L3 mood md5 + DECAY_RATES + YAML threshold；
 >      L6 history/journal/action 协议；L7 narrative 恒织 + mode 门控 + _deliver_action_result。 -->
 > <!-- 回写(2026-08-09)：测试规模→556；L7 补 assist/explore_web；L6 action 前端已接卡片。 -->
 > <!-- 回写(2026-08-09)：测试规模→561；layers/wiki/config 对齐现码（梦门/阶段锚/GWS idle/history=200 等）。 -->
 > <!-- 回写(2026-08-09)：测试规模→576；assist-4/5 对话拍短路 + insert_action + 粘性补执行。 -->
+> <!-- 回写(2026-08-12)：测试规模→606；L6 三栏相处/回顾/内在 + presence-glow；sidecar WS 真握手。 -->
 
 ---
 
@@ -153,9 +154,9 @@ L6 具身：
 - WebSocket 127.0.0.1:9527；TTS 用 edge-tts，pitch 单位是 Hz；
   voice_id = zh-CN-XiaoyiNeural。
 - 命令：/state /history /journal；后端可推 action → ActionCard / ExploreCard / AssistConfirmCard。
-- 谈=history；忆=journal（独白/梦/第一次）。
+- 聊天壳三栏：**相处**=TalkView+/history(+presence-glow)；**回顾**=ReviewView 创作/见闻；**内在**=JournalView+/journal。
 - ASR（语音识别）未实现——文档若写了 asr.py，标注"未实现/未来方向"，不要伪造代码。
-- 桌面壳是 Tauri 2 + Vue3 + Vite，无 sidecar 进程。
+- 桌面壳是 Tauri 2 + Vue3 + Vite；开发期 `brain_sidecar` 可拉起 `python -m qi`（WS 真握手探活）。
 
 L7 行动：
 - share/tend 恒织 narrative（0.78 / 0.7）；explore 不织。

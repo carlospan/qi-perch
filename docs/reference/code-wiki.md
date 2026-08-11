@@ -428,6 +428,7 @@ pydantic BaseModel，6 维 + 意识模式。
 ## 五、具身桌面端（Tauri + Vue 3 + VRM 桌宠）
 
 <!-- 回写(2026-08-11)：移除 Live2D；双窗 + brain_sidecar；依据：qi/embodiment/desktop/ -->
+<!-- 回写(2026-08-12)：三栏相处/回顾/内在 + presence-glow；依据：App.vue / ViewTabs.vue -->
 
 路径：[qi/embodiment/desktop/](../../qi/embodiment/desktop/)
 
@@ -443,19 +444,26 @@ pydantic BaseModel，6 维 + 意识模式。
 ```
 desktop/
   src/
-    App.vue                 聊天壳根组件（SceneView + 三视图 + InputBox）
+    App.vue                 聊天壳（Scene / presence-glow / 三栏 / InputBox）
     main.ts                 聊天壳入口
     pet/                    桌宠窗（PetApp / usePetVrm / usePetRoam）
     ws.ts                   QiWebSocket（managePresence 可选；宠窗旁听）
-    types.ts
-    components/             Scene / Whisper / Talk / Journal / StatusBar / Cards / …
+    types.ts                QiView = presence | review | inner
+    components/
+      TalkView.vue          相处 · 对话时间线
+      ReviewView.vue        回顾 · 创作/见闻归档
+      JournalView.vue       内在 · 梦/独白
+      SceneView.vue         氛围场景（相处时淡出）
+      WhisperView.vue       旧低语组件（未接线）
+      ViewTabs / StatusBar / Cards / …
     composables/
-      useQi.ts              WS 接线 + 消息/历史状态
+      useQi.ts              WS 接线 + 消息/历史/创作·见闻卡
       useEmotion.ts         情绪→氛围
   src-tauri/
     src/lib.rs              setup → brain_sidecar
-    src/brain_sidecar.rs    开发期拉起 python -m qi
+    src/brain_sidecar.rs    开发期拉起 python -m qi；WS 真握手探活
     tauri.conf.json         main + pet 双窗
+  public/qi-presence-glow.png  相处背景剪影光晕
   public/avatars/           VRM 同步副本（gitignore）
   public/animations/        Mixamo idle/walk
   package.json / vite.config.ts / tsconfig.json
@@ -463,14 +471,14 @@ desktop/
 
 ### 5.3 前端状态流（`useQi`）
 
-- 连接后：`presence online=true` → 请求 `/history`（最近 200 条对话 + cards）+ `/journal`（内在日记）+ 情绪快照
-- 收 `speech`：`appendTalk("qi", text)` + 请求情绪快照；**桌宠旁听同一 `speech` 做轻 notice**
+- 连接后：`presence online=true` → 请求 `/history`（最近 200 条对话 + cards）+ `/journal`（内在）+ 情绪快照
+- 收 `speech`：追加进**相处**时间线 + 请求情绪快照；**桌宠旁听同一 `speech` 做轻 notice**
 - 收 `typing`：标记正在想；桌宠短暂停 roam
 - 收 `presence`（服务端广播变化）：桌宠「回来」轻 notice（离开 ≥45s）
 - 收 `state`：更新 avatar/season/mode
 - 收 `emotion_update`：更新情绪→氛围
-- 收 `journal_entry`：unshift 到日记列表
-- 收 `action`：按 payload 挂 ActionCard / ExploreCard / AssistConfirmCard
+- 收 `journal_entry`：unshift 到**内在**列表
+- 收 `action` / `history.cards`：创作·见闻进**相处**流，并可供**回顾**筛阅
 - 8 秒轮询情绪快照；`visibilitychange` 推送 presence（仅聊天壳）
 
 ### 5.4 VRM 桌宠与 Avatar 状态

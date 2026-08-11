@@ -80,7 +80,7 @@ npm run dev
 - WebSocket：`ws://127.0.0.1:9527`  
 - VS Code 运行配置「栖 · 具身（后端+前端）」可用（需 Python 扩展）
 
-谈区会显示对话；栖 **share 递出创作** 时会出现引入句 + 创作卡片（正文不在语音里）。
+相处区会显示对话；栖 **share 递出创作** 时会出现引入句 + 创作卡片（正文不在语音里）。创作与见闻也可在 **回顾** 里翻阅。
 
 ## 文档
 
@@ -133,7 +133,7 @@ qi/                 顶层包
   action/           行动（预算 / 意志 / share·tend·explore）
   inner_life/       意识流、梦、创作、自我
   relationship/     关系
-  embodiment/       具身（WS + Vue/Tauri；谈区创作卡片）
+  embodiment/       具身（WS + Vue/Tauri；相处/回顾/内在；创作卡片）
   llm/              网关
   prompts/          运行时 LLM 模板
   storage/          SQLite

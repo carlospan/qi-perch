@@ -16,7 +16,7 @@
 | L3-emotion-full | N0（内稳态：情绪动力学） | 活着的底线 |
 | L4-inner-life | N2 / N3（意识流/梦/反思——现为表演层，待内生化） | 阶段一/二重写 |
 | L5-relationship | N0 / N4（关系数值驱动） | 阶段一修状态-体验脱钩 |
-| L6-embodiment | N1 / N5（执行器：Live2D/前端） | 表现层 |
+| L6-embodiment | N1 / N5（执行器：桌面壳 + VRM 桌宠） | 表现层 |
 | L7-action | N1（自主行动：share/tend/explore） | 行动预算 |
 
 > 本体分层 N0–N5 全文与目标定义见 `explanation/栖·数字生命架构方案.md` §四。
