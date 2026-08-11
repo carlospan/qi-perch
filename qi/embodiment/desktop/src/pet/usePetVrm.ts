@@ -6,6 +6,9 @@ import { loadMixamoAnimation } from "./loadMixamoAnimation";
 const MODEL_URL = "/avatars/qi-avatar.vrm";
 const IDLE_URL = "/animations/idle.fbx";
 const WALK_URL = "/animations/walk.fbx";
+/** 去掉头颈动画，避免 VRoid 脸被带出张嘴感 */
+const FACE_LOCK_BONES = ["head", "neck", "jaw"];
+const MOUTH_EXPR = ["aa", "ih", "ou", "ee", "oh"] as const;
 
 export type PetLocomotion = "idle" | "walk";
 /** 1 = 向屏幕右走，-1 = 向左 */
@@ -15,6 +18,8 @@ export type PetVrmHandle = {
   ready: Promise<void>;
   destroy: () => void;
   setLocomotion: (mode: PetLocomotion, facing?: PetFacing) => void;
+  /** 被点及时：看向你 + 身体微晃（不用 Joy 浅笑，会眯眼像眨眼） */
+  notice: (durationMs?: number) => void;
 };
 
 /**
@@ -28,11 +33,18 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
   let idleAction: THREE.AnimationAction | null = null;
   let walkAction: THREE.AnimationAction | null = null;
   let current: PetLocomotion = "idle";
+  let noticeUntil = 0;
+  let noticeStart = 0;
   let raf = 0;
 
   const clock = new THREE.Clock();
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(30, 1, 0.05, 40);
+  /** 视线落点：在脸前方朝向你，避免直接盯相机节点 */
+  const lookAtTarget = new THREE.Object3D();
+  scene.add(lookAtTarget);
+  const _headPos = new THREE.Vector3();
+  const _camDir = new THREE.Vector3();
 
   const key = new THREE.DirectionalLight(0xffffff, 1.2);
   key.position.set(0.45, 1.6, 1.4);
@@ -87,6 +99,31 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
     current = mode;
   };
 
+  const notice = (durationMs = 2600) => {
+    if (!vrm) return;
+    noticeStart = clock.elapsedTime;
+    noticeUntil = noticeStart + durationMs / 1000;
+    setLocomotion("idle", 1);
+    if (vrm.lookAt) {
+      vrm.lookAt.target = lookAtTarget;
+    }
+  };
+
+  const updateLookAtTarget = () => {
+    if (!vrm?.lookAt?.target) return;
+    const head = vrm.humanoid?.getNormalizedBoneNode("head");
+    if (head) {
+      head.getWorldPosition(_headPos);
+    } else {
+      _headPos.set(0, 1.4, 0);
+    }
+    // 从脸朝相机方向前方一点，像看着你而不是盯镜头内侧
+    _camDir.copy(camera.position).sub(_headPos);
+    if (_camDir.lengthSq() < 1e-6) _camDir.set(0, 0, 1);
+    else _camDir.normalize();
+    lookAtTarget.position.copy(_headPos).addScaledVector(_camDir, 0.45);
+  };
+
   const ready = (async () => {
     renderer = new THREE.WebGLRenderer({
       alpha: true,
@@ -121,6 +158,7 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
     try {
       const idleClip = await loadMixamoAnimation(IDLE_URL, loaded, {
         name: "idle",
+        omitBones: FACE_LOCK_BONES,
       });
       if (destroyed) return;
       idleAction = mixer.clipAction(idleClip);
@@ -135,6 +173,7 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
       const walkClip = await loadMixamoAnimation(WALK_URL, loaded, {
         name: "walk",
         inPlace: true,
+        omitBones: FACE_LOCK_BONES,
       });
       if (destroyed) return;
       walkAction = mixer.clipAction(walkClip);
@@ -158,8 +197,23 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
       if (destroyed || !renderer || !vrm) return;
       const delta = clock.getDelta();
       mixer?.update(delta);
-      applyBlink(vrm, clock.elapsedTime);
+      lockMouth(vrm);
+      const noticing = clock.elapsedTime < noticeUntil;
+      if (noticing) {
+        updateLookAtTarget();
+        applyNoticeReaction(vrm, clock.elapsedTime, noticeStart, noticeUntil);
+        clearEyeBlink(vrm);
+      } else {
+        applyBlink(vrm, clock.elapsedTime);
+        vrm.expressionManager?.setValue("happy", 0);
+        if (vrm.lookAt) vrm.lookAt.target = null;
+      }
       vrm.update(delta);
+      // Joy/update 之后再清一次，避免眯眼被当成眨眼
+      if (noticing) {
+        clearEyeBlink(vrm);
+        vrm.expressionManager?.update();
+      }
       renderer.render(scene, camera);
       raf = requestAnimationFrame(tick);
     };
@@ -169,6 +223,7 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
   return {
     ready,
     setLocomotion,
+    notice,
     destroy() {
       destroyed = true;
       cancelAnimationFrame(raf);
@@ -197,6 +252,55 @@ function applyBlink(model: VRM, t: number) {
   if (phase < 0.07) blink = phase / 0.07;
   else if (phase < 0.14) blink = 1 - (phase - 0.07) / 0.07;
   model.expressionManager?.setValue("blink", blink);
+}
+
+function clearEyeBlink(model: VRM) {
+  const em = model.expressionManager;
+  if (!em) return;
+  em.setValue("blink", 0);
+  em.setValue("blinkLeft", 0);
+  em.setValue("blinkRight", 0);
+}
+
+function lockMouth(model: VRM) {
+  const em = model.expressionManager;
+  if (!em) return;
+  for (const name of MOUTH_EXPR) {
+    em.setValue(name, 0);
+  }
+}
+
+/** 正脸点击：看向你 + 身体微晃。不用 happy（Joy 会眯眼，很像眨眼/不屑） */
+function applyNoticeReaction(
+  model: VRM,
+  now: number,
+  start: number,
+  until: number
+) {
+  if (until <= start || now >= until) return;
+
+  const total = until - start;
+  const elapsed = now - start;
+  const remain = until - now;
+  const rise = Math.min(0.22, total * 0.12);
+  const fall = Math.min(0.55, total * 0.28);
+  let w = 1;
+  if (elapsed < rise) w = elapsed / rise;
+  else if (remain < fall) w = remain / fall;
+  w = Math.max(0, Math.min(1, w));
+
+  // 叠在待机姿势上：极轻侧倾 + 微前倾
+  const spine = model.humanoid?.getNormalizedBoneNode("spine");
+  const chest = model.humanoid?.getNormalizedBoneNode("chest");
+  const sway = Math.sin(elapsed * 2.6) * 0.028 * w;
+  if (spine) {
+    spine.rotation.z += sway;
+    spine.rotation.x += 0.012 * w;
+  }
+  if (chest) {
+    chest.rotation.z += sway * 0.55;
+    chest.rotation.x += 0.01 * w;
+  }
 }
 
 function frameCamera(camera: THREE.PerspectiveCamera, model: VRM) {

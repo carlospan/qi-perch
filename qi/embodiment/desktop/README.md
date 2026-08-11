@@ -8,7 +8,8 @@
 
 待机动作：`public/animations/idle.fbx`（Mixamo Standing Idle Female，略放慢）。  
 走路动作：`public/animations/walk.fbx`（Mixamo Walking Female，原地播 + 窗体平移）。  
-漫步：大半时间原地待机；每隔很久才走向一个落点安顿（非左右巡逻）。
+漫步：大半时间原地待机；每隔很久才走向一个落点安顿（非左右巡逻）。  
+点击：看向你 + 身体微晃（不用 Joy 表情，避免眯眼像眨眼）。
 
 `npm run tauri:dev` 会同时打开聊天窗与置顶桌宠窗；可拖拽桌宠窗（拖时暂停漫步）。
 

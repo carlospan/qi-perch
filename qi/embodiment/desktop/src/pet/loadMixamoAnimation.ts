@@ -8,6 +8,8 @@ export type MixamoLoadOptions = {
   name?: string;
   /** 去掉位移轨，用于窗体移动时的原地走 */
   inPlace?: boolean;
+  /** 去掉头/颈等，避免 VRoid 脸上出现「嚼嘴」 */
+  omitBones?: string[];
 };
 
 /**
@@ -19,7 +21,8 @@ export async function loadMixamoAnimation(
   vrm: VRM,
   options: MixamoLoadOptions = {}
 ): Promise<THREE.AnimationClip> {
-  const { name = "mixamo", inPlace = false } = options;
+  const { name = "mixamo", inPlace = false, omitBones = [] } = options;
+  const omit = new Set(omitBones);
   const loader = new FBXLoader();
   const asset = await loader.loadAsync(url);
 
@@ -35,7 +38,9 @@ export async function loadMixamoAnimation(
   const parentRestWorldRotation = new THREE.Quaternion();
   const _quatA = new THREE.Quaternion();
 
-  const motionHips = asset.getObjectByName("mixamorigHips");
+  const motionHips =
+    asset.getObjectByName("mixamorigHips") ??
+    asset.getObjectByName("mixamorig:Hips");
   const motionHipsHeight = motionHips?.position.y;
   const vrmHipsY = vrm.humanoid?.normalizedRestPose?.hips?.position?.[1];
   if (motionHipsHeight == null || vrmHipsY == null || motionHipsHeight === 0) {
@@ -45,17 +50,19 @@ export async function loadMixamoAnimation(
 
   for (const track of clip.tracks) {
     const trackSplitted = track.name.split(".");
-    const mixamoRigName = trackSplitted[0] ?? "";
+    const rawName = trackSplitted[0] ?? "";
     const propertyName = trackSplitted[1];
     if (!propertyName) continue;
 
+    const mixamoRigName = normalizeMixamoName(rawName);
     const vrmBoneName = mixamoVRMRigMap[mixamoRigName];
-    if (!vrmBoneName) continue;
+    if (!vrmBoneName || omit.has(vrmBoneName)) continue;
 
     const vrmNodeName = vrm.humanoid?.getNormalizedBoneNode(
       vrmBoneName as never
     )?.name;
-    const mixamoRigNode = asset.getObjectByName(mixamoRigName);
+    const mixamoRigNode =
+      asset.getObjectByName(rawName) ?? asset.getObjectByName(mixamoRigName);
     if (vrmNodeName == null || !mixamoRigNode?.parent) continue;
 
     mixamoRigNode.getWorldQuaternion(restRotationInverse).invert();
@@ -100,4 +107,9 @@ export async function loadMixamoAnimation(
   }
 
   return new THREE.AnimationClip(name, clip.duration, tracks);
+}
+
+/** Mixamo 导出常见 `mixamorig:Head` / `mixamorigHead` 两种 */
+function normalizeMixamoName(name: string): string {
+  return name.replace(/^mixamorig:/, "mixamorig");
 }

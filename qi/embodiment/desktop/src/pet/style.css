@@ -10,9 +10,10 @@ body,
 }
 
 body {
-  cursor: grab;
+  cursor: pointer;
 }
 
+body.dragging,
 body:active {
   cursor: grabbing;
 }
