@@ -1,0 +1,43 @@
+html,
+body,
+#app {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent !important;
+  user-select: none;
+}
+
+body {
+  cursor: grab;
+}
+
+body:active {
+  cursor: grabbing;
+}
+
+#host {
+  width: 100%;
+  height: 100%;
+}
+
+#host canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+#status {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 12px;
+  margin: 0;
+  padding: 0;
+  font: 12px/1.4 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: rgba(240, 244, 248, 0.72);
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}

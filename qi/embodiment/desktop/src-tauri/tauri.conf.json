@@ -26,6 +26,23 @@
         "skipTaskbar": false,
         "shadow": false,
         "center": true
+      },
+      {
+        "label": "pet",
+        "title": "栖 · 桌宠",
+        "url": "pet.html",
+        "width": 380,
+        "height": 640,
+        "resizable": false,
+        "fullscreen": false,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "center": false,
+        "x": 64,
+        "y": 120
       }
     ],
     "security": {

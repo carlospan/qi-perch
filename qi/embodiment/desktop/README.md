@@ -1,10 +1,16 @@
 # 栖 · 桌面端（Vue3 + Tauri 2）
 
-透明无边框小窗（420×680）；「黄昏的枝」主界面 + Live2D 形象。前端连本机 WebSocket `ws://127.0.0.1:9527`。Python 大脑仍单独进程启动（尚未做成 Tauri sidecar）。
+透明无边框小窗（420×680）；「黄昏的枝」聊天壳 + 独立 **桌宠窗**（`pet.html`，置顶透明 3D VRM）。前端连本机 WebSocket `ws://127.0.0.1:9527`。Python 大脑仍单独进程启动（尚未做成 Tauri sidecar）。
 
-## Cubism Core（必做）
+## 3D 桌宠 VRM
 
-`public/live2dcubismcore.min.js` **不入库**。从 [Cubism SDK for Web](https://www.live2d.com/download/cubism-sdk/download-web/) 取出后放到 `public/`。缺此文件则 Live2D 不显示。详见 [换机搭建.md](../../../docs/how-to/换机搭建.md) §5、[Live2D接入.md](../../../docs/how-to/ui/主界面-Live2D接入.md)。
+把形象放到 `qi/embodiment/assets/qi-avatar.vrm`。`npm run dev` / `build` 会同步到 `public/avatars/`（该副本不入库）。
+
+待机动作：`public/animations/idle.fbx`（Mixamo Standing Idle Female，略放慢）。  
+走路动作：`public/animations/walk.fbx`（Mixamo Walking Female，原地播 + 窗体平移）。  
+漫步：大半时间原地待机；每隔很久才走向一个落点安顿（非左右巡逻）。
+
+`npm run tauri:dev` 会同时打开聊天窗与置顶桌宠窗；可拖拽桌宠窗（拖时暂停漫步）。
 
 ## 启动
 
@@ -32,7 +38,7 @@ cd qi/embodiment/desktop
 npm run dev
 ```
 
-打开 http://localhost:5173。
+打开 http://localhost:5173（聊天壳）或 http://localhost:5173/pet.html（桌宠）。
 
 打包：`npm run tauri:build` → `src-tauri/target/release/`。
 

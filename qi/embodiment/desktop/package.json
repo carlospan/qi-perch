@@ -4,8 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "sync-avatar": "node ./scripts/sync-avatar.mjs",
+    "dev": "node ./scripts/sync-avatar.mjs && vite",
+    "build": "node ./scripts/sync-avatar.mjs && vite build",
     "preview": "vite preview",
     "tauri": "node ./scripts/run-tauri.mjs",
     "tauri:dev": "node ./scripts/run-tauri.mjs dev",
@@ -14,13 +15,14 @@
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/noto-serif-sc": "^5.2.8",
+    "@pixiv/three-vrm": "^3.5.5",
     "@tauri-apps/api": "^2.11.1",
-    "pixi-live2d-display": "^0.4.0",
-    "pixi.js": "^6.5.10",
+    "three": "^0.185.1",
     "vue": "^3.5.13"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
+    "@types/three": "^0.185.4",
     "@vitejs/plugin-vue": "^5.2.1",
     "typescript": "~5.7.2",
     "vite": "^6.0.7",

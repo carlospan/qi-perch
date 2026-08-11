@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "栖桌面窗的默认权限",
-  "windows": ["main"],
+  "windows": ["main", "pet"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
@@ -10,6 +10,14 @@
     "core:window:allow-minimize",
     "core:window:allow-set-always-on-top",
     "core:window:allow-show",
-    "core:window:allow-hide"
+    "core:window:allow-hide",
+    "core:window:allow-set-position",
+    "core:window:allow-outer-position",
+    "core:window:allow-outer-size",
+    "core:window:allow-inner-size",
+    "core:window:allow-scale-factor",
+    "core:window:allow-current-monitor",
+    "core:window:allow-primary-monitor",
+    "core:window:allow-available-monitors"
   ]
 }

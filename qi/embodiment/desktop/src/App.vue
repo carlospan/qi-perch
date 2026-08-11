@@ -2,7 +2,6 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import InputBox from "./components/InputBox.vue";
 import JournalView from "./components/JournalView.vue";
-import Live2DView from "./components/Live2DView.vue";
 import SceneView from "./components/SceneView.vue";
 import StatusBar from "./components/StatusBar.vue";
 import TalkView from "./components/TalkView.vue";
@@ -11,17 +10,13 @@ import WhisperView from "./components/WhisperView.vue";
 import WindowControls from "./components/WindowControls.vue";
 import { useQi } from "./composables/useQi";
 
-/* Step 5：动效收尾 + 验收 */
-
 const {
   view,
   connected,
   typing,
   speech,
   speaking,
-  replyEpoch,
   season,
-  emotion,
   mode,
   inStasis,
   avatar,
@@ -52,19 +47,6 @@ onUnmounted(() => disconnect());
 <template>
   <div class="shell" :class="{ booted }">
     <SceneView :entered="booted" :dreaming="dreaming" />
-
-    <div
-      class="figure-layer"
-      :class="{ dim: view !== 'still', entered: booted }"
-    >
-      <Live2DView
-        :mode="mode"
-        :emotion="emotion"
-        :speaking="speaking"
-        :reply-epoch="replyEpoch"
-        :entered="booted"
-      />
-    </div>
 
     <div class="vignette" aria-hidden="true" />
     <div class="grain" aria-hidden="true" />
@@ -137,29 +119,6 @@ onUnmounted(() => disconnect());
     0 30px 80px rgba(0, 0, 0, 0.55),
     0 2px 0 rgba(255, 255, 255, 0.04) inset,
     0 0 0 1px rgba(255, 255, 255, 0.05) inset;
-}
-
-.figure-layer {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 80px;
-  bottom: 120px;
-  z-index: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.5s var(--ease-view);
-}
-.figure-layer.entered {
-  opacity: 1;
-  transition-delay: 0.35s;
-}
-.figure-layer.dim {
-  opacity: 0.35;
-  transition-delay: 0s;
 }
 
 .vignette {
