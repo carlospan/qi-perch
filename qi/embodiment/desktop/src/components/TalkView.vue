@@ -63,8 +63,8 @@ watch(
 <template>
   <div class="panel">
     <div class="panel-head">
-      <span class="t">谈</span>
-      <span class="sub">最近约 200 条</span>
+      <span class="t">相处</span>
+      <span class="sub">此刻的对话</span>
     </div>
     <div ref="body" class="panel-body">
       <p v-if="groups.length === 0 && !typing" class="empty">
@@ -113,9 +113,14 @@ watch(
   inset: 0;
   display: flex;
   flex-direction: column;
-  background: color-mix(in srgb, var(--panel-veil) 62%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  /* 薄纱遮罩，不加 blur，免得把剪影壁纸糊掉 */
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel-veil) 38%, transparent) 0%,
+      color-mix(in srgb, var(--panel-veil) 12%, transparent) 40%,
+      color-mix(in srgb, var(--panel-veil) 22%, transparent) 100%
+    );
   pointer-events: auto;
 }
 

@@ -2,11 +2,11 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import InputBox from "./components/InputBox.vue";
 import JournalView from "./components/JournalView.vue";
+import ReviewView from "./components/ReviewView.vue";
 import SceneView from "./components/SceneView.vue";
 import StatusBar from "./components/StatusBar.vue";
 import TalkView from "./components/TalkView.vue";
 import ViewTabs from "./components/ViewTabs.vue";
-import WhisperView from "./components/WhisperView.vue";
 import WindowControls from "./components/WindowControls.vue";
 import { useQi } from "./composables/useQi";
 
@@ -14,13 +14,13 @@ const {
   view,
   connected,
   typing,
-  speech,
-  speaking,
   season,
   mode,
   inStasis,
   avatar,
   talkByDay,
+  creationCards,
+  exploreCards,
   journal,
   send,
   requestWake,
@@ -45,8 +45,13 @@ onUnmounted(() => disconnect());
 </script>
 
 <template>
-  <div class="shell" :class="{ booted }">
+  <div class="shell" :class="{ booted, presence: view === 'presence' }">
     <SceneView :entered="booted" :dreaming="dreaming" />
+    <div
+      class="presence-glow"
+      :class="{ on: view === 'presence' }"
+      aria-hidden="true"
+    />
 
     <div class="vignette" aria-hidden="true" />
     <div class="grain" aria-hidden="true" />
@@ -65,22 +70,20 @@ onUnmounted(() => disconnect());
 
       <div class="stage">
         <Transition name="view" mode="out-in">
-          <div v-if="view === 'still'" key="still" class="stage-still">
-            <div class="stage-spacer" />
-            <WhisperView
-              :text="speech"
-              :typing="typing"
-              @speaking="speaking = $event"
-            />
-          </div>
-          <div v-else-if="view === 'talk'" key="talk" class="overlay">
+          <div v-if="view === 'presence'" key="presence" class="overlay">
             <TalkView
               :groups="talkByDay"
               :typing="typing"
               @send="send"
             />
           </div>
-          <div v-else key="journal" class="overlay">
+          <div v-else-if="view === 'review'" key="review" class="overlay">
+            <ReviewView
+              :creations="creationCards"
+              :explores="exploreCards"
+            />
+          </div>
+          <div v-else key="inner" class="overlay">
             <JournalView :entries="journal" />
           </div>
         </Transition>
@@ -121,6 +124,38 @@ onUnmounted(() => disconnect());
     0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 }
 
+/* 相处：剪影光晕壁纸盖住 Scene，避免双树枝 */
+.presence-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: center 42% / cover no-repeat url("/qi-presence-glow.png");
+  opacity: 0;
+  transform: scale(1.02);
+  transition:
+    opacity 0.7s var(--ease-view),
+    transform 1.2s var(--ease-view);
+}
+.presence-glow.on {
+  opacity: 1;
+  transform: scale(1);
+}
+.shell.presence {
+  /* 相处时弱化内描边，避免左右竖线压在壁纸上 */
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.55),
+    0 1px 0 rgba(255, 255, 255, 0.03) inset;
+}
+.shell.presence :deep(.scene.entered) {
+  animation: none;
+  opacity: 0;
+  transition: opacity 0.55s var(--ease-view);
+}
+.shell:not(.presence) :deep(.scene.entered) {
+  transition: opacity 0.55s var(--ease-view);
+}
+
 .vignette {
   position: absolute;
   inset: 0;
@@ -134,6 +169,16 @@ onUnmounted(() => disconnect());
   );
   opacity: var(--vig-a);
   transition: opacity 1.6s ease;
+}
+.shell.presence .vignette {
+  /* 让中心剪影更透出来，边缘仍压暗 */
+  background: radial-gradient(
+    120% 95% at 50% 48%,
+    transparent 28%,
+    rgba(5, 8, 14, 0.35) 58%,
+    rgba(5, 8, 14, 0.82) 100%
+  );
+  opacity: 0.85;
 }
 
 .grain {
@@ -248,19 +293,6 @@ h1 {
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-}
-
-.stage-still {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.stage-spacer {
-  flex: 1;
 }
 
 .overlay {

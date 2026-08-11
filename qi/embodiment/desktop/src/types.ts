@@ -67,7 +67,7 @@ export type AssistConfirmCard = {
   action_id?: number;
 };
 
-/** 后端 action payload；谈区渲染 creation / explore / assist 确认 */
+/** 后端 action payload；回顾区渲染 creation / explore；相处区渲染 assist 确认 */
 export type ActionPayload =
   | CreationCard
   | AssistConfirmCard
@@ -122,7 +122,7 @@ export type ServerMessage =
   | { type: "wake_result"; payload: { ok: boolean; reason?: string; mode?: string } }
   | { type: "action"; payload: ActionPayload };
 
-/** 谈区时间线条目：文本投影带 kind:"text"；卡片带 kind:"card" */
+/** 回顾时间线条目：文本投影带 kind:"text"；卡片带 kind:"card" */
 export type TalkCardItem = {
   id: string;
   kind: "card";
@@ -137,10 +137,10 @@ export type ClientMessage =
   | { type: "pong"; payload: { ts: number } }
   | { type: "command"; payload: { text: string } };
 
-/** 静 / 谈 / 忆 */
-export type QiView = "still" | "talk" | "journal";
+/** 相处 / 回顾 / 内在 */
+export type QiView = "presence" | "review" | "inner";
 
-/** 「谈」会话消息（来自 /history 最近约 200 条 + 本轮追加） */
+/** 「回顾 · 对话」筛选用会话消息（/history 约 200 条 + 本轮追加） */
 export type TalkMessage = {
   id: string;
   role: "qi" | "me";
@@ -149,7 +149,7 @@ export type TalkMessage = {
   tone?: string;
 };
 
-/** 「忆」日记条目（连上后经 /journal 从后端拉） */
+/** 「内在」日记条目（连上后经 /journal 从后端拉） */
 export type JournalEntry = {
   id: string;
   kind: "梦" | "独白" | "第一次" | string;

@@ -1,7 +1,8 @@
 /**
- * WS 接线 + 消息 / 历史状态（黄昏的枝 §七）。
- * 「谈」：连接后通过 /history 拉取最近窗口记录，本轮继续 append。
- * 「忆」：连接后通过 /journal 拉取独白 / 梦 / 第一次；无则诚实空占位。
+ * WS 接线 + 消息 / 历史状态。
+ * 「相处」：/history 灌对话与创作·见闻卡；本轮继续 append。
+ * 「回顾」：创作 / 见闻归档。
+ * 「内在」：/journal 灌独白 / 梦 / 第一次；无则诚实空占位。
  */
 
 import { computed, ref } from "vue";
@@ -70,7 +71,7 @@ let singleton: ReturnType<typeof createQi> | null = null;
 function createQi() {
   const { onEmotionUpdate, requestEmotionSnapshot } = useEmotion();
 
-  const view = ref<QiView>("still");
+  const view = ref<QiView>("presence");
   const connected = ref(false);
   const typing = ref(false);
   const speech = ref("");
@@ -86,7 +87,7 @@ function createQi() {
 
   /** 对话历史（启动后由 /history 灌入） */
   const talk = ref<TalkMessage[]>([]);
-  /** 谈区卡片：创作卡 + 见闻卡均随 /history.cards 回灌 */
+  /** 创作 / 见闻 / assist 确认卡（随 /history.cards 回灌） */
   const cards = ref<TalkCardItem[]>([]);
   const historyLoaded = ref(false);
   /** 内在日记（启动后由 /journal 灌入；库空则保持空） */
@@ -209,6 +210,21 @@ function createQi() {
     return [...groups.values()];
   });
 
+  const creationCards = computed(() =>
+    cards.value.filter((c) => c.card.type === "creation_card")
+  );
+  const exploreCards = computed(() =>
+    cards.value.filter((c) => c.card.type === "explore_drift")
+  );
+  /** 相处页：最近一条协助确认 */
+  const pendingAssist = computed((): AssistConfirmCard | null => {
+    for (let i = cards.value.length - 1; i >= 0; i--) {
+      const item = cards.value[i];
+      if (item.card.type === "assist_confirm_request") return item.card;
+    }
+    return null;
+  });
+
   let emotionPoll: number | null = null;
   let touchConsideredForTurn = false;
   let wired = false;
@@ -222,7 +238,6 @@ function createQi() {
   function appendTalk(role: "qi" | "me", text: string, tone?: string) {
     const t = text.trim();
     if (!t) return;
-    // 避免 history 与本轮 speech 重复叠一条
     const last = talk.value[talk.value.length - 1];
     if (
       last &&
@@ -412,7 +427,6 @@ function createQi() {
           return;
         }
         if (payload?.type === "explore_drift") {
-          // d-3-2：web | journal；须有 entries 才出卡（空手只开口、不出卡）
           const entries = payload.found?.entries;
           const okSource =
             payload.source === "web" || payload.source === "journal";
@@ -426,7 +440,6 @@ function createQi() {
             appendCard(payload);
           }
         }
-        // tend_mark / assist_result / 空手：到达不报错、不渲染
       });
     }
 
@@ -449,7 +462,6 @@ function createQi() {
     qiWs.disconnect();
   }
 
-  /** 主动再拉一次最近窗口历史（重连后也会自动拉；默认约 200 条） */
   async function refreshHistory() {
     requestHistory();
   }
@@ -472,6 +484,9 @@ function createQi() {
     inStasis,
     talk,
     talkByDay,
+    creationCards,
+    exploreCards,
+    pendingAssist,
     journal,
     historyLoaded,
     send,

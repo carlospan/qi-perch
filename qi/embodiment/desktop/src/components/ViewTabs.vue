@@ -10,9 +10,9 @@ const emit = defineEmits<{
 }>();
 
 const tabs: { id: QiView; label: string }[] = [
-  { id: "still", label: "静" },
-  { id: "talk", label: "谈" },
-  { id: "journal", label: "忆" },
+  { id: "presence", label: "相处" },
+  { id: "review", label: "回顾" },
+  { id: "inner", label: "内在" },
 ];
 </script>
 

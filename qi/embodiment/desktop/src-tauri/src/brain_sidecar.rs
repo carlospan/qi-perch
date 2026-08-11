@@ -113,12 +113,40 @@ fn skip_requested() -> bool {
   )
 }
 
+/// 探 9527 是否已在听 WebSocket。
+/// 必须走完整握手：空 TCP 连上即断会被 websockets 打成 `opening handshake failed` ERROR。
 fn ws_up() -> bool {
-  TcpStream::connect_timeout(
-    &WS_PROBE.parse().expect("static addr"),
-    Duration::from_millis(200),
-  )
-  .is_ok()
+  use std::io::{Read, Write};
+
+  let addr = WS_PROBE.parse().expect("static addr");
+  let mut stream = match TcpStream::connect_timeout(&addr, Duration::from_millis(200)) {
+    Ok(s) => s,
+    Err(_) => return false,
+  };
+  let _ = stream.set_read_timeout(Some(Duration::from_millis(400)));
+  let _ = stream.set_write_timeout(Some(Duration::from_millis(200)));
+
+  // RFC6455 示例 key；服务端验的是格式，不要求我们真的继续帧交换
+  let req = concat!(
+    "GET / HTTP/1.1\r\n",
+    "Host: 127.0.0.1:9527\r\n",
+    "Upgrade: websocket\r\n",
+    "Connection: Upgrade\r\n",
+    "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n",
+    "Sec-WebSocket-Version: 13\r\n",
+    "\r\n",
+  );
+  if stream.write_all(req.as_bytes()).is_err() {
+    return false;
+  }
+
+  let mut buf = [0u8; 256];
+  let n = match stream.read(&mut buf) {
+    Ok(n) if n > 0 => n,
+    _ => return false,
+  };
+  let head = String::from_utf8_lossy(&buf[..n]);
+  head.starts_with("HTTP/1.1 101") || head.starts_with("HTTP/1.0 101")
 }
 
 enum WaitOutcome {
