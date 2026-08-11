@@ -1,6 +1,6 @@
-"""支持 python -m qi。"""
+"""支持 python -m qi → 具身后端。"""
 
-from qi.cli import main_terminal
+from qi.cli import main
 
 if __name__ == "__main__":
-    main_terminal()
+    main()

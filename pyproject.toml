@@ -29,8 +29,7 @@ voice = [
 ]
 
 [project.scripts]
-qi = "qi.cli:main_terminal"
-qi-desktop = "qi.cli:main_desktop"
+qi = "qi.cli:main_desktop"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

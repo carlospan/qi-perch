@@ -62,7 +62,7 @@ qi/embodiment/
     │   └── types.ts
     ├── src-tauri/                    # 420×680 透明无边框
     └── package.json
-qi/cli.py                             # qi-desktop：Brain + EmbodimentServer
+qi/cli.py                             # qi：Brain + EmbodimentServer
 ```
 
 ## 实现步骤
@@ -85,7 +85,7 @@ qi/cli.py                             # qi-desktop：Brain + EmbodimentServer
 
 WS_HOST = "127.0.0.1"
 WS_PORT = 9527
-# settings.yaml 有 embodiment.host/port，qi-desktop 当前用模块常量，YAML 未读入
+# settings.yaml 有 embodiment.host/port，qi 入口当前用模块常量，YAML 未读入
 
 class EmbodimentServer:
     def __init__(self, brain: Brain, host: str = WS_HOST, port: int = WS_PORT): ...
@@ -144,7 +144,7 @@ class EmbodimentServer:
 # <!-- 回写(2026-08-09)：assist_confirm_request → AssistConfirmCard（会话内 WS，不入 history） -->
 # 前端 useQi：on("journal") 全量替换；on("journal_entry") unshift 单条；on("history") 文本+创作/见闻卡；on("action") appendCard
 # 前端重连（ws.ts）：指数退避 1s→…→30s；onopen 发 presence online
-# 启动：qi-desktop（Brain∥WS）+ npm run tauri:dev（或 npm run dev）
+# 启动：qi（Brain∥WS）+ npm run tauri:dev（开发期可自动拉起大脑）
 # Cubism Core：见 docs/how-to/ui/主界面-Live2D接入.md / 换机搭建.md（不入库）
 ```
 
@@ -297,7 +297,7 @@ desktop/
 ```
 
 # 技术栈：Vue3 + TS + Vite；Pixi v6 + pixi-live2d-display；无 UI 框架 / 无 router / 无 Pinia
-# 通信：纯 WS；两进程：qi-desktop + npm run tauri:dev（或 npm run dev）
+# 通信：纯 WS；开发期 tauri 可拉起 qi；亦可手动 qi + npm run tauri:dev
 ```
 
 </details>

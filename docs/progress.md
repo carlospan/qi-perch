@@ -8,7 +8,7 @@
 | L3 | 情绪完善 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 耦合/天气/节律/频率/模式切换已接入；日噪声 md5 稳定；expression_threshold 可 YAML 覆盖；`COUPLING_STAGE_SCALE`；阶段锚 `STAGE_BASELINES` + `energy_baseline_offset` |
 | L4 | 内在生命 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 意识流/梦/创作/自我反思已接入；提起 vs 递出已拆分（mentioned_at）；ambient_drift+冷却、waking+余烬、emotion_residue；`last_journal_entries` 实时推送；梦=积压 episode + curiosity≥0.55（非每拍 10%） |
 | L5 | 关系 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 阶段/信任/文化/伤疤/第一次/季节/漂移已接入；first_compliment 不含光秃「谢谢你」；F1 `RECALL_MIN_AGE`；F2 冷启动不测共同沉默；N3b 内在体验禁呼吸/心跳；`last_recorded` |
-| L6 | 具身 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 黄昏的枝 + Live2D；420×680；情绪→氛围/脸色；谈=`/history`；忆=`/journal` + `journal_entry` 实时；**creation_card 谈区卡片已接**（2026-08-08）。启动：`qi-desktop` + `npm run tauri:dev`。见 `docs/how-to/换机搭建.md` §5 |
+| L6 | 具身 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 黄昏的枝 + VRM 桌宠；420×680；情绪→氛围；谈=`/history`；忆=`/journal` + `journal_entry` 实时；creation_card 已接。启动：`npm run tauri:dev`（开发期可自动拉起 `qi`）或手动 `qi` + 桌面壳。见 `docs/how-to/换机搭建.md` §5 |
 | L7 | 行动 | 🌱 在养 | 2026-07-23 | 2026-07-23 | 第一版骨架已接入：ActionBudget / volition / permission / share·tend·explore / ActionLayer + brain 接线（WS `action` + creation_card 开口；正文走卡片、不内联）。**真实搜索改已完成**（C 方案 d-1/d-2/d-3-1/d-3-2 工程交付完成，相处复验中）。N3 动机接线 / 伤疤失败接线 / assist **八包 + 隐私小刀**（追问 preview、全文分块、整体叙事、explore 不背文件原文）已落地；现行仅 UTF-8 `read_file`≤1MB；irreversible 未做。见 L7-action.md |
 
 状态说明：

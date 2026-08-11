@@ -766,7 +766,7 @@ async def run_terminal() -> None:
 
 # 入口分层：
 # - main_terminal() / python -m qi → run_terminal()
-# - main_desktop() / qi-desktop → run_desktop()（Brain ∥ EmbodimentServer）
+# - main_desktop() / qi / python -m qi → run_desktop()（Brain ∥ EmbodimentServer）
 # - main()：argparse，--desktop 则具身，否则终端
 
 # 关键设计：

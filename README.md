@@ -9,7 +9,7 @@
 
 - Python 3.12+
 - Node.js 18+（仅具身前端）
-- Rust + MSVC（仅 Tauri 桌面壳；只跑终端可后装）
+- Rust + MSVC（仅 Tauri 桌面壳）
 - LLM：OpenAI 兼容接口（示例默认 **tokenrhythm / minimax-m2.7**；`providers.deepseek` 备用）
 
 换机 / 从零完整步骤见 [换机搭建.md](docs/how-to/换机搭建.md)。
@@ -28,7 +28,7 @@ copy qi\config\settings.example.yaml data\settings.yaml
 
 配置查找顺序：`data/settings.yaml` → `~/.qi/settings.yaml` → `qi/config/settings.yaml`（旧）→ 包内 example。勿提交含密钥的 `.env` / `settings.yaml`。
 
-**具身首次必做**：从 [Live2D Cubism SDK for Web](https://www.live2d.com/download/cubism-sdk/download-web/) 取出 `live2dcubismcore.min.js`，放到 `qi/embodiment/desktop/public/`（**不入库**）。没有它形象不显示。详见换机搭建 §5。
+**具身首次必做**：准备 `qi/embodiment/assets/qi-avatar.vrm`（桌宠形象）；`npm run tauri:dev` / `dev` 会同步到 `public/avatars/`。详见换机搭建 §5。
 
 前端依赖（具身、首次或 lock 变更时）：
 
@@ -49,40 +49,27 @@ voice:
 
 ## 启动
 
-配置与（具身）Cubism 就绪后，命令都在**仓库根**执行（除非下面写明 `cd`）。
+配置与（具身）资源就绪后，命令都在**仓库根**执行（除非下面写明 `cd`）。
 
-`qi` / `qi-desktop` 是 `pip install -e .` 之后装到 PATH 里的快捷命令，**不是** `qi/embodiment/desktop` 目录里的程序；拿不准时用下面的 `python …` 即可。
+`qi` 是 `pip install -e .` 之后装到 PATH 里的快捷命令，**不是** `qi/embodiment/desktop` 目录里的程序；拿不准时用 `python -m qi`。作用：具身后端（Brain + `ws://127.0.0.1:9527`）。改过入口脚本后请再执行一次 `pip install -e .`。
 
-### 终端聊天
+### 桌面壳（推荐）
 
-```bash
-python -m qi
-# 装过 editable 后也可：qi
-```
-
-`/state` 看内在状态，`/quit` 离开。
-
-### 具身窗口（推荐 · 两个终端）
-
-**先**起 Python 后端（Brain + WebSocket），**再**起桌面壳（Vite/Tauri）。前端连不上时多半是后端未起或 9527 被占。
-
-终端 1 — Python 后端（**留在仓库根**，不要 `cd` 进 `desktop`）：
-
-```bash
-python run.py --desktop
-# 装过 editable 后也可：qi-desktop
-```
-
-终端 2 — 桌面壳（前端窗口）：
+开发期 `tauri:dev` 会尝试自动拉起大脑；也可手动先开后端。
 
 ```bash
 cd qi/embodiment/desktop
 npm run tauri:dev
 ```
 
-首次 `tauri:dev` 会编 Rust，可能较慢。日常一般不必再跑 `npm install`（已装过依赖时）。
+手动后端（仓库根，可选）：
 
-- 仅浏览器调试（不启 Tauri；终端 1 仍要在仓库根跑 `python run.py --desktop`）：
+```bash
+python -m qi
+# 装过 editable 后也可：qi
+```
+
+仅浏览器调试（不启 Tauri；需另开后端）：
 
 ```bash
 cd qi/embodiment/desktop
@@ -120,7 +107,7 @@ python -m pytest -q
 
 ## 清库验收（带日期备份）
 
-清 `data/qi.db` + `data/chroma/` 前先备份；只拷库不拷向量，语义检索会对不上。先停掉 `qi` / `qi-desktop`。
+清 `data/qi.db` + `data/chroma/` 前先备份；只拷库不拷向量，语义检索会对不上。先停掉 `qi`。
 
 ```powershell
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -140,7 +127,7 @@ Remove-Item -Recurse -Force data\chroma
 
 ```
 qi/                 顶层包
-  cli.py            qi / qi-desktop 入口
+  cli.py            qi 入口（具身后端）
   core/             心跳、情绪、意向、表达
   memory/           记忆（含用户事实）
   action/           行动（预算 / 意志 / share·tend·explore）

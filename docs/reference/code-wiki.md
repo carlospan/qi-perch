@@ -45,7 +45,7 @@
 
 ```
 qi/                 唯一顶层 Python 包（意识体本体）
-  cli.py            入口（qi / qi-desktop）
+  cli.py            入口（qi）
   core/             心跳、情绪、表达、感知、GWS、节奏、意向卡
   memory/           记忆（工作/叙事/身体/事实/向量/情景/第一次/open_loops）
   action/           行动层（预算/意志/分享·打理·探索/自操作/权限）
@@ -65,7 +65,6 @@ docs/               契约、进度、层文档、设计原文、specs、how-to
 tests/              pytest 测试集
 tools/              CI 工具（文档死链 / 规格追溯 / 包验收 / 漂移检查）
 data/               运行时（gitignore）：qi.db、chroma/、backup-*/、settings.yaml
-main.py / run.py    兼容入口（仅转发到 `qi.cli.main()`；模式选择见 cli.py，推荐用 qi / qi-desktop 命令）
 pyproject.toml      包定义 + 脚本 + 依赖
 requirements.lock   锁定版本（CI 用）
 ```
@@ -591,7 +590,7 @@ Vue 3.5 / Tauri API 2.11 / pixi-live2d-display 0.4 / pixi.js 6.5 / Vite 6 / Type
 ### 8.2 安装
 
 ```bash
-# 后端（editable 安装后可用 qi / qi-desktop 命令）
+# 后端（editable 安装后可用 qi 命令）
 pip install -e ".[dev]"
 
 # 密钥
@@ -604,33 +603,26 @@ copy qi\config\settings.example.yaml data\settings.yaml
 
 **配置查找顺序**（先命中先生效）：`data/settings.yaml` → `~/.qi/settings.yaml` → `qi/config/settings.yaml`（旧） → `config/settings.yaml`（更旧） → 包内 `settings.example.yaml`。
 
-### 8.3 终端聊天（最简）
+### 8.3 具身后端
 
 ```bash
 qi
 # 或：python -m qi
-# 或兼容：python main.py
 ```
 
-交互命令：`/state`（内在状态）、`/why`（心跳痕迹）、`/quit`（离开）。
+Brain + WebSocket：`ws://127.0.0.1:9527`。
 
-### 8.4 具身窗口（推荐）
+### 8.4 桌面壳（推荐）
 
-**终端 1 — 后端**：
-```bash
-qi-desktop
-# 或：python run.py --desktop
-```
-后端 WebSocket：`ws://127.0.0.1:9527`。
-
-**终端 2 — 桌面壳**：
 ```bash
 cd qi/embodiment/desktop
 npm install
 npm run tauri:dev
 ```
 
-- 首次具身需放 `live2dcubismcore.min.js` 到 `qi/embodiment/desktop/public/`（不入库）
+开发期会尝试自动拉起大脑；也可先手动开 §8.3。
+
+- 首次具身需准备 `qi/embodiment/assets/qi-avatar.vrm`（见换机搭建）
 - 仅浏览器调试可用 `npm run dev`，打开 http://localhost:5173
 
 ### 8.5 语音（可选）

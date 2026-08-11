@@ -1074,7 +1074,7 @@ class Brain:
         )
 
     async def format_why(self, limit: int = 8) -> str:
-        """格式化最近心跳痕迹，供 CLI /why。"""
+        """格式化最近心跳痕迹，供排障（原 CLI /why）。"""
         return await _brain_trace.format_why(self, limit=limit)
 
     async def _broadcast_journal_entries(self) -> None:

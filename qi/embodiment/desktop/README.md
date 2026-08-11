@@ -1,6 +1,8 @@
 # 栖 · 桌面端（Vue3 + Tauri 2）
 
-透明无边框小窗（420×680）；「黄昏的枝」聊天壳 + 独立 **桌宠窗**（`pet.html`，置顶透明 3D VRM）。前端连本机 WebSocket `ws://127.0.0.1:9527`。Python 大脑仍单独进程启动（尚未做成 Tauri sidecar）。
+透明无边框小窗（420×680）；「黄昏的枝」聊天壳 + 独立 **桌宠窗**（`pet.html`，置顶透明 3D VRM）。前端连本机 WebSocket `ws://127.0.0.1:9527`。
+
+开发期：`npm run tauri:dev` 会尝试自动拉起 Python 大脑（`python -m qi`）。若 9527 已有进程在听则沿用；设 `QI_SKIP_BRAIN=1` 可关掉自动拉起。解释器优先 `QI_PYTHON`，否则仓库 `.venv`，再否则 PATH 里的 `python` / `py -3`。仓库根可用 `QI_ROOT` 指定。
 
 ## 3D 桌宠 VRM
 
@@ -17,14 +19,7 @@
 
 ## 启动
 
-1. 后端（项目根目录）：
-
-```bash
-qi-desktop
-# 兼容：python run.py --desktop
-```
-
-2. 桌面壳（推荐）：
+1. 桌面壳（推荐，开发期会自动拉起大脑）：
 
 ```bash
 cd qi/embodiment/desktop
@@ -32,9 +27,18 @@ npm install
 npm run tauri:dev
 ```
 
+若自动拉起失败，再手动开后端（项目根目录）：
+
+```bash
+qi
+# 或：python -m qi
+```
+
+改过入口后请再执行一次 `pip install -e .`，刷新 PATH 里的 `qi` 命令。
+
 需已安装 Rust（`cargo`）与 MSVC（「使用 C++ 的桌面开发」）。无边框窗可拖标题「栖」区域移动。
 
-3. 仅浏览器调试（不启 Tauri）：
+2. 仅浏览器调试（不启 Tauri）：
 
 ```bash
 cd qi/embodiment/desktop
@@ -50,8 +54,6 @@ npm run dev
 若 `cargo` 拉 crates.io 失败，项目已带 `src-tauri/.cargo/config.toml`（rsproxy 稀疏索引）。
 
 更多说明见仓库根目录 [README.md](../../../README.md)。
-
-终端文字模式仍用：`qi`（或 `python -m qi`）
 
 ## 语音
 
