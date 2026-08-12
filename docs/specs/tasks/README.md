@@ -3,13 +3,15 @@
 > **只放未闭环任务**。闭环后迁入 `specs/archive/YYYY-MM-DD-主题/`，勿在本目录堆史料。  
 > 模板：`_template.md`。流程：`SDD-GUIDE.md`。  
 > 回写(2026-08-07)：包 19、N5 任务包已迁入对应 archive 桶。  
-> 回写(2026-08-09)：索引对齐现码——L7 N3 / 伤疤 / assist 三包工程已闭环（过程稿仍在本目录，待迁 archive）；**仅 irreversible 未开**。
+> 回写(2026-08-09)：索引对齐现码——L7 N3 / 伤疤 / assist 三包工程已闭环（过程稿仍在本目录，待迁 archive）；**仅 irreversible 未开**。  
+> 回写(2026-08-13)：下一刀改为**世界触达四能力**（look / open / write / together）冻结；irreversible 仍未开、排在本批之后。
 
 ## 现行
 
 | 任务 | 说明 |
 |------|------|
-| （L7 下一刀）irreversible | **未开包**：替你影响世界；永远需确认。assist 三包已收口后才考虑。见 `reference/layers/L7-action.md` |
+| [`2026-08-13-L7-世界触达四能力-冻结.md`](2026-08-13-L7-世界触达四能力-冻结.md) | **维护者冻结**：`look`（含屏内容）/ `open` / `write` / `together`；感知从宽、行动从慎；尚未开编码包 |
+| （L7 其后）irreversible | **未开包**：替你影响世界；永远需确认。排在世界触达四能力之后。见 `reference/layers/L7-action.md` |
 | [`2026-08-07-N5-b-检索相关门.md`](2026-08-07-N5-b-检索相关门.md) | N5-b 检索相关门；PR 方案见 [`../archive/2026-08-07-n5-retrieval-gate/`](../archive/2026-08-07-n5-retrieval-gate/INDEX.md) |
 | [`2026-08-07-施教硬编码清理.md`](2026-08-07-施教硬编码清理.md) | 施教硬编码清理（文案墙）；见 [`../archive/2026-08-07-teach-hardcode-cleanup/`](../archive/2026-08-07-teach-hardcode-cleanup/INDEX.md) |
 | [`2026-08-07-施教机制收束.md`](2026-08-07-施教机制收束.md) | 施教机制收束（追溯建档，已验收）；同桶 INDEX |
@@ -38,4 +40,4 @@
 
 ---
 
-*tasks 索引 · 2026-08-09（刷 L7 N3/伤疤/assist 闭环；仅 irreversible 未开）*
+*tasks 索引 · 2026-08-13（世界触达四能力冻结为下一刀；irreversible 仍后置）*
