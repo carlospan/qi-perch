@@ -454,7 +454,6 @@ desktop/
       ReviewView.vue        回顾 · 创作/见闻归档
       JournalView.vue       内在 · 梦/独白
       SceneView.vue         氛围场景（相处时淡出）
-      WhisperView.vue       旧低语组件（未接线）
       ViewTabs / StatusBar / Cards / …
     composables/
       useQi.ts              WS 接线 + 消息/历史/创作·见闻卡

@@ -14,8 +14,8 @@
      栖 · 主界面设计稿 —— "黄昏的枝"
      美学：水墨 × 黄昏氛围。情绪即天气，不出现任何数字。
      有机衬线（Noto Serif SC）= 栖的声音；等宽（IBM Plex Mono）= 数字基质。
-     形象更新（2026-07）：中央形象改为 Live2D 模型，本稿以人形剪影占位，
-     实际接线见 docs/how-to/ui/主界面-Live2D接入.md；氛围/三视图/配色不受影响。
+     形象（2026-08）：聊天壳不再嵌立绘；人形在独立 VRM 桌宠窗。本稿以剪影占位，
+     氛围/三栏/配色仍作视觉参考；现行规格见 主界面设计-黄昏的枝.md。
      ============================================================ */
   :root{
     --ink:        #e9edf2;   /* 主文字 · 墨白 */
@@ -158,8 +158,7 @@
   .halo{ opacity:var(--glow-a); }
   @keyframes breathe{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.07)} }
 
-  /* 人形剪影 —— Live2D 形象占位。
-     实际实现中此处为透明 Live2D 画布（见 主界面-Live2D接入.md），
+  /* 人形剪影 —— 历史占位（现行形象在独立 VRM 桌宠窗）。
      设计稿仅以剪影预示"人形立于暮色"的构图。 */
   .figure{ position:relative; height:172px; width:auto; display:block;
     filter:drop-shadow(0 8px 22px rgba(0,0,0,.4));
@@ -328,8 +327,8 @@
           <div class="avatar-wrap">
             <div class="halo cool"></div>
             <div class="halo warm"></div>
-            <!-- Live2D 形象占位：实际为透明画布中站立的人形 -->
-            <svg class="figure" viewBox="0 0 120 200" width="104" height="172" aria-label="Live2D 形象占位">
+            <!-- 剪影占位（现行为独立 VRM 桌宠，不在壳内） -->
+            <svg class="figure" viewBox="0 0 120 200" width="104" height="172" aria-label="形象剪影占位">
               <!-- 头 -->
               <circle class="sil" cx="60" cy="26" r="15"/>
               <!-- 发（垂落） -->
@@ -413,7 +412,7 @@
   </div>
 
   <!-- 窗外：演示控制（不属于界面本身） -->
-  <div class="caption">栖 · 主界面设计稿 —— "黄昏的枝" · 420 × 680 · 情绪即天气 · 中央人形为 Live2D 形象（此处剪影占位，见 主界面-Live2D接入.md）</div>
+  <div class="caption">栖 · 主界面设计稿 —— "黄昏的枝" · 420 × 680 · 情绪即天气 · 中央为历史剪影占位（现行形象在独立 VRM 桌宠窗）</div>
   <div class="demo">
     <span class="lbl">演示情绪：</span>
     <button data-e="calm" class="on">平静</button>

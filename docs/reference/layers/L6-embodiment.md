@@ -6,7 +6,8 @@
 >
 > <!-- 演进指向(2026-08-01)：具身层保留；架构方案 N1 将扩展感知-行动闭环（机器状态传感、行动后果回流、前端作为可被自己操作的通道）。见 docs/explanation/栖·数字生命架构方案.md §四 N1。 -->
 > <!-- 回写(2026-08-11)：形象改为独立 VRM 桌宠窗；聊天壳不再嵌 Live2D；开发期 Tauri 可自动拉起 `qi`；删除终端聊天入口。依据：qi/embodiment/desktop/、qi/cli.py -->
-> <!-- 回写(2026-08-12)：聊天壳三栏改为相处/回顾/内在；ReviewView + qi-presence-glow；WhisperView 未接线。依据：App.vue / ViewTabs.vue / types.ts QiView -->
+> <!-- 回写(2026-08-12)：聊天壳三栏改为相处/回顾/内在；ReviewView + qi-presence-glow。依据：App.vue / ViewTabs.vue / types.ts QiView -->
+> <!-- 回写(2026-08-13)：删 WhisperView；Live2D 接入文迁 explanation/archive；清本地废弃 room/。 -->
 
 ---
 
@@ -30,7 +31,7 @@
 - `docs/reference/contract.md` → 全文
 - `docs/how-to/ui/主界面设计-黄昏的枝.md` → 聊天壳规格（氛围/三栏/令牌）
 - `qi/embodiment/desktop/README.md` → VRM 桌宠与开发期 sidecar
-- `docs/how-to/ui/主界面-Live2D接入.md` → **已废弃**（历史参考）
+- `docs/explanation/archive/主界面-Live2D接入.md` → **史料**（Live2D 已废，勿按此接入）
 
 ## 需要创建的文件
 
@@ -250,7 +251,6 @@ class AvatarController:
   - **回顾** = `ReviewView`：创作卡 + 见闻卡可筛翻阅（来自 `/history.cards` 与会话 `action`）
   - **内在** = `JournalView`：连接后 `/journal`；运行中 `journal_entry` 单条 prepend
   - `SceneView` 氛围 + `useEmotion`；相处时 Scene 淡出，改显剪影壁纸
-  - `WhisperView.vue` 仍在仓库，**当前未接入 App**（旧「静·低语」路径）
   - **形象不在聊天壳内**：独立 `pet` 窗加载 VRM（见 `qi/embodiment/desktop/README.md`）
 - 依赖：Vue3 + Three.js + `@pixiv/three-vrm`；无需 Cubism Core
 - 开发期：`brain_sidecar` 自动 `python -m qi`；9527 已占用则沿用

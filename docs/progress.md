@@ -24,6 +24,8 @@
 
 ## 已拍板决策
 
+- **2026-08-13 · 具身废弃残留清理**：删本地 `qi/embodiment/room/`（孤儿 node_modules）；删未接线 `WhisperView.vue`；`主界面-Live2D接入.md` 迁 `docs/explanation/archive/`；设计稿 HTML 去 Live2D 现行措辞。
+
 - **2026-08-13 · L7 世界触达四能力冻结**：下一刀为 `look`（窗口截图→视觉印象，含屏内容；感知从宽）/ `open` / `write` / `together`；个体非工具；不做自动签到、通用网页 Agent、键鼠监控；`irreversible` 后置。真源 `docs/specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md`（编码包未开）。
 
 - **2026-08-12 · 文档回写（前端 IA）**：聊天壳三栏静/谈/忆 → **相处/回顾/内在**；对齐 L6 / 黄昏的枝 / code-wiki / README；相处背景 `qi-presence-glow.png`；测试规模口径 → 606。

@@ -1,12 +1,13 @@
-<!-- 现行路径：how-to/ui/主界面-Live2D接入.md（原 dev/主界面-Live2D接入.md，2026-08-02 重构迁移；正文未改） -->
+<!-- 史料路径：explanation/archive/主界面-Live2D接入.md（2026-08-13 自 how-to/ui/ 迁入；原 how-to/ui ← 2026-08-02 自 dev/） -->
 
 # 栖 · 主界面 Live2D 形象接入
 
-> **已废弃（2026-08）。** Live2D / Cubism / `public/models/qi` 已从桌面端移除；形象改为透明窗 VRM 桌宠（见 `qi/embodiment/desktop/README.md`）。下文仅作历史参考，勿再按此接入。
+> **已废弃（史料）。** Live2D / Cubism / `public/models/qi` 已从桌面端移除；形象为透明窗 VRM 桌宠（见 `qi/embodiment/desktop/README.md`）。勿再按此接入。
 >
+> <!-- 回写(2026-08-13)：迁出 how-to，避免当现行操作指南；旧 WhisperView 已删。 -->
 > <!-- 回写(2026-08-12)：聊天壳现行三栏为相处/回顾/内在（非静/谈/忆）；见 黄昏的枝.md -->
 >
-> 本文档**曾**说明如何把 Live2D 叠进聊天壳。聊天壳现行规格以 `主界面设计-黄昏的枝.md` 为准（三栏已更名）。下文中「静/谈/忆」为历史措辞。
+> 本文档**曾**说明如何把 Live2D 叠进聊天壳。聊天壳现行规格以 `docs/how-to/ui/主界面设计-黄昏的枝.md` 为准。下文中「静/谈/忆」为历史措辞。
 
 ---
 

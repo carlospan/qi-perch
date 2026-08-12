@@ -24,6 +24,8 @@ build/
 .pytest_cache/
 # pytest --basetemp 若指到仓库内，勿提交
 .pytest_tmp*/
+.mypy_cache/
+.ruff_cache/
 
 # 前端（Vue / Vite / Tauri）
 node_modules/
