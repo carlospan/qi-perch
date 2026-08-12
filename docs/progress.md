@@ -24,6 +24,8 @@
 
 ## 已拍板决策
 
+- **2026-08-13 · SDD 改 Cursor 单线默认**：废止「方案 Agent + Cursor」双线固定分工与路 A/B 全套过程稿；默认同一 Cursor 会话完成短规格 → 编码 → 工程自验 → 回写。HITL（感受/路线/R 红线）仍归维护者。可选第二 Agent 仅作顾问审短方案。真源 `docs/specs/SDD-GUIDE.md` §2；`archive/` 旧包勿当现行工序。
+
 - **2026-08-13 · 具身废弃残留清理**：删本地 `qi/embodiment/room/`（孤儿 node_modules）；删未接线 `WhisperView.vue`；`主界面-Live2D接入.md` 迁 `docs/explanation/archive/`；设计稿 HTML 去 Live2D 现行措辞。
 
 - **2026-08-13 · L7 世界触达四能力冻结**：下一刀为 `look`（窗口截图→视觉印象，含屏内容；感知从宽）/ `open` / `write` / `together`；个体非工具；不做自动签到、通用网页 Agent、键鼠监控；`irreversible` 后置。真源 `docs/specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md`（编码包未开）。

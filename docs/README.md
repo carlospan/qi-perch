@@ -63,11 +63,11 @@
 
 ## 五、SDD 流程入口
 
-- 写 spec / 防 drift 规范：`specs/SDD-GUIDE.md`（含**协作分工**：方案 Agent（CodeBuddy / Codex 等）出方案、Cursor 固定执行编码）
+- 写 spec / 防 drift 规范：`specs/SDD-GUIDE.md`（**Cursor 单线默认**：短规格 → 编码 → 自验 → 回写；HITL 归维护者）
 - 验收契约（五测试 + 生命感监护）：`specs/acceptance.md`
-- 任务包模板：`specs/tasks/_template.md`（已内置分工说明）
+- 任务包模板：`specs/tasks/_template.md`
 - 进行中任务：`specs/tasks/`；闭环归档：`specs/archive/`
 
 ---
 
-*文档宪法 · v3（2026-08-02：Diátaxis 映射 + 分场景权威裁决 + SDD 入口；旧路径见各文档头部“现行路径”注释）*
+*文档宪法 · v3（2026-08-02：Diátaxis 映射 + 分场景权威裁决 + SDD 入口；2026-08-13：SDD 默认改 Cursor 单线；旧路径见各文档头部“现行路径”注释）*

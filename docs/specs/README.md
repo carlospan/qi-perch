@@ -5,7 +5,7 @@
 
 | 文档 / 目录 | 用途 |
 |-------------|------|
-| [`SDD-GUIDE.md`](./SDD-GUIDE.md) | 写 spec、防 drift、协作分工（方案 Agent / Cursor 编码） |
+| [`SDD-GUIDE.md`](./SDD-GUIDE.md) | 写 spec、防 drift；**Cursor 单线默认**（2026-08-13） |
 | [`acceptance.md`](./acceptance.md) | 五测试 + 生命感监护的操作化契约（定义链回架构 §一） |
 | [`open-questions.md`](./open-questions.md) | 开放 / 已结案 / 已降级问题（带状态列） |
 | [`stages/`](./stages/) | 阶段零～四退出判据与全程不变量（[`_invariants.md`](./stages/_invariants.md)） |
