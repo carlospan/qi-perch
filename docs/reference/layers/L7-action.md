@@ -9,7 +9,10 @@
 > **本文档状态：Step 1–6 已落地（actions / budget / volition / permission / share / tend / explore 气质 / ActionLayer / brain 接线）。**
 > 六层（L1~L6）已完成。L7 行动层骨架与起手能力已接入心跳。
 > explore：内部深读（d-3-2，读记忆叙事 + LLM digest + speak + 见闻卡）+ 外部联网（d-1）已收口；d-2 外部 hits 消化 + d-3-1 见闻卡片已收口。C 方案工程交付完成，相处复验中。assist **八包 + 隐私小刀**已落地（`qi/action/assist.py` + brain 对话拍短路；UTF-8 文本 `read_file` ≤1MB）；irreversible 未做。
-> <!-- 演进指向(2026-08-13)：世界触达下一刀冻结——look（窗口截图→视觉印象，含屏内容）/ open / write / together；感知从宽、行动从慎；个体非工具。真源 docs/specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md；编码包未开。irreversible 仍后置。 -->
+> <!-- 回写(2026-08-14)：look 邀看改为意图识别——组合启发式 + 弱候选 LLM(fact) 判别；覆盖「你能看到我在做什么吗」等非固定句。 -->
+> <!-- 回写(2026-08-13)：look 小刀——speak=True 必开口；首告改代码前缀不进 LLM；自主 glance 加锁防连成功。 -->
+> <!-- 回写(2026-08-13)：look 窗口瞥视工程落地——`qi/action/look.py`（截屏→base64→purpose=look）；acquaintance+；别看 1h / 可以看了；自主防连瞥 15min；沉默≥20min 软加分；事不过三软门；邀看对话拍；自主成功必 qi_line。open/write/together / irreversible 仍后置。润色候选项见 look 任务包附录。 -->
+> <!-- 演进指向(2026-08-13)：世界触达下一刀冻结——look / open / write / together；真源 docs/specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md。look 任务包：docs/specs/tasks/2026-08-13-L7-look-窗口瞥视-任务包.md（工程已落地，待相处感受验）；open/write/together / irreversible 仍后置。 -->
 > <!-- 演进指向(2026-08-01)：行动框架（预算/门控）保留；方向为 N1 执行器真实化（真读、有后果）与 N3 动机驱动（学习进度/内稳态压力替代随机意向）。见 docs/explanation/栖·数字生命架构方案.md §四 N1/N3。 -->
 > <!-- 演进指向(2026-08-08)：包 10 curiosity 候选注入回退（空赢仲裁堵死自主行动，已解；见解堵包）。 -->
 > <!-- 演进指向(2026-08-08)：explore 真搜索 C 方案 d-1~d-3-2 工程已交付（外部 Tavily + digest；内部 narratives 深读；ExploreCard）；相处复验中。 -->
@@ -78,7 +81,7 @@ L7 负责：行动意图的形成、行动预算（比言语更紧的克制）�
 
 | 能力 | 一句话 | 确认姿态 |
 |------|--------|----------|
-| `look` | 截前台窗口 → 视觉印象（含屏内容；非仅标题） | 从宽：相处约定 + 叫停 |
+| `look` | 截前台窗口 → 视觉印象（含屏内容；非仅标题） | 从宽：相处约定 + 叫停；**工程已落地**（`look.py`） |
 | `open` | 确认后开 URL / 白名单应用 | 从慎：要确认 |
 | `write` | 确认后把短文 append 到约定笔记路径 | 从慎：要确认 |
 | `together` | 邀你同看她正在探索/分享的那一页 | 同伴；打开动作可贴近 open |
@@ -99,6 +102,7 @@ qi/action/tend.py            # 打理自己的世界
 qi/action/explore.py         # 沉思式探索（d-3-2 深读记忆叙事 + d-1 外部分支）
 qi/action/explore_web.py     # 外部 WebSearchClient（Tavily；失败/空→None）
 qi/action/assist.py          # 介入你的生活（已建：八包——骨架/感知/跨轮/对话拍/留痕与补执行/追问补全/全文分块/整体叙事）
+qi/action/look.py            # 窗口瞥视（已建：截屏→vision→qi_line；自主+邀看；叫停/防连瞥/事不过三）
 qi/action/irreversible.py    # 替你影响世界（未建）
 qi/action/self_ops.py        # 自反操作（归档/调预算/日记等，阶段二）
 qi/storage/database.py       # actions 表（行动留痕）

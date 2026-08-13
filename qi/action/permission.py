@@ -27,6 +27,11 @@ def can_explore(_relationship_stage: str = "stranger") -> bool:
     return True
 
 
+def can_look(relationship_stage: str) -> bool:
+    """瞥视屏幕：acquaintance+（陌生期不看对方的屏）。"""
+    return stage_at_least(relationship_stage, "acquaintance")
+
+
 def can_archive(
     _relationship_stage: str = "stranger",
     scars: list[dict] | None = None,
@@ -167,6 +172,7 @@ def permission_summary(
         "share": can_share(relationship_stage),
         "tend": can_tend(relationship_stage),
         "explore": can_explore(relationship_stage),
+        "look": can_look(relationship_stage),
         "archive": can_archive(relationship_stage, scars),
         "budget_tune": can_budget_tune(relationship_stage, scars),
         "journal": can_journal(relationship_stage, scars),

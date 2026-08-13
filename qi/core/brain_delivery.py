@@ -125,7 +125,7 @@ async def notify_first_time(brain: Brain) -> None:
 
 
 async def deliver_action_result(brain: Brain, result: dict, now: datetime) -> None:
-    """行动结果：creation_card 的 qi_line 先开口，再广播卡片；tend/explore 向内默认不说。"""
+    """行动结果：creation_card / speak=True（含 look_glance、explore）先开口，再广播。"""
     # 1) 栖先开口——正文由前端卡片承载，不再内联进语音（W2 退役）
     if result.get("type") == "creation_card":
         line = (result.get("qi_line") or "").strip()

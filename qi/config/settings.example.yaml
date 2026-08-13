@@ -31,6 +31,7 @@ llm:
     creation: "tokenrhythm:fast"
     reflection: "tokenrhythm:strong"
     fact: "tokenrhythm:fast"
+    look: "tokenrhythm:fast"
 
 # 心跳配置
 rhythm:
@@ -104,6 +105,11 @@ action:
     probability: 0.05
     # 可选域名过滤（默认空=不改变 Tavily 现状；嫌噪声可加如 music.apple.com / mojim.com）
     exclude_domains: []
+  # look 窗口瞥视（感知从宽；非定时）
+  look:
+    pause_hours: 1              # 「别看」暂停时长
+    min_interval_minutes: 15    # 自主防连瞥（邀看不受限）
+    silence_boost_minutes: 20   # 沉默多久开始提高自主 look 倾向
 
 
 # 关系

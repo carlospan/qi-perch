@@ -12,6 +12,7 @@ from qi.action.assist import AssistAction
 from qi.action.budget import BODY_MEMORY_KEY, ActionBudget
 from qi.action.explore import ExploreAction
 from qi.action.explore_web import WebSearchClient
+from qi.action.look import LookAction
 from qi.action.permission import OUTCOME_OVERSTEPPED, outcome_creates_scar
 from qi.action.self_ops import SelfOps
 from qi.action.share import ShareAction
@@ -77,6 +78,7 @@ class ActionLayer:
         )
         self.self_ops = SelfOps(db)
         self.assist = AssistAction(db, llm=llm, narrative=narrative)
+        self.look = LookAction(db, config=self.config, llm=llm)
         self.last_result: dict | None = None
         self.last_closed_loop: dict[str, Any] | None = None
 
@@ -208,6 +210,8 @@ class ActionLayer:
         sensing: SensingSnapshot | None = None,
         pressure: Any | None = None,
         trust: float = 0.5,
+        silence_seconds: float | None = None,
+        speaking: bool = False,
     ) -> dict | None:
         """
         独处一拍：至多做一个自主行动。
@@ -251,12 +255,13 @@ class ActionLayer:
             sensing_uptime_seconds=uptime,
             energy=float(emotion.energy),
             pressure=pressure,
+            silence_seconds=silence_seconds,
         )
-        # tick 只跑 share/tend/explore，self_ops 留给 GWS execute_kind
+        # tick 只跑 share/tend/explore/look，self_ops 留给 GWS execute_kind
         autos = [
             i
             for i in intents
-            if i.kind in ("share", "tend", "explore")
+            if i.kind in ("share", "tend", "explore", "look")
         ]
         if not autos:
             return None
@@ -293,6 +298,18 @@ class ActionLayer:
             )
             if result is not None:
                 self.budget.record("explore", now)
+        elif chosen.kind == "look":
+            soft_n = await self.look._soft_block_count()
+            result = await self.look.try_autonomous(
+                relationship_stage=relationship_stage,
+                season=season,
+                now=now,
+                mode=mode,
+                speaking=speaking,
+                force_soft=soft_n >= 2,
+            )
+            if result is not None and result.get("outcome") == "success":
+                self.budget.record("look", now)
 
         if result is not None:
             await self._maybe_save_scar(result, chosen.kind, now, trust=trust)
@@ -321,14 +338,14 @@ class ActionLayer:
         self.last_result = None
         if not user_online or mode == "dreaming":
             return None
-        # B1：awake 放行 self_ops + assist（响应式对话期）
+        # B1：awake 放行 self_ops + assist + look（响应式）
         if mode == "awake":
-            if kind not in _AWAKE_SELF_OPS and kind != "assist":
+            if kind not in _AWAKE_SELF_OPS and kind not in ("assist", "look"):
                 return None
         elif mode not in ("solitary", "ambient"):
             return None
-        # B2：assist 响应式不占预算，跳过自主日限总闸
-        if kind != "assist" and not self.budget.can_autonomous(now):
+        # B2：assist / look 响应式不占预算，跳过自主日限总闸
+        if kind not in ("assist", "look") and not self.budget.can_autonomous(now):
             return None
 
         undelivered = await self.db.load_unshared_creation()
@@ -425,6 +442,24 @@ class ActionLayer:
                     season=season,
                     now=now,
                 )
+        elif kind == "look":
+            reactive = op == "invite" or bool(confirmed)
+            soft_n = await self.look._soft_block_count()
+            result = await self.look.glance(
+                relationship_stage=relationship_stage,
+                season=season,
+                now=now,
+                reactive=reactive,
+                user_question=target_path if reactive else None,
+                mode=mode,
+                force_soft=(not reactive) and soft_n >= 2,
+            )
+            if (
+                result is not None
+                and not reactive
+                and result.get("outcome") == "success"
+            ):
+                self.budget.record("look", now)
         else:
             return None
 

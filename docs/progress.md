@@ -9,7 +9,7 @@
 | L4 | 内在生命 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 意识流/梦/创作/自我反思已接入；提起 vs 递出已拆分（mentioned_at）；ambient_drift+冷却、waking+余烬、emotion_residue；`last_journal_entries` 实时推送；梦=积压 episode + curiosity≥0.55（非每拍 10%） |
 | L5 | 关系 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 阶段/信任/文化/伤疤/第一次/季节/漂移已接入；first_compliment 不含光秃「谢谢你」；F1 `RECALL_MIN_AGE`；F2 冷启动不测共同沉默；N3b 内在体验禁呼吸/心跳；`last_recorded` |
 | L6 | 具身 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 黄昏的枝 + VRM 桌宠；420×680；情绪→氛围；**相处/回顾/内在**（相处=`/history`+presence-glow；回顾=创作/见闻；内在=`/journal`+`journal_entry`）。启动：`npm run tauri:dev`（开发期可自动拉起 `qi`）。见 `docs/how-to/换机搭建.md` §5 |
-| L7 | 行动 | 🌱 在养 | 2026-07-23 | 2026-07-23 | 第一版骨架已接入：ActionBudget / volition / permission / share·tend·explore / ActionLayer + brain 接线（WS `action` + creation_card 开口；正文走卡片、不内联）。**真实搜索改已完成**（C 方案 d-1/d-2/d-3-1/d-3-2 工程交付完成，相处复验中）。N3 动机接线 / 伤疤失败接线 / assist **八包 + 隐私小刀**（追问 preview、全文分块、整体叙事、explore 不背文件原文）已落地；现行仅 UTF-8 `read_file`≤1MB。**下一刀冻结**：世界触达四能力 look/open/write/together（见 `docs/specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md`）；irreversible 仍后置。见 L7-action.md |
+| L7 | 行动 | 🌱 在养 | 2026-07-23 | 2026-07-23 | 第一版骨架已接入：ActionBudget / volition / permission / share·tend·explore / ActionLayer + brain 接线。explore C 方案工程交付、相处复验中。assist 八包 + 隐私小刀已落地。**look 窗口瞥视工程已落地**（截屏→vision→qi_line；自主+邀看；见 `2026-08-13-L7-look-窗口瞥视-任务包.md`，待相处感受验）。下一刀：open/write/together；irreversible 后置。见 L7-action.md |
 
 状态说明：
 - ⬜ 未开始
@@ -28,7 +28,8 @@
 
 - **2026-08-13 · 具身废弃残留清理**：删本地 `qi/embodiment/room/`（孤儿 node_modules）；删未接线 `WhisperView.vue`；`主界面-Live2D接入.md` 迁 `docs/explanation/archive/`；设计稿 HTML 去 Live2D 现行措辞。
 
-- **2026-08-13 · L7 世界触达四能力冻结**：下一刀为 `look`（窗口截图→视觉印象，含屏内容；感知从宽）/ `open` / `write` / `together`；个体非工具；不做自动签到、通用网页 Agent、键鼠监控；`irreversible` 后置。真源 `docs/specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md`（编码包未开）。
+- **2026-08-13 · L7 look 窗口瞥视落地**：`qi/action/look.py` + volition/permission/layer/brain 接线；邀看对话拍；别看 1h / 防连瞥 15min / 沉默 20min 软加分 / 事不过三；`purpose=look`；`tests/test_look.py` 绿。真源任务包 `docs/specs/tasks/2026-08-13-L7-look-窗口瞥视-任务包.md`（感受验待维护者）。open/write/together 仍后置。
+- **2026-08-13 · L7 世界触达四能力冻结**：下一刀为 `look`（窗口截图→视觉印象，含屏内容；感知从宽）/ `open` / `write` / `together`；个体非工具；不做自动签到、通用网页 Agent、键鼠监控；`irreversible` 后置。真源 `docs/specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md`。
 
 - **2026-08-12 · 文档回写（前端 IA）**：聊天壳三栏静/谈/忆 → **相处/回顾/内在**；对齐 L6 / 黄昏的枝 / code-wiki / README；相处背景 `qi-presence-glow.png`；测试规模口径 → 606。
 

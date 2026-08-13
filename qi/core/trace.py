@@ -423,6 +423,15 @@ async def collect_contenders(
                 uptime = float(sensing.uptime_seconds)
             # N3：内稳态压力软调制 explore 候选 priority
             pressure = getattr(brain, "last_pressure_response", None)
+            silence_seconds = None
+            try:
+                silence_seconds = float(
+                    brain.perception.detect_silence(
+                        brain.last_interaction, now
+                    )
+                )
+            except Exception:
+                silence_seconds = None
             intents = action_intentions(
                 mode=brain.emotion.mode.value,
                 relationship_stage=brain.relationship_stage,
@@ -441,6 +450,7 @@ async def collect_contenders(
                 sensing_uptime_seconds=uptime,
                 energy=float(brain.emotion.energy),
                 pressure=pressure,
+                silence_seconds=silence_seconds,
             )
             # B1：assist 放行进 GWS（响应式候选；assist-1 已接执行骨架）
             for it in intents:

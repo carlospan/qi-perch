@@ -12,6 +12,7 @@ from qi.action.permission import (
     can_budget_tune,
     can_explore,
     can_journal,
+    can_look,
     can_share,
     can_tend,
     scar_caution_multiplier,
@@ -24,6 +25,7 @@ from qi.action.permission import (
 KIND_SHARE = "share"
 KIND_TEND = "tend"
 KIND_EXPLORE = "explore"
+KIND_LOOK = "look"
 KIND_ASSIST = "assist"
 KIND_ARCHIVE = "archive"
 KIND_BUDGET_TUNE = "budget_tune"
@@ -163,12 +165,13 @@ def action_intentions(
     sensing_uptime_seconds: float | None = None,
     energy: float | None = None,
     pressure: object | None = None,
+    silence_seconds: float | None = None,
 ) -> list[ActionIntention]:
     """
     返回本拍可考虑的行动意图（倾向，非硬触发）。
     优先级永远低于 respond：有 pending 时 brain 不调用本函数做自主行动。
 
-    - share / tend / explore：独处气质（solitary/ambient）；占 ActionBudget。
+    - share / tend / explore / look：独处气质（solitary/ambient）；占 ActionBudget。
     - archive / budget_tune / journal：自反，awake 亦可（补丁 C）。
     - assist：仅当用户明确请求才候选；不占自主预算；执行由 GWS→execute_kind（assist-1/2）。
     """
@@ -244,6 +247,25 @@ def action_intentions(
                     kind=KIND_EXPLORE,
                     priority=pri,
                     reason="独处时思绪飘远",
+                )
+            )
+
+        # look：acquaintance+；curiosity；沉默软加分
+        if (
+            can_look(relationship_stage)
+            and scar_caution_multiplier(KIND_LOOK, scars) > 0
+            and curiosity >= 0.45
+        ):
+            pri = (0.28 + max(0.0, curiosity - 0.45) * 0.5) * scale
+            silence = float(silence_seconds or 0.0)
+            if silence >= 20 * 60:
+                pri *= 1.35
+            pri = min(0.75, pri * budget.weight_for(KIND_LOOK))
+            out.append(
+                ActionIntention(
+                    kind=KIND_LOOK,
+                    priority=pri,
+                    reason="有点想瞥一眼他那边",
                 )
             )
 

@@ -10,12 +10,20 @@ from qi.action.budget import (
 )
 from qi.action.explore import ExploreAction
 from qi.action.layer import SEASON_ACTION_SCALE, ActionLayer, resolve_season_scale
+from qi.action.look import (
+    LookAction,
+    detect_look_invite,
+    looks_like_look_invite,
+    looks_like_look_pause,
+    looks_like_look_resume,
+)
 from qi.action.permission import (
     can_archive,
     can_budget_tune,
     can_explore,
     can_irreversible,
     can_journal,
+    can_look,
     can_read_user_file,
     can_share,
     can_tend,
@@ -43,6 +51,7 @@ __all__ = [
     "AssistAction",
     "AssistRequest",
     "ExploreAction",
+    "LookAction",
     "SelfOps",
     "ShareAction",
     "TendAction",
@@ -52,11 +61,16 @@ __all__ = [
     "can_explore",
     "can_irreversible",
     "can_journal",
+    "can_look",
     "can_read_user_file",
     "can_share",
     "can_tend",
     "can_write_user_file",
+    "detect_look_invite",
     "looks_like_help_request",
+    "looks_like_look_invite",
+    "looks_like_look_pause",
+    "looks_like_look_resume",
     "outcome_creates_scar",
     "parse_assist_request",
     "resolve_season_scale",

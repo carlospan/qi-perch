@@ -18,6 +18,7 @@ DEFAULT_KIND_WEIGHTS: dict[str, float] = {
     "share": 1.0,
     "tend": 1.0,
     "explore": 1.0,
+    "look": 1.0,
 }
 
 WEIGHT_MIN = 0.2

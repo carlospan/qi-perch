@@ -888,6 +888,8 @@ class Brain:
                     scars=scars,
                     pressure=self.last_pressure_response,
                     trust=trust,
+                    silence_seconds=float(silence_seconds),
+                    speaking=False,
                 )
                 if action_result is not None:
                     acted = True
@@ -1300,6 +1302,83 @@ class Brain:
                     "嗯？你想让我看什么？", datetime.now(), proactive=False
                 )
                 return "嗯？你想让我看什么？"
+
+            # look：叫停 / 解除 / 邀看（先于 assist；邀看不弹确认卡）
+            try:
+                from qi.action.look import (
+                    detect_look_invite,
+                    looks_like_look_pause,
+                    looks_like_look_resume,
+                )
+            except Exception:
+                detect_look_invite = None  # type: ignore[assignment]
+                looks_like_look_pause = None  # type: ignore[assignment]
+                looks_like_look_resume = None  # type: ignore[assignment]
+
+            if (
+                looks_like_look_pause is not None
+                and looks_like_look_pause(text)
+                and self.action is not None
+            ):
+                try:
+                    await self.action.look.set_pause(datetime.now())
+                    await self._deliver_qi_message(
+                        "好，我先不看了。", datetime.now(), proactive=False
+                    )
+                    return "好，我先不看了。"
+                except Exception:
+                    logger.exception("look pause 失败")
+
+            if (
+                looks_like_look_resume is not None
+                and looks_like_look_resume(text)
+                and self.action is not None
+            ):
+                try:
+                    await self.action.look.clear_pause()
+                except Exception:
+                    logger.debug("look resume 失败", exc_info=True)
+
+            look_invited = False
+            if detect_look_invite is not None and self.action is not None:
+                try:
+                    look_invited = await detect_look_invite(text, llm=self.llm)
+                except Exception:
+                    logger.debug("look invite 判别失败", exc_info=True)
+                    look_invited = False
+            if look_invited:
+                try:
+                    now = datetime.now()
+                    scars = (
+                        await self._db.list_scars()
+                        if self._db is not None
+                        else None
+                    )
+                    trust = 0.5
+                    if self.relationship is not None:
+                        trust = float(
+                            getattr(self.relationship.state, "trust", 0.5) or 0.5
+                        )
+                    result = await self.action.execute_kind(
+                        "look",
+                        self.emotion,
+                        self.relationship_stage,
+                        self._current_season(),
+                        now,
+                        mode=self.emotion.mode.value,
+                        user_online=self.user_online,
+                        scars=scars,
+                        trust=trust,
+                        op="invite",
+                        target_path=text,
+                        confirmed=True,
+                    )
+                    if result is not None:
+                        await self._deliver_action_result(result, now)
+                        return (result.get("qi_line") or "").strip() or None
+                except Exception:
+                    logger.exception("look 邀看 execute 失败")
+                return None
 
             # assist-4：对话拍有 assist 请求时，assist 开口 = respond（不走 conversation LLM）
             self.last_user_message = text

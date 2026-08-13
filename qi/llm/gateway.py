@@ -36,6 +36,7 @@ _DEFAULT_TEMPERATURES = {
     "reflection": 0.8,
     "creation": 0.95,
     "fact": 0.3,
+    "look": 0.5,
 }
 
 # last_outcome 初始成功态（failure=None）；仅 conversation 用途会刷新它
