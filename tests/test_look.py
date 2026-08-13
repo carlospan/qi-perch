@@ -8,7 +8,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from qi.action.budget import ActionBudget
 from qi.action.layer import ActionLayer
 from qi.action.look import (
