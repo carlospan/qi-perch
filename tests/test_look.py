@@ -8,6 +8,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from qi.action.budget import ActionBudget
 from qi.action.layer import ActionLayer
 from qi.action.look import (
     FALLBACK_QI_LINE,
@@ -19,11 +21,9 @@ from qi.action.look import (
 )
 from qi.action.permission import can_look
 from qi.action.volition import action_intentions
-from qi.action.budget import ActionBudget
 from qi.core.brain import Brain
 from qi.core.emotion import ConsciousnessMode, EmotionState
 from qi.storage.database import Database
-from unittest.mock import MagicMock
 
 
 def test_look_invite_positive_negative():

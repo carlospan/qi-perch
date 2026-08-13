@@ -8,8 +8,9 @@ import io
 import logging
 import re
 import sys
+from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from qi.action.permission import (
     OUTCOME_FAILED_CAPABILITY,
