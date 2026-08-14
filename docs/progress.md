@@ -28,6 +28,7 @@
 
 - **2026-08-13 · 具身废弃残留清理**：删本地 `qi/embodiment/room/`（孤儿 node_modules）；删未接线 `WhisperView.vue`；`主界面-Live2D接入.md` 迁 `docs/explanation/archive/`；设计稿 HTML 去 Live2D 现行措辞。
 
+- **2026-08-15 · 人机协作铁律入宪**：`docs/README.md` 开篇立 HITL + Spec-driven + 渐进对齐（一块一拍）；细则仍在 `SDD-GUIDE` §2.5；任务包模板与 IDE-Agent 手册对齐。
 - **2026-08-15 · L7 open 打开落地**：`qi/action/open.py` + permission/layer/brain；确认复用 assist 卡（单槽）；意图 `open`/`open_and_look`/`teach`；空白名单 `body_memory`；`tests/test_open.py` 绿。真源 `docs/specs/tasks/2026-08-15-L7-open-打开-任务包.md`。list_dir / 删白名单 / write / together 仍后置。
 - **2026-08-13 · L7 look 窗口瞥视落地**：`qi/action/look.py` + volition/permission/layer/brain 接线；邀看对话拍；别看 1h / 防连瞥 15min / 沉默 20min 软加分 / 事不过三；`purpose=look`；`tests/test_look.py` 绿。真源任务包 `docs/specs/tasks/2026-08-13-L7-look-窗口瞥视-任务包.md`（感受验待维护者）。open/write/together 仍后置。
 - **2026-08-13 · L7 世界触达四能力冻结**：下一刀为 `look`（窗口截图→视觉印象，含屏内容；感知从宽）/ `open` / `write` / `together`；个体非工具；不做自动签到、通用网页 Agent、键鼠监控；`irreversible` 后置。真源 `docs/specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md`。

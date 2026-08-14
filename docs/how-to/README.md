@@ -9,6 +9,6 @@
 | [`真机运行与观测.md`](./真机运行与观测.md) | 栖在跑时怎么看内在活动（如 broadcast_traces） |
 | [`判据与验收.md`](./判据与验收.md) | 五个验收测试**怎么跑**（定义仍以架构 / `specs/acceptance` 为准） |
 | [`ui/`](./ui/) | 主界面实现指南（黄昏的枝；形象已迁至 VRM 桌宠）；设计稿在 [`ui/assets/`](./ui/assets/) |
-| [`ide-agent/`](./ide-agent/) | IDE Agent 提示词模板（执行任务 / 同步层文档 / 对话体检 / 仓库审计） |
+| [`ide-agent/`](./ide-agent/) | IDE Agent 提示词模板（执行任务 / 同步层文档 / 对话体检 / 仓库审计）；**须遵守**文档宪法开篇人机协作铁律与 `SDD-GUIDE` §2.5 |
 
 过程定稿与已闭环任务包不放这里，见 `specs/archive/`。
