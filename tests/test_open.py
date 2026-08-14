@@ -386,6 +386,7 @@ def test_alias_needles_include_synonyms():
 def test_find_app_candidates_start_menu(tmp_path, monkeypatch):
     from qi.action import open as open_mod
 
+    monkeypatch.setattr(open_mod.sys, "platform", "win32")
     programs = tmp_path / "Programs"
     programs.mkdir()
     lnk = programs / "企业微信.lnk"
@@ -410,6 +411,7 @@ def test_find_app_candidates_start_menu(tmp_path, monkeypatch):
 def test_find_app_candidates_known_install_dir(tmp_path, monkeypatch):
     from qi.action import open as open_mod
 
+    monkeypatch.setattr(open_mod.sys, "platform", "win32")
     pf = tmp_path / "Program Files"
     app = pf / "WXWork"
     app.mkdir(parents=True)
@@ -442,6 +444,7 @@ def test_find_app_candidates_direct_path(tmp_path):
 def test_find_app_candidates_skips_uninstall(tmp_path, monkeypatch):
     from qi.action import open as open_mod
 
+    monkeypatch.setattr(open_mod.sys, "platform", "win32")
     programs = tmp_path / "Programs"
     programs.mkdir()
     (programs / "卸载企业微信.lnk").write_bytes(b"x")
