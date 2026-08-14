@@ -1122,7 +1122,19 @@ class Brain:
             logger.debug("蛰伏提示推送失败", exc_info=True)
         return notice
 
-    _CONFIRM_CUES = ("看吧", "开吧", "好", "行", "确认", "可以", "嗯", "yes", "ok")
+    _CONFIRM_CUES = (
+        "看吧",
+        "开吧",
+        "好",
+        "行",
+        "确认",
+        "可以",
+        "嗯",
+        "要",
+        "要的",
+        "yes",
+        "ok",
+    )
     # assist-5：pending 已消费后补执行的确认词（短语级，不含裸「好/行/嗯/可以/yes/ok」）
     _CONFIRM_CUES_REEXEC = (
         "看吧",
@@ -1142,7 +1154,14 @@ class Brain:
         t = text.strip().lower()
         if any(m in t for m in self._NEW_ASSIST_MARKERS):
             return False
-        return any(cue in t for cue in self._CONFIRM_CUES)
+        # 「要」只认短回复，避免「需要/重要」误确认
+        if t in ("要", "要的", "要啊", "要吧", "要呀", "要！", "要。"):
+            return True
+        return any(
+            cue in t
+            for cue in self._CONFIRM_CUES
+            if cue not in ("要", "要的")
+        )
 
     def _is_confirm_reexec_cue(self, text: str) -> bool:
         """assist-5：pending 已消费后的窄确认词。"""
@@ -1318,11 +1337,34 @@ class Brain:
                     try:
                         if self._is_open_pending(confirmed_req):
                             self._clear_assist_target()
+                            # allow 要约尚未填候选：先找路径再二次确认，勿直接写白名单
+                            conf = True
+                            try:
+                                from qi.action.open import OpenRequest
+
+                                if (
+                                    isinstance(confirmed_req, OpenRequest)
+                                    and confirmed_req.intent
+                                    in ("allow", "teach")
+                                    and not confirmed_req.candidates
+                                ):
+                                    conf = False
+                            except Exception:
+                                pass
                             result = await self._execute_open_on_request(
                                 confirmed_req,
-                                confirmed=True,
+                                confirmed=conf,
                                 selected_index=sel,
                             )
+                            if result is not None and (
+                                result.get("needs_confirmation")
+                                or result.get("outcome") == "confirm_required"
+                            ):
+                                self.pending_assist_confirmation = confirmed_req
+                                self.pending_assist_confirmation_at = (
+                                    datetime.now()
+                                )
+                                self.pending_assist_heartbeats = 0
                         else:
                             # assist-5：确认成功后保留 last_assist_target（粘性补执行）
                             result = await self._execute_confirmed_assist(
@@ -1419,7 +1461,25 @@ class Brain:
                         if result.get("needs_confirmation") or (
                             result.get("outcome") == "confirm_required"
                         ):
-                            self.pending_assist_confirmation = open_req
+                            pending = open_req
+                            if result.get("promote_intent") in (
+                                "allow",
+                                "teach",
+                            ):
+                                from qi.action.open import OpenRequest
+
+                                alias = (
+                                    result.get("allow_alias")
+                                    or result.get("teach_alias")
+                                    or getattr(open_req, "target", None)
+                                    or ""
+                                )
+                                pending = OpenRequest(
+                                    intent="allow",
+                                    target_type="app",
+                                    target=str(alias),
+                                )
+                            self.pending_assist_confirmation = pending
                             self.pending_assist_confirmation_at = datetime.now()
                             self.pending_assist_heartbeats = 0
                             self._clear_assist_target()

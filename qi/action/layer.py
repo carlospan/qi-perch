@@ -301,14 +301,12 @@ class ActionLayer:
             if result is not None:
                 self.budget.record("explore", now)
         elif chosen.kind == "look":
-            soft_n = await self.look._soft_block_count()
             result = await self.look.try_autonomous(
                 relationship_stage=relationship_stage,
                 season=season,
                 now=now,
                 mode=mode,
                 speaking=speaking,
-                force_soft=soft_n >= 2,
             )
             if result is not None and result.get("outcome") == "success":
                 self.budget.record("look", now)
@@ -454,7 +452,6 @@ class ActionLayer:
                 )
         elif kind == "look":
             reactive = op == "invite" or bool(confirmed)
-            soft_n = await self.look._soft_block_count()
             result = await self.look.glance(
                 relationship_stage=relationship_stage,
                 season=season,
@@ -462,7 +459,6 @@ class ActionLayer:
                 reactive=reactive,
                 user_question=target_path if reactive else None,
                 mode=mode,
-                force_soft=(not reactive) and soft_n >= 2,
             )
             if (
                 result is not None
@@ -477,7 +473,7 @@ class ActionLayer:
                 url_like = str(target_path).startswith(("http://", "https://"))
                 open_req = OpenRequest(
                     intent=intent
-                    if intent in ("open", "open_and_look", "teach")
+                    if intent in ("open", "open_and_look", "allow", "teach")
                     else "open",
                     target_type="url" if url_like else "app",
                     target=str(target_path),

@@ -1,4 +1,4 @@
-"""L7 open——确认后打开 URL / 白名单应用；可对话教会写入白名单。"""
+"""L7 open——确认后打开 URL / 白名单应用；可对话授权写入白名单。"""
 
 from __future__ import annotations
 
@@ -45,12 +45,52 @@ _OPEN_NEG = re.compile(
     re.I,
 )
 
+# 不像应用名的对话碎片（防「我还不睡，你现在」当别名）
+_ALIAS_REJECT = re.compile(
+    r"(还不|现在|睡觉|不睡|谢谢|对的|哈哈|怎么|什么|吗|呢|吧|啊|"
+    r"你先|我先|明天|今天|陪你|记着|继续|复盘|代码|对话)",
+)
+
+# 打开动词（长匹配优先，避免「打开一下」吃成「一下…」）
+_OPEN_VERB = re.compile(r"(?:打开一下|开一下|帮我打开|帮我开|打开|启动)\s*")
+
+
+def _strip_alias_noise(alias: str) -> str:
+    a = (alias or "").strip().strip("「」『』\"'的了吗呢吧啊呀")
+    a = re.sub(r"^(一下)+", "", a)
+    return a.strip()
+
+
+def is_plausible_app_alias(alias: str | None) -> bool:
+    """应用别名须短、像名字，不能是整句闲聊。"""
+    a = _strip_alias_noise(alias or "")
+    if not a or len(a) < 2 or len(a) > 16:
+        return False
+    if re.search(r"[，。、？?！!\s]", a):
+        return False
+    if _ALIAS_REJECT.search(a):
+        return False
+    # 拒代词开头的短句感
+    if re.match(r"^(我|你|他|她|它|这|那)", a) and len(a) > 6:
+        return False
+    return True
+
+
+def normalize_open_intent(intent: str | None) -> str | None:
+    """open | open_and_look | allow；旧名 teach → allow。"""
+    raw = (intent or "").strip()
+    if raw == "teach":
+        return "allow"
+    if raw in ("open", "open_and_look", "allow"):
+        return raw
+    return None
+
 
 @dataclass
 class OpenRequest:
-    """对话拍解析出的打开 / 教会请求。"""
+    """对话拍解析出的打开 / 授权白名单请求。"""
 
-    intent: str  # open | open_and_look | teach
+    intent: str  # open | open_and_look | allow
     target_type: str  # url | app
     target: str  # url 或应用别名
     launch_path: str | None = None
@@ -88,7 +128,11 @@ def _heuristic_gate(text: str) -> bool:
         return False
     if extract_http_url(text):
         return True
-    if re.search(r"(打开|开一下|帮我开|启动|教会|以后.*开|你可以帮我开)", text):
+    if re.search(
+        r"(打开|开一下|帮我开|启动|以后.*开|你可以帮我开|加入白名单|"
+        r"教会你开|教你开)",
+        text,
+    ):
         return True
     if re.search(r"看看.{0,6}(链接|网址|这个网|网页)", text):
         return True
@@ -110,15 +154,16 @@ def _strong_intent(text: str) -> OpenRequest | None:
             return OpenRequest(intent="open_and_look", target_type="url", target=url)
         return None
 
-    # 教会
-    teach_m = re.search(
-        r"(以后|下次)?(.{0,12}?)(你可以帮我开|你帮我开|能帮我开|教会你开|记住.*开)",
+    # 授权进白名单（懂意思：用户说「教会」也认，意图名是 allow）
+    allow_m = re.search(
+        r"(以后|下次)?(.{0,12}?)(你可以帮我开|你帮我开|能帮我开|记住.*开|"
+        r"教会你开|教你开)",
         text,
     )
-    if teach_m or re.search(r"教会|教你开|加入白名单|你可以开", text):
+    if allow_m or re.search(r"加入白名单|你可以开|以后.*帮我开", text):
         alias = _guess_app_alias(text)
         if alias:
-            return OpenRequest(intent="teach", target_type="app", target=alias)
+            return OpenRequest(intent="allow", target_type="app", target=alias)
         return None
 
     # 打开应用（无 URL）
@@ -132,34 +177,40 @@ def _strong_intent(text: str) -> OpenRequest | None:
 def _guess_app_alias(text: str) -> str | None:
     """从句子里抠应用称呼（粗）；白名单匹配不区分大小写。"""
     t = text.strip()
-    # 去掉常见动词壳
+    m = _OPEN_VERB.search(text)
+    if m:
+        rest = text[m.end() :]
+        m2 = re.match(r"([A-Za-z0-9\u4e00-\u9fff]{2,16})", rest)
+        if m2:
+            cand = _strip_alias_noise(m2.group(1))
+            if is_plausible_app_alias(cand):
+                return cand
+    # 去掉常见动词壳后再取短片段
     t2 = re.sub(
-        r"(帮我|请|以后|下次|你可以|能|把|将|一下|开一下|打开|启动|教会|教你|记住|白名单)",
+        r"(帮我|请|以后|下次|你可以|能|把|将|一下|开一下|打开一下|打开|启动|"
+        r"教会|教你|记住|白名单)",
         " ",
         t,
     )
     t2 = re.sub(r"[？?！!。.…\s]+", " ", t2).strip()
-    parts = [p for p in t2.split() if len(p) >= 2]
-    if not parts:
-        # 中文无空格：取「开」后片段
-        m = re.search(r"(?:打开|开一下|帮我开|启动|开)\s*([^\s，。、]{2,16})", text)
-        if m:
-            return m.group(1).strip("的了吗呢")
-        return None
-    # 取最长非虚词片段
+    parts = [p for p in t2.split() if 2 <= len(p) <= 16]
     parts.sort(key=len, reverse=True)
-    return parts[0][:32]
+    for p in parts:
+        cand = _strip_alias_noise(p)
+        if is_plausible_app_alias(cand):
+            return cand
+    return None
 
 
 async def _llm_intent(llm: Any, text: str) -> OpenRequest | None:
     prompt = (
         "判断用户意图，只输出一行 JSON，不要其它字：\n"
-        '{"intent":"open"|"open_and_look"|"teach"|"neither","target_type":"url"|"app"|null,'
+        '{"intent":"open"|"open_and_look"|"allow"|"neither","target_type":"url"|"app"|null,'
         '"target":"url或应用名或null"}\n'
         "规则：\n"
         "- open：只要打开链接或应用，不要求看内容\n"
         "- open_and_look：想打开并看看链接/页面上是什么\n"
-        "- teach：以后允许打开某应用（教会/记住你可以开）\n"
+        "- allow：以后允许帮开某应用（授权进名单；不是上课/施教）\n"
         "- neither：读文件、看屏幕在做什么、闲聊、无关\n"
         f"用户：「{text}」"
     )
@@ -182,10 +233,12 @@ async def _llm_intent(llm: Any, text: str) -> OpenRequest | None:
         data = json.loads(raw[start : end + 1])
     except Exception:
         return None
-    intent = str(data.get("intent") or "neither").strip()
-    if intent not in ("open", "open_and_look", "teach"):
+    intent = normalize_open_intent(str(data.get("intent") or "neither"))
+    if intent is None:
         return None
     target = (data.get("target") or "").strip() or None
+    if target:
+        target = _strip_alias_noise(target) or target
     url = extract_http_url(text) or (
         extract_http_url(target) if target else None
     )
@@ -195,14 +248,18 @@ async def _llm_intent(llm: Any, text: str) -> OpenRequest | None:
                 intent=intent, target_type="url", target=url
             )
         alias = target or _guess_app_alias(text)
-        if not alias:
+        if not is_plausible_app_alias(alias):
             return None
-        return OpenRequest(intent=intent, target_type="app", target=alias)
-    # teach
+        return OpenRequest(
+            intent=intent, target_type="app", target=_strip_alias_noise(alias)
+        )
+    # allow
     alias = target or _guess_app_alias(text)
-    if not alias:
+    if not is_plausible_app_alias(alias):
         return None
-    return OpenRequest(intent="teach", target_type="app", target=alias)
+    return OpenRequest(
+        intent="allow", target_type="app", target=_strip_alias_noise(alias)
+    )
 
 
 async def detect_open_intent(
@@ -271,37 +328,167 @@ def find_whitelist_entry(
     return None
 
 
+# 常见口头名 ↔ 安装目录 / 快捷方式名（小表；懂意思用，非口令唯一路径）
+_APP_ALIAS_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "企微": ("企业微信", "wxwork", "wecom"),
+    "企业微信": ("企微", "wxwork", "wecom"),
+    "微信": ("wechat", "weixin"),
+    "网易云": ("cloudmusic", "netease"),
+    "chrome": ("google chrome", "谷歌浏览器"),
+    "谷歌浏览器": ("chrome", "google chrome"),
+    "edge": ("msedge", "microsoft edge"),
+    "vscode": ("code", "visual studio code"),
+    "vs code": ("code", "vscode", "visual studio code"),
+}
+
+_START_MENU_SCAN_CAP = 2500
+_KNOWN_DIR_SCAN_CAP = 400
+
+
+_NOISE_NAME = re.compile(
+    r"(uninstall|uninst|卸载|upgrader|upgrade|update|setup|installer|安装|修复)",
+    re.I,
+)
+
+
+def _is_noise_app_name(name: str) -> bool:
+    return bool(_NOISE_NAME.search(name or ""))
+
+
+def _alias_needles(alias: str) -> list[str]:
+    a = (alias or "").strip().lower()
+    if not a:
+        return []
+    needles: set[str] = {a}
+    for key, syns in _APP_ALIAS_SYNONYMS.items():
+        bucket = {key.lower(), *(s.lower() for s in syns)}
+        if a in bucket:
+            needles |= bucket
+    return sorted(needles, key=len, reverse=True)
+
+
+def _name_matches(name: str, needles: list[str]) -> bool:
+    n = (name or "").lower()
+    stem = Path(n).stem
+    return any(needle in stem or needle in n for needle in needles)
+
+
+def _match_score(name: str, needles: list[str]) -> int:
+    """越大越优先：整段 stem 命中 > 包含。"""
+    stem = Path(name or "").stem.lower()
+    best = 0
+    for needle in needles:
+        if stem == needle:
+            best = max(best, 100)
+        elif stem.startswith(needle) or stem.endswith(needle):
+            best = max(best, 80)
+        elif needle in stem:
+            best = max(best, 60)
+    return best
+
+
+def _start_menu_roots() -> list[Path]:
+    roots: list[Path] = []
+    appdata = os.environ.get("APPDATA") or ""
+    programdata = os.environ.get("PROGRAMDATA") or ""
+    if appdata:
+        roots.append(
+            Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+        )
+    if programdata:
+        roots.append(
+            Path(programdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+        )
+    return roots
+
+
+def _known_install_roots() -> list[Path]:
+    roots: list[Path] = []
+    for key in ("ProgramFiles", "ProgramFiles(x86)", "PROGRAMFILES", "PROGRAMFILES(X86)"):
+        raw = os.environ.get(key)
+        if raw:
+            roots.append(Path(raw))
+    local = os.environ.get("LOCALAPPDATA") or ""
+    if local:
+        roots.append(Path(local) / "Programs")
+    # 去重保序
+    seen: set[str] = set()
+    out: list[Path] = []
+    for r in roots:
+        k = str(r).lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(r)
+    return out
+
+
+def _resolve_shortcut(lnk: Path) -> Path | None:
+    """解析 .lnk 目标；失败则返回 None（调用方可退回用快捷方式本身）。"""
+    if sys.platform != "win32":
+        return None
+    try:
+        escaped = str(lnk).replace("'", "''")
+        r = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                f"(New-Object -ComObject WScript.Shell).CreateShortcut('{escaped}').TargetPath",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=4,
+            check=False,
+        )
+        target = (r.stdout or "").strip().strip('"')
+        if target:
+            p = Path(target)
+            if p.is_file():
+                return p
+    except Exception:
+        logger.debug("解析快捷方式失败：%s", lnk, exc_info=True)
+    return None
+
+
 def find_app_candidates(alias: str, *, limit: int = 3) -> list[dict[str, str]]:
-    """Windows：where + 若像路径则直接用；不做全盘 rglob（太慢）。"""
-    alias = (alias or "").strip()
+    """找应用候选：路径直给 → where → 开始菜单 .lnk → 常见安装目录浅搜。
+
+    不做全盘 rglob。Windows 先行；其它平台仅 which。
+    """
+    alias = _strip_alias_noise(alias or "") or (alias or "").strip()
     if not alias:
         return []
+    needles = _alias_needles(alias)
     found: list[dict[str, str]] = []
     seen: set[str] = set()
+    scored: list[tuple[int, dict[str, str]]] = []
 
-    def _add(path: Path, label: str | None = None) -> None:
+    def _add(path: Path, label: str | None = None, *, score: int = 50) -> None:
         try:
             resolved = str(path.resolve())
         except Exception:
             resolved = str(path)
-        if resolved.lower() in seen:
+        key = resolved.lower()
+        if key in seen:
             return
         if not path.is_file():
             return
-        seen.add(resolved.lower())
-        found.append(
-            {
-                "alias": alias,
-                "path": resolved,
-                "label": label or path.name,
-            }
-        )
+        seen.add(key)
+        item = {
+            "alias": alias,
+            "path": resolved,
+            "label": label or path.name,
+        }
+        scored.append((score, item))
+        found.append(item)
 
     # 用户直接给了路径
     as_path = Path(alias.strip('"'))
     if as_path.is_file():
-        _add(as_path)
-        return found[:limit]
+        _add(as_path, score=100)
+        return [x for _, x in sorted(scored, key=lambda t: -t[0])[:limit]]
 
     if sys.platform == "win32":
         try:
@@ -315,12 +502,11 @@ def find_app_candidates(alias: str, *, limit: int = 3) -> list[dict[str, str]]:
             for line in (r.stdout or "").splitlines():
                 line = line.strip()
                 if line and line.lower().endswith((".exe", ".bat", ".cmd")):
-                    _add(Path(line))
+                    _add(Path(line), score=90)
                     if len(found) >= limit:
-                        return found[:limit]
+                        return [x for _, x in sorted(scored, key=lambda t: -t[0])[:limit]]
         except Exception:
             logger.debug("where 查询失败", exc_info=True)
-        # 再试 alias.exe
         if not found and not alias.lower().endswith(".exe"):
             try:
                 r = subprocess.run(
@@ -333,11 +519,95 @@ def find_app_candidates(alias: str, *, limit: int = 3) -> list[dict[str, str]]:
                 for line in (r.stdout or "").splitlines():
                     line = line.strip()
                     if line:
-                        _add(Path(line))
+                        _add(Path(line), score=90)
                         if len(found) >= limit:
-                            return found[:limit]
+                            return [
+                                x
+                                for _, x in sorted(scored, key=lambda t: -t[0])[:limit]
+                            ]
             except Exception:
                 pass
+
+        # 开始菜单快捷方式（深度有限的 rglob，有扫描上限）
+        scanned = 0
+        for root in _start_menu_roots():
+            if len(found) >= limit * 2:
+                break
+            if not root.is_dir():
+                continue
+            try:
+                for lnk in root.rglob("*.lnk"):
+                    scanned += 1
+                    if scanned > _START_MENU_SCAN_CAP:
+                        break
+                    if not _name_matches(lnk.name, needles):
+                        continue
+                    if _is_noise_app_name(lnk.name):
+                        continue
+                    score = _match_score(lnk.name, needles)
+                    target = _resolve_shortcut(lnk)
+                    if target is not None:
+                        if _is_noise_app_name(target.name):
+                            continue
+                        _add(
+                            target,
+                            label=f"{lnk.stem}（{target.name}）",
+                            score=score + 10,
+                        )
+                    else:
+                        # 快捷方式本身也能 startfile
+                        _add(lnk, label=lnk.stem, score=score)
+                    if len(found) >= limit * 2:
+                        break
+            except Exception:
+                logger.debug("开始菜单扫描失败：%s", root, exc_info=True)
+
+        # 常见安装目录：只扫名称像别名的子目录，再浅取 exe（最多两层）
+        scanned = 0
+        for root in _known_install_roots():
+            if len(found) >= limit * 2:
+                break
+            if not root.is_dir():
+                continue
+            try:
+                for child in root.iterdir():
+                    scanned += 1
+                    if scanned > _KNOWN_DIR_SCAN_CAP:
+                        break
+                    if not child.is_dir() or not _name_matches(child.name, needles):
+                        continue
+                    score = _match_score(child.name, needles)
+                    exes: list[Path] = []
+                    try:
+                        exes.extend(
+                            p
+                            for p in child.glob("*.exe")
+                            if p.is_file() and not _is_noise_app_name(p.name)
+                        )
+                        for sub in child.iterdir():
+                            if not sub.is_dir():
+                                continue
+                            if _is_noise_app_name(sub.name):
+                                continue
+                            exes.extend(
+                                p
+                                for p in sub.glob("*.exe")
+                                if p.is_file() and not _is_noise_app_name(p.name)
+                            )
+                    except Exception:
+                        continue
+                    # 优先文件名也像别名的 exe
+                    exes.sort(
+                        key=lambda p: (-_match_score(p.name, needles), len(p.name))
+                    )
+                    for exe in exes[:2]:
+                        _add(
+                            exe,
+                            label=f"{child.name}/{exe.name}",
+                            score=score + _match_score(exe.name, needles) // 5,
+                        )
+            except Exception:
+                logger.debug("安装目录扫描失败：%s", root, exc_info=True)
     else:
         try:
             r = subprocess.run(
@@ -349,15 +619,16 @@ def find_app_candidates(alias: str, *, limit: int = 3) -> list[dict[str, str]]:
             )
             line = (r.stdout or "").strip().splitlines()
             if line:
-                _add(Path(line[0]))
+                _add(Path(line[0]), score=90)
         except Exception:
             pass
 
-    return found[:limit]
+    scored.sort(key=lambda t: -t[0])
+    return [item for _, item in scored[:limit]]
 
 
 class OpenAction:
-    """响应式打开：确认后开 URL / 白名单应用；teach 写入白名单。"""
+    """响应式打开：确认后开 URL / 白名单应用；allow 写入白名单。"""
 
     def __init__(
         self,
@@ -385,6 +656,11 @@ class OpenAction:
         now = now or datetime.now()
         if selected_index is not None:
             req.selected_index = selected_index
+        if req.target_type == "app":
+            req.target = _strip_alias_noise(req.target) or req.target
+        norm = normalize_open_intent(req.intent)
+        if norm:
+            req.intent = norm
 
         if not can_open(relationship_stage):
             return await self._fail(
@@ -394,8 +670,9 @@ class OpenAction:
                 now=now,
             )
 
-        if req.intent == "teach":
-            return await self._execute_teach(
+        if req.intent in ("allow", "teach"):
+            req.intent = "allow"
+            return await self._execute_allow(
                 req, confirmed=confirmed, season=season, now=now
             )
 
@@ -415,7 +692,7 @@ class OpenAction:
             relationship_stage=relationship_stage,
         )
 
-    async def _execute_teach(
+    async def _execute_allow(
         self,
         req: OpenRequest,
         *,
@@ -428,12 +705,12 @@ class OpenAction:
         if not req.candidates:
             return await self._fail(
                 f"我还找不到「{req.target}」在哪，你换个名字，或以后告诉我路径。",
-                f"teach 无候选：{req.target}",
+                f"allow 无候选：{req.target}",
                 season=season,
                 now=now,
             )
         if not confirmed:
-            return self._confirm_gate_teach(req)
+            return self._confirm_gate_allow(req)
 
         idx = max(0, min(req.selected_index, len(req.candidates) - 1))
         chosen = req.candidates[idx]
@@ -455,22 +732,22 @@ class OpenAction:
         msg = f"好，以后「{req.target}」我可以帮你开——开前还是会问你。"
         await self.db.insert_action(
             "open",
-            f"teach:{req.target}",
+            f"allow:{req.target}",
             target=chosen["path"],
             outcome=OUTCOME_SUCCESS,
             season=season,
             now=now,
             detail_json=json.dumps(
-                {"intent": "teach", "alias": req.target}, ensure_ascii=False
+                {"intent": "allow", "alias": req.target}, ensure_ascii=False
             ),
         )
         return {
             "type": "open_result",
-            "summary": f"已教会：{req.target}",
+            "summary": f"白名单已记：{req.target}",
             "qi_line": msg,
             "speak": True,
             "outcome": OUTCOME_SUCCESS,
-            "intent": "teach",
+            "intent": "allow",
         }
 
     async def _execute_url(
@@ -507,7 +784,6 @@ class OpenAction:
                 "speak": True,
                 "outcome": "confirm_required",
                 "needs_confirmation": True,
-                "confirm_mark": "开？",
                 "confirm_label": "开吧",
             }
 
@@ -574,8 +850,34 @@ class OpenAction:
         entries = await load_whitelist(self.db)
         entry = find_whitelist_entry(entries, req.target)
         if entry is None:
+            if not is_plausible_app_alias(req.target):
+                return await self._fail(
+                    "这个名字不太像应用，换个短称呼再说？",
+                    f"别名不像应用：{req.target}",
+                    season=season,
+                    now=now,
+                )
+            # 未确认：要约授权（brain 会把 pending 升成 allow）
+            if not confirmed:
+                msg = (
+                    f"「{req.target}」我还不会开——"
+                    "以后要不要让我帮你开？你说一声就行。"
+                )
+                return {
+                    "type": "assist_confirm_request",
+                    "kind": "open",
+                    "target_path": "",
+                    "summary": msg,
+                    "qi_line": msg,
+                    "speak": True,
+                    "outcome": "confirm_required",
+                    "needs_confirmation": True,
+                    "promote_intent": "allow",
+                    "allow_alias": req.target,
+                    "confirm_label": "要",
+                }
             return await self._fail(
-                f"「{req.target}」我还不会开——你要是愿意，可以教我一声。",
+                f"「{req.target}」还不在我能开的名单里。",
                 f"不在白名单：{req.target}",
                 season=season,
                 now=now,
@@ -592,7 +894,6 @@ class OpenAction:
                 "speak": True,
                 "outcome": "confirm_required",
                 "needs_confirmation": True,
-                "confirm_mark": "开？",
                 "confirm_label": "开吧",
             }
 
@@ -647,7 +948,7 @@ class OpenAction:
             "intent": req.intent,
         }
 
-    def _confirm_gate_teach(self, req: OpenRequest) -> dict[str, Any]:
+    def _confirm_gate_allow(self, req: OpenRequest) -> dict[str, Any]:
         lines = []
         for i, c in enumerate(req.candidates[:3], start=1):
             lines.append(f"{i}. {c.get('label') or c['path']}")
@@ -665,7 +966,6 @@ class OpenAction:
             "speak": True,
             "outcome": "confirm_required",
             "needs_confirmation": True,
-            "confirm_mark": "记？",
             "confirm_label": "好",
             "candidates": req.candidates[:3],
         }

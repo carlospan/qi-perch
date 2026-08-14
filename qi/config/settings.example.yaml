@@ -108,7 +108,7 @@ action:
   # look 窗口瞥视（感知从宽；非定时）
   look:
     pause_hours: 1              # 「别看」暂停时长
-    min_interval_minutes: 15    # 自主防连瞥（邀看不受限）
+    min_interval_minutes: 15    # 自主防连瞥硬门（邀看不受限；事不过三不可破此间隔）
     silence_boost_minutes: 20   # 沉默多久开始提高自主 look 倾向
   open:
     debounce_seconds: 8         # 同一目标确认后短时防连开

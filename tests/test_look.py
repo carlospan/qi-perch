@@ -218,7 +218,8 @@ async def test_autonomous_no_double_success_under_lock(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_autonomous_interval_and_san_bu_guo_san(tmp_path):
+async def test_autonomous_interval_is_hard_gate(tmp_path):
+    """防连瞥为硬门：间隔内多次自主冲动均挡下；事不过三不可破。"""
     db = Database(str(tmp_path / "qi.db"))
     await db.initialize()
 
@@ -237,23 +238,61 @@ async def test_autonomous_interval_and_san_bu_guo_san(tmp_path):
         relationship_stage="friend", season="spring", now=now, mode="solitary"
     )
     assert r1 is not None
-    # 紧接着应被防连瞥挡住（软门）
+    for _ in range(5):
+        assert (
+            await look.try_autonomous(
+                relationship_stage="friend",
+                season="spring",
+                now=now,
+                mode="solitary",
+                force_soft=True,
+            )
+            is None
+        )
+    # 过了间隔才可再自主瞥
+    later = now + timedelta(minutes=16)
     r2 = await look.try_autonomous(
-        relationship_stage="friend", season="spring", now=now, mode="solitary"
+        relationship_stage="friend",
+        season="spring",
+        now=later,
+        mode="solitary",
     )
-    assert r2 is None
-    r3 = await look.try_autonomous(
-        relationship_stage="friend", season="spring", now=now, mode="solitary"
+    assert r2 is not None
+
+
+@pytest.mark.asyncio
+async def test_reactive_invite_bypasses_interval(tmp_path):
+    """邀看不受防连瞥限制。"""
+    db = Database(str(tmp_path / "qi.db"))
+    await db.initialize()
+
+    class _LLM:
+        async def call(self, purpose, messages, temperature=None):
+            return "看到了。"
+
+    look = LookAction(
+        db,
+        config={"action": {"look": {"min_interval_minutes": 15}}},
+        llm=_LLM(),  # type: ignore[arg-type]
+        capture_fn=lambda: (b"\xff\xd8\xff", "Editor", False),
     )
-    assert r3 is None
-    # 第 3 次冲动：soft_count>=2 → 软门放行
-    r4 = await look.try_autonomous(
+    now = datetime.now()
+    assert (
+        await look.try_autonomous(
+            relationship_stage="friend", season="spring", now=now, mode="solitary"
+        )
+        is not None
+    )
+    r = await look.glance(
         relationship_stage="friend",
         season="spring",
         now=now,
-        mode="solitary",
+        reactive=True,
+        user_question="看看我屏幕",
+        mode="awake",
     )
-    assert r4 is not None
+    assert r is not None
+    assert r.get("outcome") == "success"
 
 
 @pytest.mark.asyncio

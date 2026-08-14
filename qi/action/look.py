@@ -399,7 +399,8 @@ class LookAction:
     ) -> dict[str, Any] | None:
         """
         执行一次瞥视。reactive=True 时跳过防连瞥与自主让路。
-        返回 result dict；硬门拒绝返回 None；软门挡下返回 None（并计数）。
+        返回 result dict；硬门拒绝返回 None。
+        force_soft 保留兼容，不再用于突破防连瞥。
         """
         if reactive:
             return await self._glance_unlocked(
@@ -452,21 +453,16 @@ class LookAction:
             await self._reset_soft_block()
             return None
 
-        soft_count = await self._soft_block_count()
-        # 事不过三：仅软门连挡≥2 后放行防连瞥；成功后计数归零，不会连成功两次
-        bypass_soft = (not reactive) and (force_soft or soft_count >= 2)
-
-        if not reactive and not bypass_soft:
-            if not await self._interval_ok(now):
-                await self._mark_soft_block()
-                return None
+        # 防连瞥：自主硬门（事不过三不可破；邀看 reactive 不受限）
+        if not reactive and not await self._interval_ok(now):
+            return None
 
         if reactive and paused:
             await self.clear_pause()
 
         jpeg, title, is_self = self._capture_fn()
         if not reactive and is_self:
-            # 自身窗：跳过自主，不计入事不过三
+            # 自身窗：跳过自主
             return None
 
         if not jpeg:

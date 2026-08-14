@@ -11,21 +11,37 @@ defineEmits<{
   cancel: [];
 }>();
 
+/** open 确认：同伴问一句即可，不要「记？+ 裸 exe」读文件壳 */
+const isOpen = computed(() => props.card.kind === "open");
+
 const fileName = computed(() => {
   const parts = props.card.target_path.split(/[\\/]/);
   return parts[parts.length - 1] || props.card.target_path;
 });
 
-const mark = computed(() => props.card.confirm_mark || (props.card.kind === "open" ? "开？" : "看？"));
-const confirmLabel = computed(
-  () => props.card.confirm_label || (props.card.kind === "open" ? "开吧" : "看吧"),
+const mark = computed(() => {
+  if (isOpen.value) return "";
+  return props.card.confirm_mark || "看？";
+});
+
+const confirmLabel = computed(() => {
+  if (props.card.confirm_label) return props.card.confirm_label;
+  return isOpen.value ? "开吧" : "看吧";
+});
+
+const ariaLabel = computed(
+  () => mark.value || (props.card.summary || "").slice(0, 24) || "确认",
 );
 </script>
 
 <template>
-  <article class="paper assist-confirm" :aria-label="mark">
-    <span class="mark">{{ mark }}</span>
-    <div class="filename">{{ fileName }}</div>
+  <article
+    class="paper assist-confirm"
+    :class="{ open: isOpen }"
+    :aria-label="ariaLabel"
+  >
+    <span v-if="mark" class="mark">{{ mark }}</span>
+    <div v-if="!isOpen && fileName" class="filename">{{ fileName }}</div>
     <p class="summary">{{ card.summary }}</p>
     <div class="actions">
       <button type="button" class="confirm" @click="$emit('confirm')">
@@ -82,6 +98,10 @@ const confirmLabel = computed(
   font-size: 13px;
   line-height: 1.75;
   color: var(--ink);
+}
+
+.paper.open .summary {
+  margin-top: 0;
 }
 
 .actions {
