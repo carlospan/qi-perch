@@ -86,7 +86,13 @@ watch(
             <AssistConfirmCard
               v-else-if="m.card.type === 'assist_confirm_request'"
               :card="m.card"
-              @confirm="emit('send', '看吧')"
+              @confirm="
+                emit(
+                  'send',
+                  m.card.confirm_label ||
+                    (m.card.kind === 'open' ? '开吧' : '看吧'),
+                )
+              "
               @cancel="emit('send', '不用')"
             />
             <div class="when">{{ timeLabel(m.at) }}</div>

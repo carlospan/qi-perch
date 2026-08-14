@@ -55,7 +55,7 @@ export type ExploreCard = {
   sandbox: string;
 };
 
-/** assist-3：读文件确认请求（对齐 assist.py _confirm_gate） */
+/** assist / open：确认请求（对齐 assist/open _confirm_gate） */
 export type AssistConfirmCard = {
   type: "assist_confirm_request";
   target_path: string;
@@ -65,6 +65,9 @@ export type AssistConfirmCard = {
   outcome?: string;
   needs_confirmation?: boolean;
   action_id?: number;
+  kind?: string;
+  confirm_mark?: string;
+  confirm_label?: string;
 };
 
 /** 后端 action payload；回顾区渲染 creation / explore；相处区渲染 assist 确认 */

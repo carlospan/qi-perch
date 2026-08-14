@@ -177,6 +177,9 @@ function createQi() {
           summary: String(row.summary || "").trim(),
           qi_line: row.qi_line,
           action_id: row.action_id,
+          kind: row.kind,
+          confirm_mark: row.confirm_mark,
+          confirm_label: row.confirm_label,
         };
         const key = cardKey(card);
         if (seen.has(key)) continue;

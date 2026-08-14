@@ -32,6 +32,11 @@ def can_look(relationship_stage: str) -> bool:
     return stage_at_least(relationship_stage, "acquaintance")
 
 
+def can_open(relationship_stage: str) -> bool:
+    """打开链接/白名单应用：acquaintance+；执行侧仍每次确认。"""
+    return stage_at_least(relationship_stage, "acquaintance")
+
+
 def can_archive(
     _relationship_stage: str = "stranger",
     scars: list[dict] | None = None,
@@ -173,6 +178,7 @@ def permission_summary(
         "tend": can_tend(relationship_stage),
         "explore": can_explore(relationship_stage),
         "look": can_look(relationship_stage),
+        "open": can_open(relationship_stage),
         "archive": can_archive(relationship_stage, scars),
         "budget_tune": can_budget_tune(relationship_stage, scars),
         "journal": can_journal(relationship_stage, scars),

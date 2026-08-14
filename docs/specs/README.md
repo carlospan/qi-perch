@@ -1,11 +1,11 @@
 # specs/ · 规格与验收入口（SDD）
 
 > **定位**：开发任务的规格、验收与开放问题——不是日常操作手册（`how-to/`），也不是层实现规格（`reference/layers/`）。
-> 流程真源：[`SDD-GUIDE.md`](./SDD-GUIDE.md)。权威裁决见 [`../README.md`](../README.md)。
+> 流程真源：[`SDD-GUIDE.md`](./SDD-GUIDE.md)（含 **§2.5 渐进对齐**）。权威裁决见 [`../README.md`](../README.md)。
 
 | 文档 / 目录 | 用途 |
 |-------------|------|
-| [`SDD-GUIDE.md`](./SDD-GUIDE.md) | 写 spec、防 drift；**Cursor 单线默认**（2026-08-13） |
+| [`SDD-GUIDE.md`](./SDD-GUIDE.md) | 写 spec、防 drift；**Cursor 单线默认**；§2.5 一块一拍 |
 | [`acceptance.md`](./acceptance.md) | 五测试 + 生命感监护的操作化契约（定义链回架构 §一） |
 | [`open-questions.md`](./open-questions.md) | 开放 / 已结案 / 已降级问题（带状态列） |
 | [`stages/`](./stages/) | 阶段零～四退出判据与全程不变量（[`_invariants.md`](./stages/_invariants.md)） |

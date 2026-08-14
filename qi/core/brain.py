@@ -121,8 +121,8 @@ class Brain:
         self.last_sensing = None  # SensingSnapshot | None（包 8）
         self.last_user_message: str | None = None  # assist-2：供 trace / 感知
         self.last_assist_request = None  # AssistRequest | None（assist-2）
-        # assist-3：跨轮确认（仅内存，不落 body_memory）
-        self.pending_assist_confirmation = None  # AssistRequest | None
+        # assist-3 / open：跨轮确认（仅内存；AssistRequest | OpenRequest）
+        self.pending_assist_confirmation = None  # AssistRequest | OpenRequest | None
         self.pending_assist_confirmation_at: datetime | None = None
         self.pending_assist_heartbeats: int = 0
         # assist-5：粘性目标（确认成功后保留，供口头补执行）
@@ -1122,7 +1122,7 @@ class Brain:
             logger.debug("蛰伏提示推送失败", exc_info=True)
         return notice
 
-    _CONFIRM_CUES = ("看吧", "好", "行", "确认", "可以", "嗯", "yes", "ok")
+    _CONFIRM_CUES = ("看吧", "开吧", "好", "行", "确认", "可以", "嗯", "yes", "ok")
     # assist-5：pending 已消费后补执行的确认词（短语级，不含裸「好/行/嗯/可以/yes/ok」）
     _CONFIRM_CUES_REEXEC = (
         "看吧",
@@ -1134,7 +1134,7 @@ class Brain:
         "行 看吧",
     )
     # 「不用看」须先于「不用」；英文 no 只整句匹配（避免 notes 误伤）
-    _REJECT_CUES = ("不用看", "不用", "算了", "不要", "取消")
+    _REJECT_CUES = ("不用看", "不用", "算了", "不要", "取消", "别开")
     _NEW_ASSIST_MARKERS = ("帮我看", "帮我读", "帮我看一下", "帮我读一下")
 
     def _is_confirm_cue(self, text: str) -> bool:
@@ -1168,6 +1168,58 @@ class Brain:
     def _clear_assist_target(self) -> None:
         self.last_assist_target = None
         self.last_assist_target_at = None
+
+    def _pending_selected_index(self, text: str) -> int | None:
+        t = text.strip()
+        if t in ("1", "2", "3"):
+            return int(t) - 1
+        return None
+
+    def _is_open_pending(self, req: object) -> bool:
+        try:
+            from qi.action.open import OpenRequest
+
+            return isinstance(req, OpenRequest)
+        except Exception:
+            return False
+
+    async def _execute_open_on_request(
+        self,
+        open_req: object,
+        *,
+        confirmed: bool = False,
+        selected_index: int | None = None,
+    ) -> dict | None:
+        if self.action is None:
+            return None
+        now = datetime.now()
+        scars = None
+        if self._db is not None:
+            try:
+                scars = await self._db.list_scars()
+            except Exception:
+                scars = None
+        trust = 0.5
+        if self.relationship is not None:
+            trust = float(
+                getattr(self.relationship.state, "trust", 0.5) or 0.5
+            )
+        return await self.action.execute_kind(
+            "open",
+            self.emotion,
+            self.relationship_stage,
+            self._current_season(),
+            now,
+            mode=self.emotion.mode.value,
+            user_online=self.user_online,
+            scars=scars,
+            sensing=self.last_sensing,
+            pressure=self.last_pressure_response,
+            trust=trust,
+            confirmed=confirmed,
+            payload=open_req,
+            selected_index=selected_index,
+        )
 
     async def _execute_assist_on_request(
         self, assist_req: object, *, confirmed_override: bool = False
@@ -1251,7 +1303,7 @@ class Brain:
             if self.in_stasis:
                 return await self._reply_stasis_notice()
 
-            # assist-3：跨轮确认（控制消息；确认不进 pending_queue）
+            # assist-3 / open：跨轮确认（控制消息；确认不进 pending_queue）
             if self.pending_assist_confirmation is not None:
                 if self._is_reject_cue(text):
                     self._clear_pending_assist()
@@ -1259,21 +1311,30 @@ class Brain:
                     now = datetime.now()
                     await self._deliver_qi_message("好。", now, proactive=False)
                     return "好。"
-                if self._is_confirm_cue(text):
+                sel = self._pending_selected_index(text)
+                if self._is_confirm_cue(text) or sel is not None:
                     confirmed_req = self.pending_assist_confirmation
                     self._clear_pending_assist()
-                    # assist-5：确认成功后保留 last_assist_target（粘性补执行）
                     try:
-                        result = await self._execute_confirmed_assist(
-                            confirmed_req
-                        )
+                        if self._is_open_pending(confirmed_req):
+                            self._clear_assist_target()
+                            result = await self._execute_open_on_request(
+                                confirmed_req,
+                                confirmed=True,
+                                selected_index=sel,
+                            )
+                        else:
+                            # assist-5：确认成功后保留 last_assist_target（粘性补执行）
+                            result = await self._execute_confirmed_assist(
+                                confirmed_req
+                            )
                         if result is not None:
                             await self._deliver_action_result(
                                 result, datetime.now()
                             )
                             return (result.get("qi_line") or "").strip() or None
                     except Exception:
-                        logger.exception("assist confirmed execute 失败")
+                        logger.exception("confirmed execute 失败")
                     return None
                 # 换话题 / 新请求：清旧 pending + 粘性 target，落入正常对话
                 self._clear_pending_assist()
@@ -1338,6 +1399,37 @@ class Brain:
                     await self.action.look.clear_pause()
                 except Exception:
                     logger.debug("look resume 失败", exc_info=True)
+
+            # open：先于 look 邀看（「看看这个链接」走 open_and_look，不误成纯 look）
+            open_req = None
+            if self.action is not None:
+                try:
+                    from qi.action.open import detect_open_intent
+
+                    open_req = await detect_open_intent(text, llm=self.llm)
+                except Exception:
+                    logger.debug("open intent 判别失败", exc_info=True)
+                    open_req = None
+            if open_req is not None:
+                try:
+                    result = await self._execute_open_on_request(
+                        open_req, confirmed=False
+                    )
+                    if result is not None:
+                        if result.get("needs_confirmation") or (
+                            result.get("outcome") == "confirm_required"
+                        ):
+                            self.pending_assist_confirmation = open_req
+                            self.pending_assist_confirmation_at = datetime.now()
+                            self.pending_assist_heartbeats = 0
+                            self._clear_assist_target()
+                        await self._deliver_action_result(
+                            result, datetime.now()
+                        )
+                        return (result.get("qi_line") or "").strip() or None
+                except Exception:
+                    logger.exception("open 对话拍 execute 失败")
+                return None
 
             look_invited = False
             if detect_look_invite is not None and self.action is not None:

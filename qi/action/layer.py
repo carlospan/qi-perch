@@ -13,6 +13,7 @@ from qi.action.budget import BODY_MEMORY_KEY, ActionBudget
 from qi.action.explore import ExploreAction
 from qi.action.explore_web import WebSearchClient
 from qi.action.look import LookAction
+from qi.action.open import OpenAction, OpenRequest
 from qi.action.permission import OUTCOME_OVERSTEPPED, outcome_creates_scar
 from qi.action.self_ops import SelfOps
 from qi.action.share import ShareAction
@@ -79,6 +80,7 @@ class ActionLayer:
         self.self_ops = SelfOps(db)
         self.assist = AssistAction(db, llm=llm, narrative=narrative)
         self.look = LookAction(db, config=self.config, llm=llm)
+        self.open = OpenAction(db, llm=llm, config=self.config, look=self.look)
         self.last_result: dict | None = None
         self.last_closed_loop: dict[str, Any] | None = None
 
@@ -333,19 +335,27 @@ class ActionLayer:
         op: str | None = None,
         target_path: str | None = None,
         confirmed: bool = False,
+        payload: Any | None = None,
+        selected_index: int | None = None,
     ) -> dict | None:
         """GWS 分发：执行指定行动 kind，跳过 tick 内随机软门。"""
         self.last_result = None
         if not user_online or mode == "dreaming":
             return None
-        # B1：awake 放行 self_ops + assist + look（响应式）
+        # B1：awake 放行 self_ops + assist + look + open（响应式）
         if mode == "awake":
-            if kind not in _AWAKE_SELF_OPS and kind not in ("assist", "look"):
+            if kind not in _AWAKE_SELF_OPS and kind not in (
+                "assist",
+                "look",
+                "open",
+            ):
                 return None
         elif mode not in ("solitary", "ambient"):
             return None
-        # B2：assist / look 响应式不占预算，跳过自主日限总闸
-        if kind not in ("assist", "look") and not self.budget.can_autonomous(now):
+        # B2：assist / look / open 响应式不占预算，跳过自主日限总闸
+        if kind not in ("assist", "look", "open") and not self.budget.can_autonomous(
+            now
+        ):
             return None
 
         undelivered = await self.db.load_unshared_creation()
@@ -460,6 +470,29 @@ class ActionLayer:
                 and result.get("outcome") == "success"
             ):
                 self.budget.record("look", now)
+        elif kind == "open":
+            open_req = payload if isinstance(payload, OpenRequest) else None
+            if open_req is None and target_path:
+                intent = op or "open"
+                url_like = str(target_path).startswith(("http://", "https://"))
+                open_req = OpenRequest(
+                    intent=intent
+                    if intent in ("open", "open_and_look", "teach")
+                    else "open",
+                    target_type="url" if url_like else "app",
+                    target=str(target_path),
+                )
+            if open_req is None:
+                result = None
+            else:
+                result = await self.open.execute(
+                    open_req,
+                    relationship_stage=relationship_stage,
+                    confirmed=confirmed,
+                    season=season,
+                    now=now,
+                    selected_index=selected_index,
+                )
         else:
             return None
 

@@ -15,16 +15,21 @@ const fileName = computed(() => {
   const parts = props.card.target_path.split(/[\\/]/);
   return parts[parts.length - 1] || props.card.target_path;
 });
+
+const mark = computed(() => props.card.confirm_mark || (props.card.kind === "open" ? "开？" : "看？"));
+const confirmLabel = computed(
+  () => props.card.confirm_label || (props.card.kind === "open" ? "开吧" : "看吧"),
+);
 </script>
 
 <template>
-  <article class="paper assist-confirm" aria-label="栖想看这个文件">
-    <span class="mark">看？</span>
+  <article class="paper assist-confirm" :aria-label="mark">
+    <span class="mark">{{ mark }}</span>
     <div class="filename">{{ fileName }}</div>
     <p class="summary">{{ card.summary }}</p>
     <div class="actions">
       <button type="button" class="confirm" @click="$emit('confirm')">
-        看吧
+        {{ confirmLabel }}
       </button>
       <button type="button" class="cancel" @click="$emit('cancel')">
         不用
