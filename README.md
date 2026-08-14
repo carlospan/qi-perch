@@ -10,7 +10,7 @@
 - Python 3.12+
 - Node.js 18+（仅具身前端）
 - Rust + MSVC（仅 Tauri 桌面壳）
-- LLM：OpenAI 兼容接口（示例默认 **tokenrhythm / minimax-m2.7**；`providers.deepseek` 备用）
+- LLM：OpenAI 兼容接口（示例默认 **sensenova / sensenova-6.8-flash-lite**；tokenrhythm / ark 备用）
 
 换机 / 从零完整步骤见 [换机搭建.md](docs/how-to/换机搭建.md)。
 
@@ -20,7 +20,7 @@
 pip install -e ".[dev]"
 
 copy .env.example .env
-# 编辑 .env：填 TOKENRHYTHM_API_KEY=...（改用 deepseek 时填 DEEPSEEK_API_KEY，并改 settings 路由）
+# 编辑 .env：填 SENSENOVA_API_KEY=...（备用可填 TOKENRHYTHM_API_KEY / ARK_API_KEY）
 
 mkdir data 2>nul
 copy qi\config\settings.example.yaml data\settings.yaml

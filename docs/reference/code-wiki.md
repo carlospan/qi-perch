@@ -14,7 +14,7 @@
 
 - **语言/运行时**：Python 3.12+（后端意识体）、Node.js 18+（具身前端）、Rust + MSVC（Tauri 桌面壳）
 - **形态**：单进程异步 agent loop（心跳）+ WebSocket 具身通道 + Tauri 聊天壳 / VRM 桌宠
-- **认知来源**：OpenAI 兼容协议的远程 LLM（现行 **tokenrhythm / minimax-m2.7**；`providers.deepseek` 备用），按 `purpose` 路由
+- **认知来源**：OpenAI 兼容协议的远程 LLM（现行 **sensenova / sensenova-6.8-flash-lite**；tokenrhythm / ark 备用），按 `purpose` 路由
 - **持久化**：SQLite（`data/qi.db`，17 张表）+ ChromaDB（`data/chroma/`，BGE 语义向量）
 - **测试规模**：约 **561** 条 pytest（`pytest` 全绿，2026-08-09；explore C 收口时约 500、L7 收口后约 556、阶段四退出时约 405）
 - **协议**：MIT
@@ -257,7 +257,7 @@ requirements.lock   锁定版本（CI 用）
 
 **用途默认温度**：conversation 0.7 / consciousness 0.85 / dream 1.1 / fact 0.3。
 
-**路由示例**（settings.yaml）：`conversation: "tokenrhythm:fast"`（custom `minimax-m2.7`；`providers.deepseek` 备用）。
+**路由示例**（settings.yaml）：`conversation: "sensenova:fast"`（`sensenova-6.8-flash-lite`；tokenrhythm / ark 备用）。
 
 ### 3.8 `qi/stasis/` — 内稳态与存续（N0 / 阶段四）
 
@@ -583,7 +583,7 @@ Vue 3.5 / Tauri API 2.11 / three + @pixiv/three-vrm / Vite 6 / TypeScript 5.7。
 - Python 3.12+
 - Node.js 18+（仅具身前端）
 - Rust + MSVC（Tauri 桌面壳，仅 Windows 具身）
-- LLM：OpenAI 兼容接口（现行 **tokenrhythm**；deepseek 备用）
+- LLM：OpenAI 兼容接口（现行 **sensenova / sensenova-6.8-flash-lite**；tokenrhythm / ark 备用）
 
 ### 8.2 安装
 
@@ -593,7 +593,7 @@ pip install -e ".[dev]"
 
 # 密钥
 copy .env.example .env
-# 编辑 .env：TOKENRHYTHM_API_KEY=...（备用可填 DEEPSEEK_API_KEY）
+# 编辑 .env：SENSENOVA_API_KEY=...（备用可填 TOKENRHYTHM_API_KEY / ARK_API_KEY）
 
 # 配置（推荐放 data/，与记忆数据一起，不入库）
 copy qi\config\settings.example.yaml data\settings.yaml
@@ -681,12 +681,11 @@ push `main` / PR 触发，两个 job：
 
 ```yaml
 llm:
-  default_provider: "tokenrhythm"
-  providers: { deepseek }   # 官方备用
-  custom_providers: { tokenrhythm }  # 现行：minimax-m2.7
+  default_provider: "sensenova"
+  custom_providers: { sensenova, tokenrhythm, ark }  # 现行：sensenova-6.8-flash-lite
   model_routing:
-    conversation: "tokenrhythm:fast"
-    narrative: "tokenrhythm:strong"
+    conversation: "sensenova:fast"
+    narrative: "sensenova:strong"
     consciousness / dream / creation / fact: "tokenrhythm:fast"
     reflection: "tokenrhythm:strong"
 

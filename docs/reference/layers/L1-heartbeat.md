@@ -50,7 +50,7 @@ qi/prompts/conversation.txt      # 对话 prompt
 ### Step 1：数据库 + 配置
 
 - 建 `qi/storage/database.py`：初始化 SQLite，建 `emotion_states` 和 `messages` 表
-- 建 `qi/config/settings.yaml`：LLM provider（example 默认 **tokenrhythm / minimax-m2.7**，`providers.deepseek` 备用；OpenAI 兼容协议）、API key（从环境变量读）、心跳间隔
+- 建 `qi/config/settings.yaml`：LLM provider（example 默认 **sensenova / sensenova-6.8-flash-lite**，tokenrhythm / ark 备用；OpenAI 兼容协议）、API key（从环境变量读）、心跳间隔
 - 验收：`python -c "from qi.storage.database import Database; ..."` 不报错
 
 <details>
@@ -86,26 +86,26 @@ CREATE TABLE IF NOT EXISTS messages (
 
 ```yaml
 # qi/config/settings.example.yaml（权威模板；本地 settings.yaml 不入库）
-# <!-- 回写(2026-08-05)：仅保留 deepseek；fast/strong = deepseek-v4-flash -->
+# <!-- 回写(2026-08-15)：现行 sensenova-6.8-flash-lite；已移除 deepseek provider -->
 
 llm:
-  default_provider: "deepseek"
-  providers:
-    deepseek:
-      base_url: "https://api.deepseek.com"
-      api_key: "${DEEPSEEK_API_KEY}"
+  default_provider: "sensenova"
+  custom_providers:
+    sensenova:
+      base_url: "https://token.sensenova.cn/v1"
+      api_key: "${SENSENOVA_API_KEY}"
       models:
-        fast: "deepseek-v4-flash"
-        strong: "deepseek-v4-flash"
-  custom_providers: {}
+        fast: "sensenova-6.8-flash-lite"
+        strong: "sensenova-6.8-flash-lite"
   model_routing:
-    conversation: "deepseek:fast"
-    narrative: "deepseek:strong"
-    consciousness: "deepseek:fast"
-    dream: "deepseek:fast"
-    creation: "deepseek:fast"
-    reflection: "deepseek:strong"
-    fact: "deepseek:fast"
+    conversation: "sensenova:fast"
+    narrative: "sensenova:strong"
+    consciousness: "sensenova:fast"
+    dream: "sensenova:fast"
+    creation: "sensenova:fast"
+    reflection: "sensenova:strong"
+    fact: "sensenova:fast"
+    look: "sensenova:fast"
 
 rhythm:
   awake_interval: 3
@@ -269,7 +269,7 @@ def clamp_emotion(emotion: EmotionState) -> EmotionState:
 
 ### Step 3：LLM 层 + Prompt
 
-- 建 `qi/llm/providers/openai_compat.py`：OpenAI 兼容端点的统一 provider（deepseek / custom_providers）
+- 建 `qi/llm/providers/openai_compat.py`：OpenAI 兼容端点的统一 provider（sensenova / tokenrhythm / ark 等）
 - 建 `qi/llm/gateway.py`：按 `model_routing` 的 "provider:档位" 路由，暴露 `call(purpose, messages, temperature)` 方法
 - 建 `qi/llm/prompt_builder.py`：组装 system prompt（注入情绪描述、时间）
 - 建 `qi/prompts/conversation.txt`：**自己写**。参考 `qi/prompts/conversation.txt` 模板
@@ -301,7 +301,7 @@ class LLMGateway:
     def __init__(self, config: dict):
         self.providers: dict[str, OpenAICompatProvider] = {}
         self.routing: dict = config.get("llm", {}).get("model_routing", {})
-        self._default_provider = config.get("llm", {}).get("default_provider", "deepseek")
+        self._default_provider = config.get("llm", {}).get("default_provider", "sensenova")
         self._init_providers(config)
         # _init_providers：遍历 llm.providers + llm.custom_providers，
         # 为每个有 base_url+models 的条目建 OpenAICompatProvider

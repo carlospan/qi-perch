@@ -1,15 +1,8 @@
 # LLM 配置（OpenAI 兼容协议）
-# 现行示例：tokenrhythm（kimi-k2.7-code）；ark / deepseek 备用
-# 密钥放仓库根 .env：TOKENRHYTHM_API_KEY=...（ark 备用则 ARK_API_KEY=...）
+# 现行示例：sensenova（sensenova-6.8-flash-lite）；tokenrhythm / ark 备用
+# 密钥放仓库根 .env：SENSENOVA_API_KEY=...（备用 TOKENRHYTHM_API_KEY / ARK_API_KEY）
 llm:
-  default_provider: "tokenrhythm"
-  providers:
-    deepseek:
-      base_url: "https://api.deepseek.com"
-      api_key: "${DEEPSEEK_API_KEY}"
-      models:
-        fast: "deepseek-v4-flash"
-        strong: "deepseek-v4-flash"
+  default_provider: "sensenova"
   custom_providers:
     ark:
       base_url: "https://ark.cn-beijing.volces.com/api/v3"
@@ -23,15 +16,21 @@ llm:
       models:
         fast: "kimi-k2.7-code"
         strong: "kimi-k2.7-code"
+    sensenova:
+      base_url: "https://token.sensenova.cn/v1"
+      api_key: "${SENSENOVA_API_KEY}"
+      models:
+        fast: "sensenova-6.8-flash-lite"
+        strong: "sensenova-6.8-flash-lite"
   model_routing:
-    conversation: "tokenrhythm:fast"
-    narrative: "tokenrhythm:strong"
-    consciousness: "tokenrhythm:fast"
-    dream: "tokenrhythm:fast"
-    creation: "tokenrhythm:fast"
-    reflection: "tokenrhythm:strong"
-    fact: "tokenrhythm:fast"
-    look: "tokenrhythm:fast"
+    conversation: "sensenova:fast"
+    narrative: "sensenova:strong"
+    consciousness: "sensenova:fast"
+    dream: "sensenova:fast"
+    creation: "sensenova:fast"
+    reflection: "sensenova:strong"
+    fact: "sensenova:fast"
+    look: "sensenova:fast"
 
 # 心跳配置
 rhythm:
