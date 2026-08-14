@@ -174,6 +174,10 @@ async def test_allow_then_open_app(db, tmp_path):
         req, relationship_stage="acquaintance", confirmed=True
     )
     assert allowed.get("outcome") == "success"
+    assert allowed.get("offer_open_now") is True
+    assert "没开" in (allowed.get("qi_line") or "")
+    assert "现在开吗" in (allowed.get("qi_line") or "")
+    assert "开前还是会问" not in (allowed.get("qi_line") or "")
     entries = await load_whitelist(db)
     assert find_whitelist_entry(entries, "网易云")
 
@@ -339,10 +343,23 @@ async def test_brain_whitelist_miss_要_promotes_allow(tmp_path):
             assert getattr(pending2, "candidates", None)
 
             line3 = await brain.receive_user_message("开吧")
-            assert "可以帮你开" in (line3 or "")
-            assert brain.pending_assist_confirmation is None
+            assert line3 is not None
+            assert "记下了" in line3 and "没开" in line3
+            assert "现在开吗" in line3
+            pending3 = brain.pending_assist_confirmation
+            assert pending3 is not None
+            assert getattr(pending3, "intent", None) == "open"
+            assert getattr(pending3, "target", None) == "企微"
             entries = await load_whitelist(db)
             assert find_whitelist_entry(entries, "企微")
+
+            with patch.object(
+                OpenAction, "_launch_path"
+            ) as launch:
+                line4 = await brain.receive_user_message("开吧")
+                assert "开了" in (line4 or "")
+                launch.assert_called_once()
+            assert brain.pending_assist_confirmation is None
 
         await db.close()
 
@@ -454,3 +471,59 @@ def test_find_app_candidates_skips_uninstall(tmp_path, monkeypatch):
     assert found
     assert all("Uninstall" not in c["path"] for c in found)
     assert any("WXWork.exe" in c["path"] for c in found)
+
+
+@pytest.mark.asyncio
+async def test_open_confirm_speaks_without_assist_card():
+    """open 确认：谈区开口，不广播 AssistConfirmCard（避免与 qi_line 重复）。"""
+    from qi.core.brain import Brain
+
+    brain = Brain({}, MagicMock())
+    delivered: list[str] = []
+    broadcasts: list[dict] = []
+
+    async def fake_deliver(text, now, proactive=False):
+        delivered.append(text)
+
+    async def fake_broadcast(msg):
+        broadcasts.append(msg)
+
+    brain._deliver_qi_message = fake_deliver  # type: ignore[method-assign]
+    brain.embodiment = MagicMock()
+    brain.embodiment.broadcast = fake_broadcast
+
+    msg = "以后都可以帮你开「qq」吗？我找到这些，回 1/2 或说开吧（默认 1）："
+    await brain._deliver_action_result(
+        {
+            "type": "assist_confirm_request",
+            "kind": "open",
+            "target_path": "C:/QQ/QQ.exe",
+            "summary": msg,
+            "qi_line": msg,
+            "speak": True,
+            "outcome": "confirm_required",
+            "needs_confirmation": True,
+            "confirm_label": "好",
+        },
+        datetime(2026, 8, 15, 4, 55),
+    )
+    assert delivered == [msg]
+    assert broadcasts == []
+
+    # assist（非 open）仍广播确认卡
+    delivered.clear()
+    await brain._deliver_action_result(
+        {
+            "type": "assist_confirm_request",
+            "target_path": "D:/a.txt",
+            "summary": "要我看 a.txt 吗？",
+            "qi_line": "要我看 a.txt 吗？",
+            "speak": True,
+            "outcome": "confirm_required",
+            "needs_confirmation": True,
+        },
+        datetime(2026, 8, 15, 4, 56),
+    )
+    assert delivered == ["要我看 a.txt 吗？"]
+    assert len(broadcasts) == 1
+    assert broadcasts[0]["payload"]["type"] == "assist_confirm_request"

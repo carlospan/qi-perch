@@ -1188,6 +1188,26 @@ class Brain:
         self.last_assist_target = None
         self.last_assist_target_at = None
 
+    def _arm_open_after_allow(self, result: dict | None) -> None:
+        """allow 成功后挂 open pending（方案 A：记下了，问现在开吗）。"""
+        if not result or not result.get("offer_open_now"):
+            return
+        alias = str(result.get("allow_alias") or "").strip()
+        if not alias:
+            return
+        try:
+            from qi.action.open import OpenRequest
+        except Exception:
+            return
+        self.pending_assist_confirmation = OpenRequest(
+            intent="open",
+            target_type="app",
+            target=alias,
+        )
+        self.pending_assist_confirmation_at = datetime.now()
+        self.pending_assist_heartbeats = 0
+        self._clear_assist_target()
+
     def _pending_selected_index(self, text: str) -> int | None:
         t = text.strip()
         if t in ("1", "2", "3"):
@@ -1365,6 +1385,8 @@ class Brain:
                                     datetime.now()
                                 )
                                 self.pending_assist_heartbeats = 0
+                            elif result is not None:
+                                self._arm_open_after_allow(result)
                         else:
                             # assist-5：确认成功后保留 last_assist_target（粘性补执行）
                             result = await self._execute_confirmed_assist(
@@ -1483,6 +1505,8 @@ class Brain:
                             self.pending_assist_confirmation_at = datetime.now()
                             self.pending_assist_heartbeats = 0
                             self._clear_assist_target()
+                        else:
+                            self._arm_open_after_allow(result)
                         await self._deliver_action_result(
                             result, datetime.now()
                         )

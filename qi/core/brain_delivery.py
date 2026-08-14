@@ -136,6 +136,13 @@ async def deliver_action_result(brain: Brain, result: dict, now: datetime) -> No
             str(result["qi_line"]), now, proactive=True
         )
 
+    # open 确认：谈区正文已是完整问句（含多候选 1/2），再叠 AssistConfirmCard 会重复
+    if (
+        result.get("type") == "assist_confirm_request"
+        and result.get("kind") == "open"
+    ):
+        return
+
     # 2) 再广播——谈区时间线：栖那句 → 卡片
     if brain.embodiment is not None:
         try:

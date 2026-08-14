@@ -30,7 +30,7 @@
 
 - **2026-08-15 · 人机协作铁律入宪**：`docs/README.md` 开篇立 HITL + Spec-driven + 渐进对齐（一块一拍）；细则仍在 `SDD-GUIDE` §2.5；任务包模板与 IDE-Agent 手册对齐。
 - **2026-08-15 · L7 look 防连瞥硬门**：自主 15min 间隔不可被「事不过三」突破；邀看仍不受限；`tests/test_look.py` 覆盖间隔内连冲动与邀看旁路。真源 `docs/specs/tasks/2026-08-13-L7-look-窗口瞥视-任务包.md`。
-- **2026-08-15 · L7 open 打开落地**：`qi/action/open.py` + permission/layer/brain；确认复用 assist 卡（单槽）；意图 `open`/`open_and_look`/`allow`（旧名 teach 已收）；空白名单 `body_memory`；应用发现：开始菜单 + 常见目录浅搜；`tests/test_open.py` 绿。真源 `docs/specs/tasks/2026-08-15-L7-open-打开-任务包.md`。list_dir / 删白名单 / write / together 仍后置。
+- **2026-08-15 · L7 open 打开落地**：`qi/action/open.py` + permission/layer/brain；确认复用 assist pending（单槽），**谈区正文不叠确认卡**；意图 `open`/`open_and_look`/`allow`（旧名 teach 已收）；空白名单 `body_memory`；应用发现：开始菜单 + 常见目录浅搜；`tests/test_open.py` 绿。真源 `docs/specs/tasks/2026-08-15-L7-open-打开-任务包.md`。list_dir / 删白名单 / write / together 仍后置。
 - **2026-08-13 · L7 look 窗口瞥视落地**：`qi/action/look.py` + volition/permission/layer/brain 接线；邀看对话拍；别看 1h / 防连瞥 15min / 沉默 20min 软加分；`purpose=look`；`tests/test_look.py` 绿。真源任务包 `docs/specs/tasks/2026-08-13-L7-look-窗口瞥视-任务包.md`（感受验待维护者）。open/write/together 仍后置。
 - **2026-08-13 · L7 世界触达四能力冻结**：下一刀为 `look`（窗口截图→视觉印象，含屏内容；感知从宽）/ `open` / `write` / `together`；个体非工具；不做自动签到、通用网页 Agent、键鼠监控；`irreversible` 后置。真源 `docs/specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md`。
 

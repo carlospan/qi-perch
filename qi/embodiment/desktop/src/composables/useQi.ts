@@ -439,6 +439,8 @@ function createQi() {
           return;
         }
         if (payload?.type === "assist_confirm_request") {
+          // open：确认只走谈区正文 + 口头，不叠卡（与 brain_delivery 一致）
+          if (payload.kind === "open") return;
           if (String(payload.target_path || "").trim()) {
             appendCard(payload);
           }

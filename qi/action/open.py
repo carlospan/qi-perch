@@ -729,7 +729,8 @@ class OpenAction:
             }
         )
         await save_whitelist(self.db, entries)
-        msg = f"好，以后「{req.target}」我可以帮你开——开前还是会问你。"
+        # 方案 A：只记不写开；口吻要说清「没开」，并问要不要现在开（brain 挂 open pending）
+        msg = f"记下了「{req.target}」。这次我没开，现在开吗？"
         await self.db.insert_action(
             "open",
             f"allow:{req.target}",
@@ -748,6 +749,8 @@ class OpenAction:
             "speak": True,
             "outcome": OUTCOME_SUCCESS,
             "intent": "allow",
+            "offer_open_now": True,
+            "allow_alias": req.target,
         }
 
     async def _execute_url(
@@ -918,7 +921,8 @@ class OpenAction:
             )
 
         await self._mark_debounce(path, now)
-        qi_line = "开了，你看看对不对。"
+        # startfile/Popen 只表示已托给系统，窗口冷启动常晚几秒；开口要说清「已点开、请稍等」
+        qi_line = "开了——窗口起来可能稍慢，你稍等一下看看。"
         if req.intent == "open_and_look":
             glance_line = await self._glance_after_open(
                 relationship_stage=relationship_stage,

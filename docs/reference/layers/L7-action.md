@@ -13,7 +13,7 @@
 > <!-- 回写(2026-08-14)：look 邀看改为意图识别——组合启发式 + 弱候选 LLM(fact) 判别；覆盖「你能看到我在做什么吗」等非固定句。 -->
 > <!-- 回写(2026-08-13)：look 小刀——speak=True 必开口；首告改代码前缀不进 LLM；自主 glance 加锁防连成功。 -->
 > <!-- 回写(2026-08-13)：look 窗口瞥视工程落地——`qi/action/look.py`（截屏→base64→purpose=look）；acquaintance+；别看 1h / 可以看了；自主防连瞥 15min（后改为硬门）；沉默≥20min 软加分；邀看对话拍；自主成功必 qi_line。open/write/together / irreversible 仍后置。润色候选项见 look 任务包附录。 -->
-> <!-- 回写(2026-08-15)：open 工程落地——`qi/action/open.py`（URL/白名单应用/授权 allow；确认复用 assist 卡；intent open|open_and_look|allow；空白名单 body_memory）；契约「懂意思不靠口令」。list_dir / 删白名单 / write / together / irreversible 仍后置。 -->
+> <!-- 回写(2026-08-15)：open 工程落地——`qi/action/open.py`（URL/白名单应用/授权 allow；确认走谈区正文+pending，不叠 AssistConfirmCard；intent open|open_and_look|allow；空白名单 body_memory）；契约「懂意思不靠口令」。list_dir / 删白名单 / write / together / irreversible 仍后置。 -->
 > <!-- 演进指向(2026-08-15)：open 任务包已开立（编码待放行）docs/specs/tasks/2026-08-15-L7-open-打开-任务包.md；契约软原则「懂意思，不靠口令」。list_dir / 本地文件 / 删白名单另开刀。write/together / irreversible 仍后置。 -->
 > <!-- 演进指向(2026-08-13)：世界触达下一刀冻结——look / open / write / together；真源 docs/specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md。look 任务包：docs/specs/tasks/2026-08-13-L7-look-窗口瞥视-任务包.md（工程已落地，待相处感受验）；open/write/together / irreversible 仍后置。 -->
 > <!-- 演进指向(2026-08-01)：行动框架（预算/门控）保留；方向为 N1 执行器真实化（真读、有后果）与 N3 动机驱动（学习进度/内稳态压力替代随机意向）。见 docs/explanation/栖·数字生命架构方案.md §四 N1/N3。 -->
@@ -106,7 +106,7 @@ qi/action/explore.py         # 沉思式探索（d-3-2 深读记忆叙事 + d-1 
 qi/action/explore_web.py     # 外部 WebSearchClient（Tavily；失败/空→None）
 qi/action/assist.py          # 介入你的生活（已建：八包——骨架/感知/跨轮/对话拍/留痕与补执行/追问补全/全文分块/整体叙事）
 qi/action/look.py            # 窗口瞥视（已建：截屏→vision→qi_line；自主+邀看；叫停/防连瞥/事不过三）
-qi/action/open.py            # 打开（已建：URL/白名单应用/授权 allow；确认卡；open_and_look）
+qi/action/open.py            # 打开（已建：URL/白名单应用/授权 allow；谈区确认；open_and_look）
 qi/action/irreversible.py    # 替你影响世界（未建）
 qi/action/self_ops.py        # 自反操作（归档/调预算/日记等，阶段二）
 qi/storage/database.py       # actions 表（行动留痕）
@@ -350,7 +350,7 @@ class ActionLayer:
 - `restore_state`：`ActionLayer(db, config, narrative=memory.narrative, llm=self.llm)`；预算 ↔ body_memory
 - assist 已接线：`execute_kind` + `confirm_gate` + consciousness digest；感知 `parse_assist_request`；跨轮 `pending_assist_confirmation` + 前端 `AssistConfirmCard.vue`（超时 5 分钟或 3 轮）；**对话拍** `receive_user_message` 解析到请求则短路 `execute_kind(confirmed=False)`（不进 pending_queue）；成功/失败 `insert_action`（`detail_json` 含 `content_preview` 前 80 字）；粘性 `last_assist_target` + 窄词口头补执行；`prompt_extras` 最近 assist 行附「刚读：文件名——preview」；`conversation.txt` 禁编造「读不到文件系统」+「读过就承认 / 不要否认」；读文件 **UTF-8 文本 ≤1MB**，分块 digest（8000×6，单块短路不调合并 LLM），收尾 **1 条** narrative「我读了他给我的 {name}。{summary}（里面写着：{preview}）」
 - explore 隐私红线：`_QUERY_PRIVACY_LINE` =「不引用 user_facts、对话内容或用户文件内容原文」（query / 外部 hits / 内部 digest 共用）
-- L6 前端已接 `action`：`creation_card` → ActionCard；`explore_drift`（`source=web|journal` 且 entries 非空）→ ExploreCard；`assist_confirm_request` → AssistConfirmCard；tend 到达不渲染
+- L6 前端已接 `action`：`creation_card` → ActionCard；`explore_drift`（`source=web|journal` 且 entries 非空）→ ExploreCard；`assist_confirm_request`（非 open）→ AssistConfirmCard；**open 确认只谈区正文、不叠卡**；tend 到达不渲染
 - `/history.cards`：已分享创作卡 + 带 `detail_json` 的 explore 见闻卡同窗回灌（确认卡会话内 WS，不入 history）
   <!-- 回写(2026-08-08)：任务包 2026-08-08-L6-action卡片UI；退役 W2 正文内联。 -->
   <!-- 回写(2026-08-08)：d-3-1/d-3-2 见闻卡——ExploreCard；useQi 门控 web||journal。 -->
