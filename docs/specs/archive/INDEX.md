@@ -23,6 +23,13 @@
 | [`2026-08-07-n5-hard-gate/`](2026-08-07-n5-hard-gate/INDEX.md) | N5 硬闸扩展 | ✅ 闭环 |
 | [`2026-08-07-n5-retrieval-gate/`](2026-08-07-n5-retrieval-gate/INDEX.md) | N5-b 检索相关门 | 🔧 编码完成，待方案验收 |
 | [`2026-08-07-teach-hardcode-cleanup/`](2026-08-07-teach-hardcode-cleanup/INDEX.md) | 施教硬编码清理 + 机制收束 | 🔧 文案墙待终验；机制收束 ✅ |
+| [`2026-08-08-doc-links/`](2026-08-08-doc-links/INDEX.md) | docs 死链 file 协议跳过 | ✅ 闭环 |
+| [`2026-08-08-L6-action-cards/`](2026-08-08-L6-action-cards/INDEX.md) | L6 action 卡片 UI | ✅ 闭环 |
+| [`2026-08-08-L7-curiosity-unblock/`](2026-08-08-L7-curiosity-unblock/INDEX.md) | curiosity 解堵 + share 停滞排查 | ✅ 闭环 |
+| [`2026-08-08-L7-explore/`](2026-08-08-L7-explore/INDEX.md) | L7 explore 真搜索 C | ✅ 工程闭环 |
+| [`2026-08-08-相处验证收口/`](2026-08-08-相处验证收口/INDEX.md) | L1–L6 相处验证收口 | ✅ 闭环 |
+| [`2026-08-09-L7-n3-scar-share/`](2026-08-09-L7-n3-scar-share/INDEX.md) | N3 / 伤疤 / share cooldown | ✅ 闭环 |
+| [`2026-08-15-L7-world-reach/`](2026-08-15-L7-world-reach/INDEX.md) | 世界触达 look/open/disk/write/together | ✅ 工程闭环 |
 | [`2026-08-09-L7-assist/`](2026-08-09-L7-assist/INDEX.md) | L7 assist 八包 + 隐私小刀（追问 preview / 全文分块 / 整体叙事 / explore 文件红线） | ✅ 工程闭环 |
 
 ## 归档纪律
@@ -33,4 +40,4 @@
 
 ---
 
-*总索引 · 2026-08-09 回写（L7-assist 扩至八包 + 隐私小刀）*
+*总索引 · 2026-08-15 回写（tasks 大批迁档）*

@@ -8,28 +8,13 @@
 
 > **本文档状态：Step 1–6 已落地（actions / budget / volition / permission / share / tend / explore 气质 / ActionLayer / brain 接线）。**
 > 六层（L1~L6）已完成。L7 行动层骨架与起手能力已接入心跳。
-> explore：内部深读（d-3-2，读记忆叙事 + LLM digest + speak + 见闻卡）+ 外部联网（d-1）已收口；d-2 外部 hits 消化 + d-3-1 见闻卡片已收口。C 方案工程交付完成，相处复验中。assist **八包 + 隐私小刀**已落地（`qi/action/assist.py` + brain 对话拍短路；UTF-8 文本 `read_file` ≤1MB）；irreversible 未做。
-> <!-- 回写(2026-08-15)：look 防连瞥改为硬门——15min 自主间隔不可被事不过三/force_soft 突破；邀看仍不受限。 -->
-> <!-- 回写(2026-08-14)：look 邀看改为意图识别——组合启发式 + 弱候选 LLM(fact) 判别；覆盖「你能看到我在做什么吗」等非固定句。 -->
-> <!-- 回写(2026-08-13)：look 小刀——speak=True 必开口；首告改代码前缀不进 LLM；自主 glance 加锁防连成功。 -->
-> <!-- 回写(2026-08-13)：look 窗口瞥视工程落地——`qi/action/look.py`（截屏→base64→purpose=look）；acquaintance+；别看 1h / 可以看了；自主防连瞥 15min（后改为硬门）；沉默≥20min 软加分；邀看对话拍；自主成功必 qi_line。open/write/together / irreversible 仍后置。润色候选项见 look 任务包附录。 -->
-> <!-- 回写(2026-08-15)：together 同看落地——`qi/action/together.py`；池粘性；软邀+主动+见闻卡入口；确认不叠卡；同伴文案。删白名单 / irreversible 仍后置。 -->
-> <!-- 回写(2026-08-15)：write 写下落地——`qi/action/write.py`；D: 白名单目录+文件；日记按日期新建；确认谈区不叠卡；acquaintance+；懂意思。together / 删白名单 / irreversible 仍后置。 -->
-> <!-- 回写(2026-08-15)：list_dir + 打开本地文件（D:）落地——`qi/action/disk.py`；仅 D:\\；浅列一层≤40；确认谈区不叠卡；acquaintance+；白话能力问/邀列/列后指认。write / together / 删应用白名单 / irreversible 仍后置。 -->
-> <!-- 演进指向(2026-08-15)：open 任务包已开立（编码待放行）docs/specs/tasks/2026-08-15-L7-open-打开-任务包.md；契约软原则「懂意思，不靠口令」。list_dir / 本地文件 / 删白名单另开刀。write/together / irreversible 仍后置。 -->
-> <!-- 演进指向(2026-08-13)：世界触达下一刀冻结——look / open / write / together；真源 docs/specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md。look 任务包：docs/specs/tasks/2026-08-13-L7-look-窗口瞥视-任务包.md（工程已落地，待相处感受验）；open/write/together / irreversible 仍后置。 -->
-> <!-- 演进指向(2026-08-01)：行动框架（预算/门控）保留；方向为 N1 执行器真实化（真读、有后果）与 N3 动机驱动（学习进度/内稳态压力替代随机意向）。见 docs/explanation/栖·数字生命架构方案.md §四 N1/N3。 -->
-> <!-- 演进指向(2026-08-08)：包 10 curiosity 候选注入回退（空赢仲裁堵死自主行动，已解；见解堵包）。 -->
-> <!-- 演进指向(2026-08-08)：explore 真搜索 C 方案 d-1~d-3-2 工程已交付（外部 Tavily + digest；内部 narratives 深读；ExploreCard）；相处复验中。 -->
-> <!-- 回写(2026-08-09)：assist 三包已落地；仅 irreversible 仍待做（见下条演进指向）。 -->
-> <!-- 演进指向(2026-08-08)：explore C 方案收尾——d-2 外部 hits→digest；d-3-1 见闻卡片（web）；d-3-2 内部 narratives→digest + speak + 见闻卡（journal）；工程交付完成，相处复验中。 -->
-> <!-- 演进指向(2026-08-09)：explore 补 N3 动机接线——pressure 软调制 explore 概率（常量 K=0.5/0.6），force 下限 0.2。 -->
-> <!-- 演进指向(2026-08-09)：伤疤失败接线——layer._maybe_save_scar；severity 0.3/0.7；origin `[action:{kind}]`；骨架触发源待 assist/irreversible 真实产出。 -->
-> <!-- 演进指向(2026-08-09)：第 4 顺位 assist——assist-1 骨架（execute_kind + confirm_gate + consciousness digest）+ assist-2 感知（parse_assist_request 路径提取）+ assist-3 跨轮确认（pending_assist_confirmation + 前端 AssistConfirmCard.vue + 超时清理）；irreversible 未做。 -->
-> <!-- 回写(2026-08-09)：assist-4 对话拍短路（parse→execute_kind confirmed=False，不进 pending_queue）+ assist-5 留痕 insert_action / conversation 硬规则 / 粘性 last_assist_target 口头补执行；过程稿归档 specs/archive/2026-08-09-L7-assist/。 -->
-> <!-- 回写(2026-08-09)：assist-6 content_preview→prompt_extras + conversation「读过就承认」；assist-7 去 32KB 截断、≤1MB 分块 digest（8000×6，单块短路）；assist-8 收尾 1 条 narrative（整体感受+preview）；隐私小刀 explore `_QUERY_PRIVACY_LINE` 覆盖用户文件内容原文。过程稿同桶归档。 -->
+> explore C（内外深读 + 见闻卡）工程交付、相处复验中。assist 八包 + 隐私小刀已落地。  
+> **世界触达**：look / open / disk / write / together **工程已落地**（任务包装档 `specs/archive/2026-08-15-L7-world-reach/`）。删白名单另开；**irreversible 未做**。  
+> 范围真源：[`docs/specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md`](../../specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md)。  
+> <!-- 回写(2026-08-15)：tasks 大批迁 archive；本节压缩旧演进指向叠注。历史细节见各 archive 桶 INDEX。 -->
+> <!-- 回写(2026-08-09)：N3 / 伤疤 / assist 八包+隐私小刀工程闭环——过程稿见 archive/2026-08-09-L7-assist 与 2026-08-09-L7-n3-scar-share。 -->
 > Step 5：actions + narrative 已接；伤疤 `save_scar` **已接骨架**（`layer._maybe_save_scar`）；self_model 喂入尚未接线。assist 成功/failed_capability 已 `insert_action`（confirm_gate 不写）；读文件成功另写 **1 条** `assist`/`file_read` narrative；生产路径尚无 scar-creating outcome（confirm_gate 不产 overstepped；irreversible 未做）。
-> 已落地处见各段 `<!-- 回写 -->`。
+> 已落地处见各段 `<!-- 回写 -->`；闭环任务包见 `specs/archive/`。
 
 ---
 

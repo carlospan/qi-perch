@@ -137,7 +137,7 @@ class EmbodimentServer:
 #              assist_confirm_request → AssistConfirmCard；tend 不渲染）
 # 前端→后端：user_message | presence | pong | command{/state|/history|/journal}
 #
-# <!-- 回写(2026-08-08)：action/creation_card 卡片 UI 落地；见 tasks/2026-08-08-L6-action卡片UI -->
+# <!-- 回写(2026-08-08)：action/creation_card 卡片 UI 落地；见 archive/2026-08-08-L6-action-cards -->
 # <!-- 回写(2026-08-08)：d-3-1/d-3-2 ExploreCard；useQi 门控 source=web|journal 且 entries 非空 -->
 # <!-- 回写(2026-08-09)：/history.cards 回灌已分享创作卡；见闻卡仍会话瞬时 -->
 # <!-- 回写(2026-08-09)：见闻卡亦回灌——actions.detail_json 存 found.entries -->
