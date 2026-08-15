@@ -141,6 +141,7 @@ async def deliver_action_result(brain: Brain, result: dict, now: datetime) -> No
         "open",
         "disk",
         "write",
+        "together",
     ):
         return
 

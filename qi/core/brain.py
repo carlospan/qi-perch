@@ -122,13 +122,15 @@ class Brain:
         self.last_user_message: str | None = None  # assist-2：供 trace / 感知
         self.last_assist_request = None  # AssistRequest | None（assist-2）
         # assist-3 / open：跨轮确认（仅内存；AssistRequest | OpenRequest）
-        self.pending_assist_confirmation = None  # AssistRequest | OpenRequest | DiskRequest | WriteRequest | None
+        self.pending_assist_confirmation = None  # Assist|Open|Disk|Write|Together|None
         self.pending_assist_confirmation_at: datetime | None = None
         self.pending_assist_heartbeats: int = 0
         # disk 列目录后粘性（名字/序号打开）；仅内存
         self.last_disk_listing: dict | None = None
         # write：无路径时短时记住想写什么；仅内存
         self.write_desire: dict | None = None
+        # together：可同看对象池（explore/share/open）；仅内存
+        self.together_pool: list = []
         # assist-5：粘性目标（确认成功后保留，供口头补执行）
         self.last_assist_target: str | None = None
         self.last_assist_target_at: datetime | None = None
@@ -1291,6 +1293,90 @@ class Brain:
         except Exception:
             return False
 
+    def _is_together_pending(self, req: object) -> bool:
+        try:
+            from qi.action.together import TogetherRequest
+
+            return isinstance(req, TogetherRequest)
+        except Exception:
+            return False
+
+    def _ingest_together_pool(self, result: dict | None) -> None:
+        try:
+            from qi.action.together import candidates_from_action_result
+        except Exception:
+            return
+        added = candidates_from_action_result(result)
+        if not added:
+            return
+        now = datetime.now()
+        for e in added:
+            e = dict(e)
+            e["at"] = now
+            self.together_pool = [
+                x
+                for x in self.together_pool
+                if str(x.get("target")) != str(e.get("target"))
+            ]
+            self.together_pool.append(e)
+        if len(self.together_pool) > 20:
+            self.together_pool = self.together_pool[-20:]
+
+    async def _maybe_soft_invite_together(self, result: dict | None) -> None:
+        if not result or result.get("type") != "explore_drift":
+            return
+        if result.get("outcome") != "success":
+            return
+        try:
+            from qi.action.permission import can_together
+            from qi.action.together import pool_has_openable
+
+            if not can_together(self.relationship_stage):
+                return
+            if not pool_has_openable(self.together_pool):
+                return
+        except Exception:
+            return
+        await self._deliver_qi_message(
+            "要不要一起看看？", datetime.now(), proactive=True
+        )
+
+    async def _execute_together_on_request(
+        self,
+        tog_req: object,
+        *,
+        confirmed: bool = False,
+    ) -> dict | None:
+        if self.action is None:
+            return None
+        now = datetime.now()
+        scars = None
+        if self._db is not None:
+            try:
+                scars = await self._db.list_scars()
+            except Exception:
+                scars = None
+        trust = 0.5
+        if self.relationship is not None:
+            trust = float(
+                getattr(self.relationship.state, "trust", 0.5) or 0.5
+            )
+        return await self.action.execute_kind(
+            "together",
+            self.emotion,
+            self.relationship_stage,
+            self._current_season(),
+            now,
+            mode=self.emotion.mode.value,
+            user_online=self.user_online,
+            scars=scars,
+            sensing=self.last_sensing,
+            pressure=self.last_pressure_response,
+            trust=trust,
+            confirmed=confirmed,
+            payload=tog_req,
+        )
+
     def _remember_write_desire(self, result: dict | None) -> None:
         if not result or not result.get("remember_desire"):
             return
@@ -1596,6 +1682,12 @@ class Brain:
                             )
                             if result and result.get("outcome") == "success":
                                 self.write_desire = None
+                        elif self._is_together_pending(confirmed_req):
+                            self._clear_assist_target()
+                            result = await self._execute_together_on_request(
+                                confirmed_req, confirmed=True
+                            )
+                            self._ingest_together_pool(result)
                         else:
                             # assist-5：确认成功后保留 last_assist_target（粘性补执行）
                             result = await self._execute_confirmed_assist(
@@ -1673,7 +1765,40 @@ class Brain:
                 except Exception:
                     logger.debug("look resume 失败", exc_info=True)
 
-            # write（D: 约定路径写下）：先于 disk，避免「写日记」等被盘口令启发式抢走
+            # together：同看（先于 open，避免「一起看 url」被纯打开抢走）
+            tog_req = None
+            if self.action is not None:
+                try:
+                    from qi.action.together import detect_together_intent
+
+                    tog_req = await detect_together_intent(
+                        text, pool=self.together_pool, llm=self.llm
+                    )
+                except Exception:
+                    logger.debug("together intent 判别失败", exc_info=True)
+                    tog_req = None
+            if tog_req is not None:
+                try:
+                    result = await self._execute_together_on_request(
+                        tog_req, confirmed=False
+                    )
+                    if result is not None:
+                        if result.get("needs_confirmation") or (
+                            result.get("outcome") == "confirm_required"
+                        ):
+                            self.pending_assist_confirmation = tog_req
+                            self.pending_assist_confirmation_at = datetime.now()
+                            self.pending_assist_heartbeats = 0
+                            self._clear_assist_target()
+                        await self._deliver_action_result(
+                            result, datetime.now()
+                        )
+                        return (result.get("qi_line") or "").strip() or None
+                except Exception:
+                    logger.exception("together 对话拍 execute 失败")
+                return None
+
+            # write（D: 约定路径写下）：先于 disk
             write_req = None
             if self.action is not None:
                 try:
@@ -1981,6 +2106,11 @@ class Brain:
     ) -> None:
         """行动结果：卡片推前端；share 的 qi_line 作为这一拍的开口（非主动言语通道）。"""
         await _brain_delivery.deliver_action_result(self, result, now)
+        try:
+            self._ingest_together_pool(result)
+            await self._maybe_soft_invite_together(result)
+        except Exception:
+            logger.debug("together 池/软邀失败", exc_info=True)
 
     async def restore_state(self, db: Database) -> None:
         self._db = db

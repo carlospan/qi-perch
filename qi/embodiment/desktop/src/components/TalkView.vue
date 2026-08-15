@@ -82,6 +82,15 @@ watch(
             <ExploreCard
               v-else-if="m.card.type === 'explore_drift'"
               :card="m.card"
+              @together="
+                (url, title) =>
+                  emit(
+                    'send',
+                    title
+                      ? `一起看「${title}」 ${url}`
+                      : `一起看 ${url}`,
+                  )
+              "
             />
             <AssistConfirmCard
               v-else-if="m.card.type === 'assist_confirm_request'"

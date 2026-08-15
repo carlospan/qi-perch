@@ -19,6 +19,7 @@ from qi.action.permission import OUTCOME_OVERSTEPPED, outcome_creates_scar
 from qi.action.self_ops import SelfOps
 from qi.action.share import ShareAction
 from qi.action.tend import TendAction
+from qi.action.together import TogetherAction, TogetherRequest
 from qi.action.volition import action_intentions
 from qi.action.write import WriteAction, WriteRequest
 
@@ -85,6 +86,7 @@ class ActionLayer:
         self.open = OpenAction(db, llm=llm, config=self.config, look=self.look)
         self.disk = DiskAction(db, config=self.config)
         self.write = WriteAction(db, config=self.config)
+        self.together = TogetherAction(db, config=self.config)
         self.last_result: dict | None = None
         self.last_closed_loop: dict[str, Any] | None = None
 
@@ -352,12 +354,20 @@ class ActionLayer:
                 "open",
                 "disk",
                 "write",
+                "together",
             ):
                 return None
         elif mode not in ("solitary", "ambient"):
             return None
-        # B2：assist / look / open / disk / write 响应式不占预算，跳过自主日限总闸
-        if kind not in ("assist", "look", "open", "disk", "write") and not self.budget.can_autonomous(
+        # B2：响应式不占预算
+        if kind not in (
+            "assist",
+            "look",
+            "open",
+            "disk",
+            "write",
+            "together",
+        ) and not self.budget.can_autonomous(
             now
         ):
             return None
@@ -529,6 +539,25 @@ class ActionLayer:
                     season=season,
                     now=now,
                     llm=self.llm,
+                )
+        elif kind == "together":
+            tog_req = payload if isinstance(payload, TogetherRequest) else None
+            if tog_req is None and target_path:
+                tog_req = TogetherRequest(
+                    target_type="url"
+                    if str(target_path).startswith("http")
+                    else "app",
+                    target=str(target_path),
+                )
+            if tog_req is None:
+                result = None
+            else:
+                result = await self.together.execute(
+                    tog_req,
+                    relationship_stage=relationship_stage,
+                    confirmed=confirmed,
+                    season=season,
+                    now=now,
                 )
         else:
             return None

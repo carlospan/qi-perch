@@ -6,6 +6,10 @@ const props = defineProps<{
   card: ExploreCard;
 }>();
 
+const emit = defineEmits<{
+  together: [url: string, title: string];
+}>();
+
 /** 与后端 explore._SEASON_ZH 同构；未知码兜底原样 */
 const SEASON_ZH: Record<string, string> = {
   spring: "春",
@@ -20,6 +24,12 @@ const seasonLabel = computed(() => {
   const s = (props.card.season || "").trim();
   return s ? SEASON_ZH[s] || s : "";
 });
+
+function onTogether(url: string, title: string) {
+  const u = (url || "").trim();
+  if (!u) return;
+  emit("together", u, (title || "").trim());
+}
 </script>
 
 <template>
@@ -37,6 +47,14 @@ const seasonLabel = computed(() => {
           class="src"
           >↗</a
         >
+        <button
+          v-if="h.url"
+          type="button"
+          class="tog"
+          @click="onTogether(h.url, h.title || '')"
+        >
+          一起看
+        </button>
       </li>
     </ul>
     <footer v-if="seasonLabel" class="foot">{{ seasonLabel }}</footer>
@@ -110,6 +128,24 @@ const seasonLabel = computed(() => {
 
 .hit .src:hover {
   color: var(--ember);
+}
+
+.tog {
+  margin-left: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.5px;
+  color: var(--ember);
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.tog:hover {
+  opacity: 1;
+  text-decoration: underline;
 }
 
 .foot {

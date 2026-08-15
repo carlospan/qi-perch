@@ -839,6 +839,8 @@ class OpenAction:
             "speak": True,
             "outcome": OUTCOME_SUCCESS,
             "intent": req.intent,
+            "opened_target": url,
+            "target_type": "url",
         }
 
     async def _execute_app(
@@ -950,6 +952,9 @@ class OpenAction:
             "speak": True,
             "outcome": OUTCOME_SUCCESS,
             "intent": req.intent,
+            "opened_target": path,
+            "target_type": "app",
+            "allow_alias": req.target,
         }
 
     def _confirm_gate_allow(self, req: OpenRequest) -> dict[str, Any]:

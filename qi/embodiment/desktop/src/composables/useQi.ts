@@ -443,7 +443,8 @@ function createQi() {
           if (
             payload.kind === "open" ||
             payload.kind === "disk" ||
-            payload.kind === "write"
+            payload.kind === "write" ||
+            payload.kind === "together"
           )
             return;
           if (String(payload.target_path || "").trim()) {
