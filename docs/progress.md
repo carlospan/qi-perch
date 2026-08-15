@@ -9,7 +9,7 @@
 | L4 | 内在生命 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 意识流/梦/创作/自我反思已接入；提起 vs 递出已拆分（mentioned_at）；ambient_drift+冷却、waking+余烬、emotion_residue；`last_journal_entries` 实时推送；梦=积压 episode + curiosity≥0.55（非每拍 10%） |
 | L5 | 关系 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 阶段/信任/文化/伤疤/第一次/季节/漂移已接入；first_compliment 不含光秃「谢谢你」；F1 `RECALL_MIN_AGE`；F2 冷启动不测共同沉默；N3b 内在体验禁呼吸/心跳；`last_recorded` |
 | L6 | 具身 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 黄昏的枝 + VRM 桌宠；420×680；情绪→氛围；**相处/回顾/内在**（相处=`/history`+presence-glow；回顾=创作/见闻；内在=`/journal`+`journal_entry`）。启动：`npm run tauri:dev`（开发期可自动拉起 `qi`）。见 `docs/how-to/换机搭建.md` §5 |
-| L7 | 行动 | 🌱 在养 | 2026-07-23 | 2026-07-23 | 第一版骨架已接入：ActionBudget / volition / permission / share·tend·explore / ActionLayer + brain 接线。explore C 方案工程交付、相处复验中。assist 八包 + 隐私小刀已落地。**look** / **open** / **disk** / **write** / **together** 工程已落地。删白名单另开；irreversible 后置。见 L7-action.md |
+| L7 | 行动 | 🌱 在养 | 2026-07-23 | 2026-07-23 | look/open/disk/write/together **工程已落地**。感受验见 `how-to/L7世界触达-感受验清单.md`。删白名单另开；irreversible 后置。见 L7-action.md |
 
 状态说明：
 - ⬜ 未开始
@@ -30,6 +30,7 @@
 
 - **2026-08-15 · 人机协作铁律入宪**：`docs/README.md` 开篇立 HITL + Spec-driven + 渐进对齐（一块一拍）；细则仍在 `SDD-GUIDE` §2.5；任务包模板与 IDE-Agent 手册对齐。
 - **2026-08-15 · L7 look 防连瞥硬门**：自主 15min 间隔不可被「事不过三」突破；邀看仍不受限；`tests/test_look.py` 覆盖间隔内连冲动与邀看旁路。真源 `docs/specs/archive/2026-08-15-L7-world-reach/2026-08-13-L7-look-窗口瞥视-任务包.md`。
+- **2026-08-15 · docs/工作流整改**：Cursor `qi-sdd-hitl.mdc`（一块一拍）；how-to「L7 感受验清单」「文档与代码一致性扫描」；宪法/SDD/判据回写。
 - **2026-08-15 · docs 迁档收束**：`specs/tasks/` 仅留世界触达冻结 + 模板；约 88 份闭环过程稿迁入 `specs/archive/` 分桶（world-reach / explore / n3-scar-share / curiosity-unblock / L6 cards / 相处验证 / doc-links 等）。归档不删。
 
 - **2026-08-15 · 契约「懂意思，不靠口令」升铁律**：写入 `docs/README.md` ★ 第四条、`contract.md`「理解意图」工程自检、`SDD-GUIDE` §2.1 纪律第 5 条、Cursor rule `qi-intent-understanding.mdc`（alwaysApply）。行动意图改码前必守；禁关键词遥控器。

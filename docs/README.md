@@ -18,7 +18,8 @@
 | **懂意思，不靠口令** | 用户怎么说都行，关键是**听懂想干什么**；禁关键词遥控器。真源 → **`reference/contract.md`「理解意图」** |
 
 一句话：**HITL + 规范驱动下的渐进对齐；行动意图必须懂意思。**  
-细则 → **`specs/SDD-GUIDE.md` §2.5**（流程）+ **`reference/contract.md`「理解意图」**（意图铁律）。开新能力包（look / open / disk / write…）默认走这一套；**改行动意图代码前必重读「理解意图」**。
+细则 → **`specs/SDD-GUIDE.md` §2.5**（流程）+ **`reference/contract.md`「理解意图」**（意图铁律）。开新能力包（look / open / disk / write…）默认走这一套；**改行动意图代码前必重读「理解意图」**。  
+Cursor 规则（alwaysApply）：`.cursor/rules/qi-sdd-hitl.mdc`（一块一拍）+ `qi-intent-understanding.mdc`（懂意思）。
 
 ---
 
@@ -74,7 +75,7 @@
 - **过程文档 / 任务包**：问题闭环后**归档到 `specs/archive/` 不删**（对齐 OpenSpec / GitHub Spec Kit；v2“闭环即删”已作废）。活信息先迁入权威文档再归档。体系重构过程稿见 `specs/archive/2026-08-02-docs-restructure/INDEX.md`。
 - **层文档同步**：`reference/layers/` 实现规格以代码为权威，改动代码后回写（工具：`how-to/ide-agent/` 同步层文档代码块）。
 - **常量/文件名/默认状态同步纪律（2026-08-02 立）**：任何改动**代码常量、默认配置值、模块文件名（如 `brain.py`→`brain_*.py`）、功能启用状态（如 `gws.enabled`）**，必须同步排查 `docs/` 下所有写死同一值的位置（含架构方案 §五、explanation/、how-to/、specs/），回写或加演进指向注释。禁止“代码改了文档还写旧值”。
-- **定期审计**：每阶段退出复核，跑一次“文档 vs 代码”一致性扫描（参考 2026-08-02 全面审查发现的日限 1→20、brain.py 拆分、gws 启用状态三处脱节）。
+- **定期审计**：每阶段退出复核，跑一次“文档 vs 代码”一致性扫描——操作见 [`how-to/文档与代码一致性扫描.md`](./how-to/文档与代码一致性扫描.md)（参考 2026-08-02 全面审查发现的日限 1→20、brain.py 拆分、gws 启用状态三处脱节）。
 
 ---
 
@@ -88,4 +89,4 @@
 
 ---
 
-*文档宪法 · v3（2026-08-02：Diátaxis 映射 + 分场景权威裁决 + SDD 入口；2026-08-13：SDD 默认改 Cursor 单线；2026-08-15：**立人机协作铁律**（HITL + Spec-driven + 渐进对齐）+ SDD §2.5；旧路径见各文档头部“现行路径”注释）*
+*文档宪法 · v3（2026-08-02：Diátaxis 映射 + 分场景权威裁决 + SDD 入口；2026-08-13：SDD 默认改 Cursor 单线；2026-08-15：**立人机协作铁律** + SDD §2.5；同日 Cursor 规则 qi-sdd-hitl + 感受验/一致性扫描 how-to；旧路径见各文档头部“现行路径”注释）*

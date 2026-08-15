@@ -37,7 +37,8 @@
 | Spec-driven | 先 Spec / 任务包，再编码 |
 | 渐进对齐 | **一次一块**；谈定立刻写入任务包，不攒、不靠聊天当真源 |
 
-细则：`docs/specs/SDD-GUIDE.md` **§2.5**。违反「长清单一次拍 / 聊完不落盘 / 未放行就改码」视为流程违规。
+细则：`docs/specs/SDD-GUIDE.md` **§2.5**。违反「长清单一次拍 / 聊完不落盘 / 未放行就改码」视为流程违规。  
+Cursor alwaysApply：`qi-sdd-hitl.mdc`（一块一拍）+ `qi-intent-understanding.mdc`（懂意思）。
 
 ---
 

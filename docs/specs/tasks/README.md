@@ -8,9 +8,10 @@
 
 | 任务 | 说明 |
 |------|------|
-| [`2026-08-13-L7-世界触达四能力-冻结.md`](2026-08-13-L7-世界触达四能力-冻结.md) | **范围真源**：look / open / write / together（+ disk 另刀）；工程均已落地，见 archive 桶 |
+| [`2026-08-13-L7-世界触达四能力-冻结.md`](2026-08-13-L7-世界触达四能力-冻结.md) | **范围真源**：look / open / write / together（+ disk）；工程已落地 |
+| （并行）感受验 | [`../../how-to/L7世界触达-感受验清单.md`](../../how-to/L7世界触达-感受验清单.md) |
 | （L7 其后）删白名单 | **未开包**（open/write 另开刀） |
-| （L7 其后）irreversible | **未开包**：排在世界触达之后。见 `reference/layers/L7-action.md` |
+| （L7 其后）irreversible | **未开包**：见 `reference/layers/L7-action.md` |
 
 ## 已迁 archive（查总索引）
 

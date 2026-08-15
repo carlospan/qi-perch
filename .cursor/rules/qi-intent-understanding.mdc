@@ -13,4 +13,6 @@ alwaysApply: true
 4. **不确定就问**，不猜着执行；确认后才动手。
 5. 任务包验收须含非口令口语用例；只有口令通 = bug。
 
+开包对齐产品边界时，另守 **一块一拍**（`.cursor/rules/qi-sdd-hitl.mdc` / `SDD-GUIDE` §2.5）。
+
 真源：`docs/README.md` ★ 铁律第四条；`docs/specs/SDD-GUIDE.md` §2.1 纪律第 5 条。
