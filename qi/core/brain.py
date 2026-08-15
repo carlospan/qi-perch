@@ -122,11 +122,13 @@ class Brain:
         self.last_user_message: str | None = None  # assist-2：供 trace / 感知
         self.last_assist_request = None  # AssistRequest | None（assist-2）
         # assist-3 / open：跨轮确认（仅内存；AssistRequest | OpenRequest）
-        self.pending_assist_confirmation = None  # AssistRequest | OpenRequest | DiskRequest | None
+        self.pending_assist_confirmation = None  # AssistRequest | OpenRequest | DiskRequest | WriteRequest | None
         self.pending_assist_confirmation_at: datetime | None = None
         self.pending_assist_heartbeats: int = 0
         # disk 列目录后粘性（名字/序号打开）；仅内存
         self.last_disk_listing: dict | None = None
+        # write：无路径时短时记住想写什么；仅内存
+        self.write_desire: dict | None = None
         # assist-5：粘性目标（确认成功后保留，供口头补执行）
         self.last_assist_target: str | None = None
         self.last_assist_target_at: datetime | None = None
@@ -1281,6 +1283,90 @@ class Brain:
         except Exception:
             return False
 
+    def _is_write_pending(self, req: object) -> bool:
+        try:
+            from qi.action.write import WriteRequest
+
+            return isinstance(req, WriteRequest)
+        except Exception:
+            return False
+
+    def _remember_write_desire(self, result: dict | None) -> None:
+        if not result or not result.get("remember_desire"):
+            return
+        self.write_desire = {
+            "intent": str(result.get("desire_intent") or "write"),
+            "topic": str(result.get("desire_topic") or ""),
+            "at": datetime.now(),
+        }
+
+    def _write_desire_fresh(self, now: datetime | None = None) -> bool:
+        if not self.write_desire:
+            return False
+        at = self.write_desire.get("at")
+        if not isinstance(at, datetime):
+            return False
+        now = now or datetime.now()
+        return (now - at).total_seconds() <= 10 * 60
+
+    def _arm_write_pending(self, write_req: object, result: dict) -> None:
+        try:
+            from qi.action.write import WriteRequest
+
+            if isinstance(write_req, WriteRequest):
+                content = str(result.get("write_content") or "").strip()
+                if content:
+                    write_req.content = content
+                mode = str(result.get("write_mode") or "")
+                if mode:
+                    write_req.meta["write_mode"] = mode
+                diary_dir = str(result.get("diary_dir") or "").strip()
+                if diary_dir:
+                    write_req.path = diary_dir
+                    write_req.meta["diary_bootstrap"] = True
+        except Exception:
+            pass
+        self.pending_assist_confirmation = write_req
+        self.pending_assist_confirmation_at = datetime.now()
+        self.pending_assist_heartbeats = 0
+        self._clear_assist_target()
+
+    async def _execute_write_on_request(
+        self,
+        write_req: object,
+        *,
+        confirmed: bool = False,
+    ) -> dict | None:
+        if self.action is None:
+            return None
+        now = datetime.now()
+        scars = None
+        if self._db is not None:
+            try:
+                scars = await self._db.list_scars()
+            except Exception:
+                scars = None
+        trust = 0.5
+        if self.relationship is not None:
+            trust = float(
+                getattr(self.relationship.state, "trust", 0.5) or 0.5
+            )
+        return await self.action.execute_kind(
+            "write",
+            self.emotion,
+            self.relationship_stage,
+            self._current_season(),
+            now,
+            mode=self.emotion.mode.value,
+            user_online=self.user_online,
+            scars=scars,
+            sensing=self.last_sensing,
+            pressure=self.last_pressure_response,
+            trust=trust,
+            confirmed=confirmed,
+            payload=write_req,
+        )
+
     async def _execute_disk_on_request(
         self,
         disk_req: object,
@@ -1503,6 +1589,13 @@ class Brain:
                                 disk_payload, confirmed=True
                             )
                             self._remember_disk_listing(result)
+                        elif self._is_write_pending(confirmed_req):
+                            self._clear_assist_target()
+                            result = await self._execute_write_on_request(
+                                confirmed_req, confirmed=True
+                            )
+                            if result and result.get("outcome") == "success":
+                                self.write_desire = None
                         else:
                             # assist-5：确认成功后保留 last_assist_target（粘性补执行）
                             result = await self._execute_confirmed_assist(
@@ -1579,6 +1672,65 @@ class Brain:
                     await self.action.look.clear_pause()
                 except Exception:
                     logger.debug("look resume 失败", exc_info=True)
+
+            # write（D: 约定路径写下）：先于 disk，避免「写日记」等被盘口令启发式抢走
+            write_req = None
+            if self.action is not None:
+                try:
+                    from qi.action.write import (
+                        WriteRequest,
+                        detect_write_intent,
+                        extract_win_path,
+                    )
+
+                    write_req = await detect_write_intent(text, llm=self.llm)
+                    # 无路径欲望粘性：用户补路径 → 接上 diary/write/allow
+                    if write_req is None and self._write_desire_fresh():
+                        path = extract_win_path(text)
+                        if path:
+                            desire = self.write_desire or {}
+                            intent = str(desire.get("intent") or "write")
+                            topic = str(desire.get("topic") or text)
+                            if intent == "diary":
+                                write_req = WriteRequest(
+                                    intent="diary",
+                                    path=path,
+                                    topic=topic,
+                                )
+                            else:
+                                write_req = WriteRequest(
+                                    intent="write",
+                                    path=path,
+                                    topic=topic,
+                                    create_new=True,
+                                )
+                    elif (
+                        write_req is not None
+                        and write_req.intent in ("ask_where",)
+                        and self._write_desire_fresh()
+                    ):
+                        pass
+                except Exception:
+                    logger.debug("write intent 判别失败", exc_info=True)
+                    write_req = None
+            if write_req is not None:
+                try:
+                    result = await self._execute_write_on_request(
+                        write_req, confirmed=False
+                    )
+                    if result is not None:
+                        self._remember_write_desire(result)
+                        if result.get("needs_confirmation") or (
+                            result.get("outcome") == "confirm_required"
+                        ):
+                            self._arm_write_pending(write_req, result)
+                        await self._deliver_action_result(
+                            result, datetime.now()
+                        )
+                        return (result.get("qi_line") or "").strip() or None
+                except Exception:
+                    logger.exception("write 对话拍 execute 失败")
+                return None
 
             # disk（D: 列目录 / 开本地文件）：先于 open，避免「打开 D:\a.txt」误进应用 open
             disk_req = None

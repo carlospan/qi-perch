@@ -140,6 +140,7 @@ async def deliver_action_result(brain: Brain, result: dict, now: datetime) -> No
     if result.get("type") == "assist_confirm_request" and result.get("kind") in (
         "open",
         "disk",
+        "write",
     ):
         return
 

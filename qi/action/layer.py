@@ -20,6 +20,7 @@ from qi.action.self_ops import SelfOps
 from qi.action.share import ShareAction
 from qi.action.tend import TendAction
 from qi.action.volition import action_intentions
+from qi.action.write import WriteAction, WriteRequest
 
 if TYPE_CHECKING:
     from qi.core.emotion import EmotionState
@@ -83,6 +84,7 @@ class ActionLayer:
         self.look = LookAction(db, config=self.config, llm=llm)
         self.open = OpenAction(db, llm=llm, config=self.config, look=self.look)
         self.disk = DiskAction(db, config=self.config)
+        self.write = WriteAction(db, config=self.config)
         self.last_result: dict | None = None
         self.last_closed_loop: dict[str, Any] | None = None
 
@@ -349,12 +351,13 @@ class ActionLayer:
                 "look",
                 "open",
                 "disk",
+                "write",
             ):
                 return None
         elif mode not in ("solitary", "ambient"):
             return None
-        # B2：assist / look / open / disk 响应式不占预算，跳过自主日限总闸
-        if kind not in ("assist", "look", "open", "disk") and not self.budget.can_autonomous(
+        # B2：assist / look / open / disk / write 响应式不占预算，跳过自主日限总闸
+        if kind not in ("assist", "look", "open", "disk", "write") and not self.budget.can_autonomous(
             now
         ):
             return None
@@ -508,6 +511,24 @@ class ActionLayer:
                     confirmed=confirmed,
                     season=season,
                     now=now,
+                )
+        elif kind == "write":
+            write_req = payload if isinstance(payload, WriteRequest) else None
+            if write_req is None and target_path:
+                write_req = WriteRequest(
+                    intent=op or "write",
+                    path=str(target_path),
+                )
+            if write_req is None:
+                result = None
+            else:
+                result = await self.write.execute(
+                    write_req,
+                    relationship_stage=relationship_stage,
+                    confirmed=confirmed,
+                    season=season,
+                    now=now,
+                    llm=self.llm,
                 )
         else:
             return None

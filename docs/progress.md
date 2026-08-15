@@ -9,7 +9,7 @@
 | L4 | 内在生命 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 意识流/梦/创作/自我反思已接入；提起 vs 递出已拆分（mentioned_at）；ambient_drift+冷却、waking+余烬、emotion_residue；`last_journal_entries` 实时推送；梦=积压 episode + curiosity≥0.55（非每拍 10%） |
 | L5 | 关系 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 阶段/信任/文化/伤疤/第一次/季节/漂移已接入；first_compliment 不含光秃「谢谢你」；F1 `RECALL_MIN_AGE`；F2 冷启动不测共同沉默；N3b 内在体验禁呼吸/心跳；`last_recorded` |
 | L6 | 具身 | ✅ 完成 | 2026-07-21 | 2026-08-08 | 黄昏的枝 + VRM 桌宠；420×680；情绪→氛围；**相处/回顾/内在**（相处=`/history`+presence-glow；回顾=创作/见闻；内在=`/journal`+`journal_entry`）。启动：`npm run tauri:dev`（开发期可自动拉起 `qi`）。见 `docs/how-to/换机搭建.md` §5 |
-| L7 | 行动 | 🌱 在养 | 2026-07-23 | 2026-07-23 | 第一版骨架已接入：ActionBudget / volition / permission / share·tend·explore / ActionLayer + brain 接线。explore C 方案工程交付、相处复验中。assist 八包 + 隐私小刀已落地。**look** / **open** / **disk（list_dir+D: 开文件）** 工程已落地。下一刀：write/together；删白名单另开；irreversible 后置。见 L7-action.md |
+| L7 | 行动 | 🌱 在养 | 2026-07-23 | 2026-07-23 | 第一版骨架已接入：ActionBudget / volition / permission / share·tend·explore / ActionLayer + brain 接线。explore C 方案工程交付、相处复验中。assist 八包 + 隐私小刀已落地。**look** / **open** / **disk** / **write** 工程已落地。下一刀：together；删白名单另开；irreversible 后置。见 L7-action.md |
 
 状态说明：
 - ⬜ 未开始
@@ -32,7 +32,8 @@
 - **2026-08-15 · L7 look 防连瞥硬门**：自主 15min 间隔不可被「事不过三」突破；邀看仍不受限；`tests/test_look.py` 覆盖间隔内连冲动与邀看旁路。真源 `docs/specs/tasks/2026-08-13-L7-look-窗口瞥视-任务包.md`。
 - **2026-08-15 · 契约「懂意思，不靠口令」升铁律**：写入 `docs/README.md` ★ 第四条、`contract.md`「理解意图」工程自检、`SDD-GUIDE` §2.1 纪律第 5 条、Cursor rule `qi-intent-understanding.mdc`（alwaysApply）。行动意图改码前必守；禁关键词遥控器。
 
-- **2026-08-15 · L7 disk（list_dir + 打开本地文件）**：`qi/action/disk.py`；仅 `D:\`；浅列一层≤40；谈区确认不叠卡；白话能力问→邀列→列后名字/序号指认；`tests/test_disk.py` 绿。真源 `docs/specs/tasks/2026-08-15-L7-list_dir与本地打开-任务包.md`。write / together / 删应用白名单仍后置。
+- **2026-08-15 · L7 write（写下）**：`qi/action/write.py`；D: 白名单（目录+文件）；日记按 `日记-YYYY-MM-DD.md` 新建；确认不叠卡；白话意图；`tests/test_write.py` 绿。真源 `docs/specs/tasks/2026-08-15-L7-write-写下-任务包.md`。together / 删白名单 / irreversible 仍后置。
+- **2026-08-15 · L7 disk（list_dir + 打开本地文件）**：`qi/action/disk.py`；仅 `D:\`；浅列一层≤40；谈区确认不叠卡；白话能力问→邀列→列后名字/序号指认；`tests/test_disk.py` 绿。真源 `docs/specs/tasks/2026-08-15-L7-list_dir与本地打开-任务包.md`。together / 删应用白名单仍后置。
 
 - **2026-08-15 · L7 open 打开落地**：`qi/action/open.py` + permission/layer/brain；确认复用 assist pending（单槽），**谈区正文不叠确认卡**；意图 `open`/`open_and_look`/`allow`（旧名 teach 已收）；空白名单 `body_memory`；应用发现：开始菜单 + 常见目录浅搜；`tests/test_open.py` 绿。真源 `docs/specs/tasks/2026-08-15-L7-open-打开-任务包.md`。list_dir / 删白名单 / write / together 曾后置（list_dir 同日另包落地）。
 - **2026-08-13 · L7 look 窗口瞥视落地**：`qi/action/look.py` + volition/permission/layer/brain 接线；邀看对话拍；别看 1h / 防连瞥 15min / 沉默 20min 软加分；`purpose=look`；`tests/test_look.py` 绿。真源任务包 `docs/specs/tasks/2026-08-13-L7-look-窗口瞥视-任务包.md`（感受验待维护者）。open/write/together 仍后置。
