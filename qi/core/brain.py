@@ -122,9 +122,11 @@ class Brain:
         self.last_user_message: str | None = None  # assist-2：供 trace / 感知
         self.last_assist_request = None  # AssistRequest | None（assist-2）
         # assist-3 / open：跨轮确认（仅内存；AssistRequest | OpenRequest）
-        self.pending_assist_confirmation = None  # AssistRequest | OpenRequest | None
+        self.pending_assist_confirmation = None  # AssistRequest | OpenRequest | DiskRequest | None
         self.pending_assist_confirmation_at: datetime | None = None
         self.pending_assist_heartbeats: int = 0
+        # disk 列目录后粘性（名字/序号打开）；仅内存
+        self.last_disk_listing: dict | None = None
         # assist-5：粘性目标（确认成功后保留，供口头补执行）
         self.last_assist_target: str | None = None
         self.last_assist_target_at: datetime | None = None
@@ -1188,6 +1190,55 @@ class Brain:
         self.last_assist_target = None
         self.last_assist_target_at = None
 
+    def _remember_disk_listing(self, result: dict | None) -> None:
+        if not result or not result.get("listing_sticky"):
+            return
+        entries = result.get("listing_entries") or []
+        if not entries:
+            return
+        self.last_disk_listing = {
+            "dir": result.get("listing_dir"),
+            "entries": entries,
+            "at": datetime.now(),
+        }
+
+    def _disk_listing_fresh(self, now: datetime | None = None) -> bool:
+        if not self.last_disk_listing:
+            return False
+        at = self.last_disk_listing.get("at")
+        if not isinstance(at, datetime):
+            return False
+        now = now or datetime.now()
+        try:
+            from qi.action.disk import LISTING_STICKY_MINUTES
+
+            mins = float(LISTING_STICKY_MINUTES)
+        except Exception:
+            mins = 5.0
+        return (now - at).total_seconds() <= mins * 60
+
+    def _arm_disk_pending_from_result(
+        self, disk_req: object, result: dict
+    ) -> None:
+        """确认门：offer_list 升成 list_dir pending；其它保持原请求。"""
+        pending: object = disk_req
+        if result.get("promote_intent") == "list_dir":
+            try:
+                from qi.action.disk import DiskRequest
+
+                path = str(
+                    result.get("list_path")
+                    or getattr(disk_req, "path", "")
+                    or ""
+                )
+                pending = DiskRequest(intent="list_dir", path=path)
+            except Exception:
+                pending = disk_req
+        self.pending_assist_confirmation = pending
+        self.pending_assist_confirmation_at = datetime.now()
+        self.pending_assist_heartbeats = 0
+        self._clear_assist_target()
+
     def _arm_open_after_allow(self, result: dict | None) -> None:
         """allow 成功后挂 open pending（方案 A：记下了，问现在开吗）。"""
         if not result or not result.get("offer_open_now"):
@@ -1221,6 +1272,50 @@ class Brain:
             return isinstance(req, OpenRequest)
         except Exception:
             return False
+
+    def _is_disk_pending(self, req: object) -> bool:
+        try:
+            from qi.action.disk import DiskRequest
+
+            return isinstance(req, DiskRequest)
+        except Exception:
+            return False
+
+    async def _execute_disk_on_request(
+        self,
+        disk_req: object,
+        *,
+        confirmed: bool = False,
+    ) -> dict | None:
+        if self.action is None:
+            return None
+        now = datetime.now()
+        scars = None
+        if self._db is not None:
+            try:
+                scars = await self._db.list_scars()
+            except Exception:
+                scars = None
+        trust = 0.5
+        if self.relationship is not None:
+            trust = float(
+                getattr(self.relationship.state, "trust", 0.5) or 0.5
+            )
+        return await self.action.execute_kind(
+            "disk",
+            self.emotion,
+            self.relationship_stage,
+            self._current_season(),
+            now,
+            mode=self.emotion.mode.value,
+            user_online=self.user_online,
+            scars=scars,
+            sensing=self.last_sensing,
+            pressure=self.last_pressure_response,
+            trust=trust,
+            confirmed=confirmed,
+            payload=disk_req,
+        )
 
     async def _execute_open_on_request(
         self,
@@ -1387,6 +1482,27 @@ class Brain:
                                 self.pending_assist_heartbeats = 0
                             elif result is not None:
                                 self._arm_open_after_allow(result)
+                        elif self._is_disk_pending(confirmed_req):
+                            self._clear_assist_target()
+                            disk_payload = confirmed_req
+                            try:
+                                from qi.action.disk import DiskRequest, allowed_root
+
+                                if (
+                                    isinstance(confirmed_req, DiskRequest)
+                                    and confirmed_req.intent == "offer_list"
+                                ):
+                                    disk_payload = DiskRequest(
+                                        intent="list_dir",
+                                        path=confirmed_req.path
+                                        or str(allowed_root()),
+                                    )
+                            except Exception:
+                                pass
+                            result = await self._execute_disk_on_request(
+                                disk_payload, confirmed=True
+                            )
+                            self._remember_disk_listing(result)
                         else:
                             # assist-5：确认成功后保留 last_assist_target（粘性补执行）
                             result = await self._execute_confirmed_assist(
@@ -1463,6 +1579,44 @@ class Brain:
                     await self.action.look.clear_pause()
                 except Exception:
                     logger.debug("look resume 失败", exc_info=True)
+
+            # disk（D: 列目录 / 开本地文件）：先于 open，避免「打开 D:\a.txt」误进应用 open
+            disk_req = None
+            if self.action is not None:
+                try:
+                    from qi.action.disk import (
+                        detect_disk_intent,
+                        resolve_listing_followup,
+                    )
+
+                    if self._disk_listing_fresh():
+                        disk_req = resolve_listing_followup(
+                            text, self.last_disk_listing
+                        )
+                    if disk_req is None:
+                        disk_req = await detect_disk_intent(text, llm=self.llm)
+                except Exception:
+                    logger.debug("disk intent 判别失败", exc_info=True)
+                    disk_req = None
+            if disk_req is not None:
+                try:
+                    result = await self._execute_disk_on_request(
+                        disk_req, confirmed=False
+                    )
+                    if result is not None:
+                        if result.get("needs_confirmation") or (
+                            result.get("outcome") == "confirm_required"
+                        ):
+                            self._arm_disk_pending_from_result(disk_req, result)
+                        else:
+                            self._remember_disk_listing(result)
+                        await self._deliver_action_result(
+                            result, datetime.now()
+                        )
+                        return (result.get("qi_line") or "").strip() or None
+                except Exception:
+                    logger.exception("disk 对话拍 execute 失败")
+                return None
 
             # open：先于 look 邀看（「看看这个链接」走 open_and_look，不误成纯 look）
             open_req = None

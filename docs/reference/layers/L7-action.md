@@ -13,7 +13,7 @@
 > <!-- 回写(2026-08-14)：look 邀看改为意图识别——组合启发式 + 弱候选 LLM(fact) 判别；覆盖「你能看到我在做什么吗」等非固定句。 -->
 > <!-- 回写(2026-08-13)：look 小刀——speak=True 必开口；首告改代码前缀不进 LLM；自主 glance 加锁防连成功。 -->
 > <!-- 回写(2026-08-13)：look 窗口瞥视工程落地——`qi/action/look.py`（截屏→base64→purpose=look）；acquaintance+；别看 1h / 可以看了；自主防连瞥 15min（后改为硬门）；沉默≥20min 软加分；邀看对话拍；自主成功必 qi_line。open/write/together / irreversible 仍后置。润色候选项见 look 任务包附录。 -->
-> <!-- 回写(2026-08-15)：open 工程落地——`qi/action/open.py`（URL/白名单应用/授权 allow；确认走谈区正文+pending，不叠 AssistConfirmCard；intent open|open_and_look|allow；空白名单 body_memory）；契约「懂意思不靠口令」。list_dir / 删白名单 / write / together / irreversible 仍后置。 -->
+> <!-- 回写(2026-08-15)：list_dir + 打开本地文件（D:）落地——`qi/action/disk.py`；仅 D:\\；浅列一层≤40；确认谈区不叠卡；acquaintance+；白话能力问/邀列/列后指认。write / together / 删应用白名单 / irreversible 仍后置。 -->
 > <!-- 演进指向(2026-08-15)：open 任务包已开立（编码待放行）docs/specs/tasks/2026-08-15-L7-open-打开-任务包.md；契约软原则「懂意思，不靠口令」。list_dir / 本地文件 / 删白名单另开刀。write/together / irreversible 仍后置。 -->
 > <!-- 演进指向(2026-08-13)：世界触达下一刀冻结——look / open / write / together；真源 docs/specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md。look 任务包：docs/specs/tasks/2026-08-13-L7-look-窗口瞥视-任务包.md（工程已落地，待相处感受验）；open/write/together / irreversible 仍后置。 -->
 > <!-- 演进指向(2026-08-01)：行动框架（预算/门控）保留；方向为 N1 执行器真实化（真读、有后果）与 N3 动机驱动（学习进度/内稳态压力替代随机意向）。见 docs/explanation/栖·数字生命架构方案.md §四 N1/N3。 -->
@@ -86,6 +86,7 @@ L7 负责：行动意图的形成、行动预算（比言语更紧的克制）�
 |------|--------|----------|
 | `look` | 截前台窗口 → 视觉印象（含屏内容；非仅标题） | 从宽：相处约定 + 叫停；**工程已落地**（`look.py`） |
 | `open` | 确认后开 URL / 白名单应用；可对话授权进名单（allow） | 从慎：要确认；**工程已落地**（`open.py`） |
+| `list_dir` / 本地打开 | 确认后列 **D:\\** 下一层；确认后开 D: 下文件；白话能力问→邀列→名字/序号指认 | 从慎；**工程已落地**（`disk.py`） |
 | `write` | 确认后把短文 append 到约定笔记路径 | 从慎：要确认；未编码 |
 | `together` | 邀你同看她正在探索/分享的那一页 | 同伴；打开动作可贴近 open；未编码 |
 
@@ -107,6 +108,7 @@ qi/action/explore_web.py     # 外部 WebSearchClient（Tavily；失败/空→No
 qi/action/assist.py          # 介入你的生活（已建：八包——骨架/感知/跨轮/对话拍/留痕与补执行/追问补全/全文分块/整体叙事）
 qi/action/look.py            # 窗口瞥视（已建：截屏→vision→qi_line；自主+邀看；叫停/防连瞥/事不过三）
 qi/action/open.py            # 打开（已建：URL/白名单应用/授权 allow；谈区确认；open_and_look）
+qi/action/disk.py            # 盘：列 D: 一层 + 打开 D: 文件（谈区确认）
 qi/action/irreversible.py    # 替你影响世界（未建）
 qi/action/self_ops.py        # 自反操作（归档/调预算/日记等，阶段二）
 qi/storage/database.py       # actions 表（行动留痕）

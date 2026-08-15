@@ -14,7 +14,8 @@
 |------|------|
 | [`2026-08-13-L7-世界触达四能力-冻结.md`](2026-08-13-L7-世界触达四能力-冻结.md) | **维护者冻结**：`look` / `open` / `write` / `together`；感知从宽、行动从慎 |
 | [`2026-08-13-L7-look-窗口瞥视-任务包.md`](2026-08-13-L7-look-窗口瞥视-任务包.md) | look **工程已落地**；感受验可并行 |
-| [`2026-08-15-L7-open-打开-任务包.md`](2026-08-15-L7-open-打开-任务包.md) | open **工程已落地**；感受验可并行；list_dir 另开刀 |
+| [`2026-08-15-L7-open-打开-任务包.md`](2026-08-15-L7-open-打开-任务包.md) | open **工程已落地**；感受验可并行 |
+| [`2026-08-15-L7-list_dir与本地打开-任务包.md`](2026-08-15-L7-list_dir与本地打开-任务包.md) | list_dir + D: 开文件 **工程已落地** |
 | （L7 其后）irreversible | **未开包**：排在世界触达四能力之后。见 `reference/layers/L7-action.md` |
 | [`2026-08-07-N5-b-检索相关门.md`](2026-08-07-N5-b-检索相关门.md) | N5-b 检索相关门；PR 方案见 [`../archive/2026-08-07-n5-retrieval-gate/`](../archive/2026-08-07-n5-retrieval-gate/INDEX.md) |
 | [`2026-08-07-施教硬编码清理.md`](2026-08-07-施教硬编码清理.md) | 施教硬编码清理（文案墙）；见 [`../archive/2026-08-07-teach-hardcode-cleanup/`](../archive/2026-08-07-teach-hardcode-cleanup/INDEX.md) |

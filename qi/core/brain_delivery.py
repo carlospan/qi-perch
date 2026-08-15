@@ -137,9 +137,9 @@ async def deliver_action_result(brain: Brain, result: dict, now: datetime) -> No
         )
 
     # open 确认：谈区正文已是完整问句（含多候选 1/2），再叠 AssistConfirmCard 会重复
-    if (
-        result.get("type") == "assist_confirm_request"
-        and result.get("kind") == "open"
+    if result.get("type") == "assist_confirm_request" and result.get("kind") in (
+        "open",
+        "disk",
     ):
         return
 

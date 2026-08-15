@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from qi.action.assist import AssistAction
 from qi.action.budget import BODY_MEMORY_KEY, ActionBudget
+from qi.action.disk import DiskAction, DiskRequest
 from qi.action.explore import ExploreAction
 from qi.action.explore_web import WebSearchClient
 from qi.action.look import LookAction
@@ -81,6 +82,7 @@ class ActionLayer:
         self.assist = AssistAction(db, llm=llm, narrative=narrative)
         self.look = LookAction(db, config=self.config, llm=llm)
         self.open = OpenAction(db, llm=llm, config=self.config, look=self.look)
+        self.disk = DiskAction(db, config=self.config)
         self.last_result: dict | None = None
         self.last_closed_loop: dict[str, Any] | None = None
 
@@ -340,18 +342,19 @@ class ActionLayer:
         self.last_result = None
         if not user_online or mode == "dreaming":
             return None
-        # B1：awake 放行 self_ops + assist + look + open（响应式）
+        # B1：awake 放行 self_ops + assist + look + open + disk（响应式）
         if mode == "awake":
             if kind not in _AWAKE_SELF_OPS and kind not in (
                 "assist",
                 "look",
                 "open",
+                "disk",
             ):
                 return None
         elif mode not in ("solitary", "ambient"):
             return None
-        # B2：assist / look / open 响应式不占预算，跳过自主日限总闸
-        if kind not in ("assist", "look", "open") and not self.budget.can_autonomous(
+        # B2：assist / look / open / disk 响应式不占预算，跳过自主日限总闸
+        if kind not in ("assist", "look", "open", "disk") and not self.budget.can_autonomous(
             now
         ):
             return None
@@ -488,6 +491,23 @@ class ActionLayer:
                     season=season,
                     now=now,
                     selected_index=selected_index,
+                )
+        elif kind == "disk":
+            disk_req = payload if isinstance(payload, DiskRequest) else None
+            if disk_req is None and target_path:
+                intent = op or "list_dir"
+                if intent not in ("list_dir", "open_file"):
+                    intent = "list_dir"
+                disk_req = DiskRequest(intent=intent, path=str(target_path))
+            if disk_req is None:
+                result = None
+            else:
+                result = await self.disk.execute(
+                    disk_req,
+                    relationship_stage=relationship_stage,
+                    confirmed=confirmed,
+                    season=season,
+                    now=now,
                 )
         else:
             return None

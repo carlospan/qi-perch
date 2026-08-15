@@ -37,6 +37,11 @@ def can_open(relationship_stage: str) -> bool:
     return stage_at_least(relationship_stage, "acquaintance")
 
 
+def can_disk(relationship_stage: str) -> bool:
+    """列 D: 目录 / 打开 D: 文件：acquaintance+；执行侧仍每次确认。"""
+    return stage_at_least(relationship_stage, "acquaintance")
+
+
 def can_archive(
     _relationship_stage: str = "stranger",
     scars: list[dict] | None = None,
