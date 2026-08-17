@@ -13,6 +13,7 @@ const tabs: { id: QiView; label: string }[] = [
   { id: "presence", label: "相处" },
   { id: "review", label: "回顾" },
   { id: "inner", label: "内在" },
+  { id: "state", label: "状态" },
 ];
 </script>
 
@@ -34,7 +35,7 @@ const tabs: { id: QiView; label: string }[] = [
 .tabs {
   display: flex;
   justify-content: center;
-  gap: 34px;
+  gap: 22px;
   margin-bottom: 12px;
   pointer-events: auto;
 }

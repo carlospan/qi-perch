@@ -347,6 +347,16 @@ class EmbodimentServer:
                     if hasattr(self.brain, "public_mode")
                     else e.mode.value
                 )
+                # 刷新表情映射，供桌宠 / 壳同时读到
+                if getattr(self.brain, "avatar", None) is not None:
+                    season = "spring"
+                    if getattr(self.brain, "relationship", None) is not None:
+                        season = self.brain.relationship.state.season
+                    self.brain.avatar.map_state(
+                        e,
+                        mode if mode != "stasis" else "solitary",
+                        season=season,
+                    )
                 await self.broadcast(
                     {
                         "type": "emotion_update",
@@ -364,6 +374,7 @@ class EmbodimentServer:
                         },
                     }
                 )
+                await self.broadcast(self._state_packet())
             elif cmd == "/history":
                 await self._send_history(websocket)
             elif cmd == "/journal":

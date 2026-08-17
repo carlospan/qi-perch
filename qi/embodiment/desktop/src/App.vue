@@ -4,6 +4,7 @@ import InputBox from "./components/InputBox.vue";
 import JournalView from "./components/JournalView.vue";
 import ReviewView from "./components/ReviewView.vue";
 import SceneView from "./components/SceneView.vue";
+import StateView from "./components/StateView.vue";
 import StatusBar from "./components/StatusBar.vue";
 import TalkView from "./components/TalkView.vue";
 import ViewTabs from "./components/ViewTabs.vue";
@@ -16,6 +17,7 @@ const {
   typing,
   season,
   mode,
+  emotion,
   inStasis,
   avatar,
   talkByDay,
@@ -32,6 +34,8 @@ const booted = ref(false);
 const dreaming = computed(
   () => mode.value === "dreaming" || avatar.value.effect === "dream_bubbles"
 );
+/** 自然语言心境（后端 EmotionState.description，非数值标签） */
+const moodText = computed(() => (emotion.value.description || "").trim());
 
 onMounted(() => {
   connect();
@@ -63,7 +67,12 @@ onUnmounted(() => disconnect());
           <h1 data-tauri-drag-region>栖</h1>
         </div>
         <div class="header-right">
-          <StatusBar :mode="mode" :season="season" :connected="connected" />
+          <StatusBar
+            :mode="mode"
+            :season="season"
+            :connected="connected"
+            :mood="moodText"
+          />
           <WindowControls />
         </div>
       </header>
@@ -83,8 +92,11 @@ onUnmounted(() => disconnect());
               :explores="exploreCards"
             />
           </div>
-          <div v-else key="inner" class="overlay">
+          <div v-else-if="view === 'inner'" key="inner" class="overlay">
             <JournalView :entries="journal" />
+          </div>
+          <div v-else key="state" class="overlay">
+            <StateView :emotion="emotion" :connected="connected" />
           </div>
         </Transition>
       </div>

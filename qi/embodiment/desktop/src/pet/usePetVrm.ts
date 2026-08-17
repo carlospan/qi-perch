@@ -14,12 +14,49 @@ export type PetLocomotion = "idle" | "walk";
 /** 1 = 向屏幕右走，-1 = 向左 */
 export type PetFacing = 1 | -1;
 
+/** 与后端 Expression / VRM preset+custom 对齐 */
+export type PetFaceExpression =
+  | "neutral"
+  | "soft_smile"
+  | "happy"
+  | "quiet"
+  | "surprised"
+  | "sleepy"
+  | "curious";
+
+/** 情绪相关 expression 名（每帧清零后再加目标，避免叠脸） */
+const EMOTION_EXPR_NAMES = [
+  "happy",
+  "angry",
+  "sad",
+  "relaxed",
+  "surprised",
+  "neutral",
+  "soft_smile",
+  "quiet",
+  "sleepy",
+  "curious",
+] as const;
+
+/** 目标权重：happy 故意压低，避免 VRoid Joy 眯眼 */
+const EXPR_TARGETS: Record<PetFaceExpression, Record<string, number>> = {
+  neutral: {},
+  soft_smile: { soft_smile: 1 },
+  happy: { happy: 0.38 },
+  quiet: { quiet: 1 },
+  surprised: { surprised: 0.72 },
+  sleepy: { sleepy: 1 },
+  curious: { curious: 1 },
+};
+
 export type PetVrmHandle = {
   ready: Promise<void>;
   destroy: () => void;
   setLocomotion: (mode: PetLocomotion, facing?: PetFacing) => void;
   /** 被点及时：看向你 + 身体微晃（不用 Joy 浅笑，会眯眼像眨眼） */
   notice: (durationMs?: number) => void;
+  /** 情绪脸：后端 avatar_state.expression → VRM preset/custom */
+  setExpression: (expression: string) => void;
 };
 
 /**
@@ -36,6 +73,9 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
   let noticeUntil = 0;
   let noticeStart = 0;
   let raf = 0;
+  let faceExpr: PetFaceExpression = "neutral";
+  /** 当前已应用到模型的权重，向目标缓动 */
+  const faceWeights: Record<string, number> = {};
 
   const clock = new THREE.Clock();
   const scene = new THREE.Scene();
@@ -106,6 +146,15 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
     setLocomotion("idle", 1);
     if (vrm.lookAt) {
       vrm.lookAt.target = lookAtTarget;
+    }
+  };
+
+  const setExpression = (expression: string) => {
+    const key = expression as PetFaceExpression;
+    if (key in EXPR_TARGETS) {
+      faceExpr = key;
+    } else {
+      faceExpr = "neutral";
     }
   };
 
@@ -204,10 +253,15 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
         applyNoticeReaction(vrm, clock.elapsedTime, noticeStart, noticeUntil);
         clearEyeBlink(vrm);
       } else {
-        applyBlink(vrm, clock.elapsedTime);
-        vrm.expressionManager?.setValue("happy", 0);
+        // sleepy 自带半闭眼，减弱自动眨眼以免打架
+        if (faceExpr === "sleepy") {
+          clearEyeBlink(vrm);
+        } else {
+          applyBlink(vrm, clock.elapsedTime);
+        }
         if (vrm.lookAt) vrm.lookAt.target = null;
       }
+      applyFaceExpression(vrm, faceExpr, faceWeights, delta);
       vrm.update(delta);
       // Joy/update 之后再清一次，避免眯眼被当成眨眼
       if (noticing) {
@@ -224,6 +278,7 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
     ready,
     setLocomotion,
     notice,
+    setExpression,
     destroy() {
       destroyed = true;
       cancelAnimationFrame(raf);
@@ -267,6 +322,28 @@ function lockMouth(model: VRM) {
   if (!em) return;
   for (const name of MOUTH_EXPR) {
     em.setValue(name, 0);
+  }
+}
+
+function applyFaceExpression(
+  model: VRM,
+  expr: PetFaceExpression,
+  current: Record<string, number>,
+  delta: number
+) {
+  const em = model.expressionManager;
+  if (!em) return;
+
+  const targets = EXPR_TARGETS[expr] ?? {};
+  const speed = 3.2; // ~0.5s 到目标
+  const t = 1 - Math.exp(-speed * Math.max(delta, 0));
+
+  for (const name of EMOTION_EXPR_NAMES) {
+    const goal = targets[name] ?? 0;
+    const prev = current[name] ?? 0;
+    const next = prev + (goal - prev) * t;
+    current[name] = Math.abs(next) < 0.002 ? 0 : next;
+    em.setValue(name, current[name]);
   }
 }
 

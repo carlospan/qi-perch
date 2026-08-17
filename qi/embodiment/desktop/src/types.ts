@@ -141,7 +141,7 @@ export type ClientMessage =
   | { type: "command"; payload: { text: string } };
 
 /** 相处 / 回顾 / 内在 */
-export type QiView = "presence" | "review" | "inner";
+export type QiView = "presence" | "review" | "inner" | "state";
 
 /** 「回顾 · 对话」筛选用会话消息（/history 约 200 条 + 本轮追加） */
 export type TalkMessage = {

@@ -117,6 +117,13 @@ onMounted(async () => {
     petWs.on("typing", () => {
       pauseRoamFor(TYPING_HOLD_MS);
     });
+    petWs.on(
+      "state",
+      (payload: { avatar_state?: { expression?: string } }) => {
+        const expr = payload?.avatar_state?.expression;
+        if (expr) pet?.setExpression(expr);
+      }
+    );
     petWs.on("presence", (payload: { online?: boolean }) => {
       if (payload?.online) {
         if (awaySince != null && Date.now() - awaySince >= AWAY_MIN_MS) {
@@ -129,6 +136,10 @@ onMounted(async () => {
       awaySince = awaySince ?? Date.now();
     });
     petWs.connect();
+    // 拉一次状态，避免开机长时间呆脸
+    window.setTimeout(() => {
+      petWs?.send({ type: "command", payload: { text: "/state" } });
+    }, 400);
   } catch (err) {
     console.error(err);
     status.value = "模型加载失败";
