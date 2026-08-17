@@ -10,11 +10,11 @@
 
 | 键 | 默认值 | 语义 |
 |----|--------|------|
-| `llm.default_provider` | `ark` | 默认供应商（OpenAI 兼容；现行走 custom_providers） |
+| `llm.default_provider` | 见 yaml（现行 `tokenrhythm`） | 默认供应商（OpenAI 兼容；现行走 custom_providers） |
 | `llm.providers.*.base_url` / `api_key` | — | 端点与密钥（密钥走 `.env`）；`deepseek` 为备用 |
-| `llm.providers.*.models.fast` / `strong` | 见 yaml | 快/强模型名 |
-| `llm.custom_providers` | 见 yaml（example 含 `ark` 火山方舟 / `tokenrhythm`） | 自定义 OpenAI 兼容端点；非空对象 |
-| `llm.model_routing.*` | 见 yaml（现行多为 `ark:fast`） | 各意图路由到 provider:model；密钥用 `ARK_API_KEY` |
+| `llm.providers.*.models.fast` / `strong` | 见 yaml | 快/强模型名（现行 `kimi-k2.7-code`） |
+| `llm.custom_providers` | 见 yaml（`tokenrhythm` / `sensenova` / `ark`） | 自定义 OpenAI 兼容端点；非空对象 |
+| `llm.model_routing.*` | 见 yaml（现行多为 `tokenrhythm:fast`） | 各意图路由到 provider:model；密钥用 `TOKENRHYTHM_API_KEY` |
 
 ## rhythm（心跳节律，秒）
 

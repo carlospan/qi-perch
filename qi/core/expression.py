@@ -12,6 +12,7 @@ from qi.core.intention import (
     assert_reply_respects_card,
     detect_teach_inversion,
     is_hard_violation,
+    looks_like_answer_chase,
 )
 from qi.inner_life.consciousness import char_jaccard
 from qi.llm.prompt_builder import PromptBuilder
@@ -42,8 +43,24 @@ _FACT_CONSISTENCY_CONSTRAINT = (
 # free_talk 模板勿粘贴 memory 原文（曾致 #1483/#1485 答非所问 + 恰 84 字截断感）
 _FREE_TALK_SAFE = "……嗯。我好像没对准你刚问的。你再说一遍好吗？"
 _DEDUP_SAFE = "……我好像卡住重复了。你刚才那句，能再说一次吗？"
+# 催答空卡/空返回：接住催促，不编实质答案（实证 #1678）
+_ANSWER_CHASE_SAFE = (
+    "你在催我答上一句。我这拍没说清楚——"
+    "你要听的是哪一问，用半句点一下？"
+)
+_ANSWER_CHASE_CONSTRAINT = (
+    "用户在催你回答上一问。若上一问尚未正面回应："
+    "先直接回应或诚实说明卡在哪；"
+    "禁止只回「……嗯。」这类敷衍；禁止编造卡外事实。"
+)
+_ELLIPSIS_DODGE = frozenset({"……嗯。", "……嗯", "嗯。", "……", "…", "嗯"})
 
 _TEACH_VIOLATION_TAGS = ("施教关系反转", "空卡编造共同回忆")
+
+
+def _is_ellipsis_dodge(text: str) -> bool:
+    t = (text or "").strip()
+    return t in _ELLIPSIS_DODGE
 
 
 def _teach_memory_violation(text: str, intention: IntentionCard) -> bool:
@@ -69,7 +86,12 @@ def _hard_violations(
     ]
 
 
-def _build_fallback(intention: IntentionCard, viols: list[str]) -> str:
+def _build_fallback(
+    intention: IntentionCard,
+    viols: list[str],
+    *,
+    user_message: str = "",
+) -> str:
     """按违规类型选模板兜底。"""
     if any("施教" in v or "空卡编造共同回忆" in v for v in viols) or any(
         any(t in v for t in _TEACH_VIOLATION_TAGS) for v in viols
@@ -77,7 +99,7 @@ def _build_fallback(intention: IntentionCard, viols: list[str]) -> str:
         if intention.recall_relation == "taught_by_qi":
             return _TEACH_INVERSION_FALLBACK_QI_TAUGHT
         return _TEACH_INVERSION_FALLBACK
-    templated = render_template(intention)
+    templated = render_template(intention, user_message=user_message)
     if templated:
         return templated
     return "……我不确定自己还记不记得。我不想假装记得。"
@@ -123,13 +145,16 @@ def is_duplicate_reply(
     return False
 
 
-def render_template(card: IntentionCard) -> str:
+def render_template(card: IntentionCard, *, user_message: str = "") -> str:
     """断网/空返回模板：朴素、有出处，只使用卡内素材。"""
     if card.silence:
         return ""
     primary = card.primary_text()
     act = card.act
     short = card.length == "short"
+    chase = looks_like_answer_chase(user_message) or looks_like_answer_chase(
+        card.topic
+    )
 
     if act == "answer":
         if primary:
@@ -158,15 +183,21 @@ def render_template(card: IntentionCard) -> str:
             )
         ):
             text = _FREE_TALK_SAFE
+        elif chase and not primary:
+            text = _ANSWER_CHASE_SAFE
         else:
             text = f"……嗯。{primary}" if primary else "……嗯。"
     elif act == "silence":
         return ""
     else:
-        text = f"……嗯。{primary}" if primary else "……嗯。"
+        if chase and not primary:
+            text = _ANSWER_CHASE_SAFE
+        else:
+            text = f"……嗯。{primary}" if primary else "……嗯。"
 
     text = text.strip()
-    if short and len(text) > 40:
+    # 催答安全句勿被 short 截断成半句（否则又像敷衍）
+    if short and len(text) > 40 and text != _ANSWER_CHASE_SAFE:
         text = text[:40].rstrip("。…") + "…"
     return text
 
@@ -233,9 +264,12 @@ class Expression:
             messages[0] = sys0
 
         hist = recent_qi_replies_from_messages(recent_messages, limit=REPLY_DEDUP_WINDOW)
+        chase = looks_like_answer_chase(user_message) or looks_like_answer_chase(
+            intention.topic
+        )
 
         text = ""
-        # 每拍对话最多 2 次 LLM：主调用 +（HARD 修复 XOR 去重重生）
+        # 每拍对话最多 2 次 LLM：主调用 +（HARD 修复 XOR 催答空重试 XOR 去重重生）
         used_retry = False
         try:
             text = await self.llm.call(purpose="conversation", messages=messages)
@@ -244,6 +278,30 @@ class Expression:
             text = ""
 
         text = str(text or "").strip()
+        # 催答：空返回或省略号敷衍 → 约束重试一次（占本拍重试预算）
+        if chase and (not text or _is_ellipsis_dodge(text)) and not used_retry:
+            chase_messages = list(messages)
+            if chase_messages:
+                sys0 = dict(chase_messages[0])
+                sys0["content"] = (
+                    str(sys0.get("content") or "")
+                    + f"\n\n【催答】{_ANSWER_CHASE_CONSTRAINT}"
+                )
+                chase_messages[0] = sys0
+            try:
+                again = await self.llm.call(
+                    purpose="conversation", messages=chase_messages
+                )
+            except Exception:
+                logger.debug("催答重试异常，走模板", exc_info=True)
+                again = ""
+            used_retry = True
+            again = str(again or "").strip()
+            if again and not _is_ellipsis_dodge(again):
+                text = again
+            else:
+                text = ""
+
         # 运行时硬闸：全量 HARD（施教/共同回忆/虚构实体…）；SOFT 仅写入 evidence
         if text:
             all_viols = assert_reply_respects_card(
@@ -255,21 +313,28 @@ class Expression:
                 intention.evidence["soft_violations"] = soft
             hard = [v for v in all_viols if is_hard_violation(v)]
             if hard:
+                if used_retry:
+                    intention.outcome = "template"
+                    return _build_fallback(
+                        intention, hard, user_message=user_message
+                    )
                 fixed = await self._fix_generation(
                     messages, hard, intention, recent_messages=recent_messages
                 )
                 used_retry = True
                 if fixed is None:
                     intention.outcome = "template"
-                    return _build_fallback(intention, hard)
+                    return _build_fallback(
+                        intention, hard, user_message=user_message
+                    )
                 text = fixed
         if text:
             if not is_duplicate_reply(text, hist):
                 intention.outcome = "llm"
                 return text
-            # 跨轮复读：若本拍已为 HARD 用过重试预算 → 直接模板，不再打第三次 LLM
+            # 跨轮复读：若本拍已用过重试预算 → 直接模板，不再打第三次 LLM
             if used_retry:
-                templated = render_template(intention)
+                templated = render_template(intention, user_message=user_message)
                 if templated and not is_duplicate_reply(templated, hist):
                     intention.outcome = "template"
                     return templated
@@ -293,7 +358,9 @@ class Expression:
                     again, intention, recent_messages=recent_messages
                 )
                 if again_hard:
-                    fb = _build_fallback(intention, again_hard)
+                    fb = _build_fallback(
+                        intention, again_hard, user_message=user_message
+                    )
                     if fb and not is_duplicate_reply(fb, hist):
                         intention.outcome = "template"
                         return fb
@@ -302,7 +369,7 @@ class Expression:
                 intention.outcome = "llm"
                 return again
             # 仍重复 → 模板；若模板也撞车则安全句（防 #1485≡#1487）
-            templated = render_template(intention)
+            templated = render_template(intention, user_message=user_message)
             if templated and not is_duplicate_reply(templated, hist):
                 intention.outcome = "template"
                 return templated
@@ -310,7 +377,7 @@ class Expression:
             return _DEDUP_SAFE
 
         # UNREACHABLE / EMPTY：一律模板开口（契约演进）
-        templated = render_template(intention)
+        templated = render_template(intention, user_message=user_message)
         if templated:
             intention.outcome = "template"
             return templated

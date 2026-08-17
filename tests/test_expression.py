@@ -44,6 +44,84 @@ def test_free_talk_template_does_not_dump_memory():
     assert "没对准" in text or "再说" in text
 
 
+def test_answer_chase_template_not_bare_嗯():
+    """催答空卡不得只回「……嗯。」（实证 #1678）。"""
+    from qi.core.expression import _ANSWER_CHASE_SAFE
+    from qi.core.intention import looks_like_answer_chase
+
+    assert looks_like_answer_chase("你还没回答")
+    assert looks_like_answer_chase("嗯你没答我啊")
+    assert not looks_like_answer_chase("今晚月亮很亮")
+
+    card = IntentionCard(
+        act="free_talk",
+        topic="你还没回答",
+        materials=[Material(tag="none", text="")],
+    )
+    text = render_template(card, user_message="你还没回答")
+    assert text == _ANSWER_CHASE_SAFE
+    assert text.strip() != "……嗯。"
+    assert "催" in text
+
+    plain = IntentionCard(
+        act="free_talk",
+        topic="今晚月亮",
+        materials=[Material(tag="none", text="")],
+    )
+    assert render_template(plain, user_message="今晚月亮很亮") == "……嗯。"
+
+
+@pytest.mark.asyncio
+async def test_express_answer_chase_empty_retries_then_safe_template():
+    """催答 + 空 LLM → 约束重试；仍空 → 催答安全句。"""
+    from qi.core.expression import _ANSWER_CHASE_SAFE
+
+    llm = AsyncMock()
+    llm.call = AsyncMock(side_effect=["", ""])
+    expr = Expression({}, llm)
+    card = IntentionCard(
+        act="free_talk",
+        topic="你还没回答",
+        materials=[Material(tag="none", text="")],
+    )
+    out = await expr.express(
+        user_message="你还没回答",
+        emotion=EmotionState(),
+        now=datetime(2026, 8, 17, 22, 2),
+        intention=card,
+        recent_messages=[],
+    )
+    assert llm.call.await_count == 2
+    retry_sys = llm.call.await_args_list[1].kwargs["messages"][0]["content"]
+    assert "【催答】" in retry_sys
+    assert out == _ANSWER_CHASE_SAFE
+    assert card.outcome == "template"
+
+
+@pytest.mark.asyncio
+async def test_express_answer_chase_ellipsis_dodge_retries():
+    """催答 + 首答「……嗯。」→ 当敷衍重试，采纳第二拍实质句。"""
+    llm = AsyncMock()
+    llm.call = AsyncMock(side_effect=["……嗯。", "嗯。上一问我还没正面说完——你是在问我会不会教吗？"])
+    expr = Expression({}, llm)
+    card = IntentionCard(
+        act="free_talk",
+        topic="你还没回答",
+        materials=[Material(tag="none", text="")],
+    )
+    out = await expr.express(
+        user_message="你还没回答",
+        emotion=EmotionState(),
+        now=datetime(2026, 8, 17, 22, 2),
+        intention=card,
+        recent_messages=[],
+    )
+    assert "正面" in out or "会不会" in out
+    assert out.strip() != "……嗯。"
+    assert card.outcome == "llm"
+    assert llm.call.await_count == 2
+
+
 @pytest.mark.asyncio
 async def test_express_dedup_avoids_identical_template_loop():
     """模板若与上轮相同，改吐安全句，避免 #1485≡#1487。"""

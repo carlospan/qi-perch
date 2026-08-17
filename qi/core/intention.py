@@ -463,11 +463,21 @@ def _length_for(emotion: EmotionState, stage: str, act: str) -> str:
 
 
 _SHORT_FEEDBACK_RE = re.compile(r"直接一点|简短|别绕|长话短说|说重点|简单点")
+# 催答：只辅助表达层重试/兜底，不是意图唯一入口
+_ANSWER_CHASE_RE = re.compile(
+    r"还没回答|没有回答|没回答我|你没答|你还没答|"
+    r"回答我刚才|刚才那句还没|刚才问的还没|你还没说"
+)
 
 
 def looks_like_short_feedback(text: str) -> bool:
     """用户要求简短/直接——表达层应压长度。"""
     return bool(_SHORT_FEEDBACK_RE.search(text or ""))
+
+
+def looks_like_answer_chase(text: str) -> bool:
+    """用户在催上一问未答——表达层应避免空嗯敷衍。"""
+    return bool(_ANSWER_CHASE_RE.search((text or "").strip()))
 
 
 def _base_must(

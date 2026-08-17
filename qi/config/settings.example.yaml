@@ -1,8 +1,8 @@
 # LLM 配置（OpenAI 兼容协议）
-# 现行示例：sensenova（sensenova-6.8-flash-lite）；tokenrhythm / ark 备用
-# 密钥放仓库根 .env：SENSENOVA_API_KEY=...（备用 TOKENRHYTHM_API_KEY / ARK_API_KEY）
+# 现行示例：tokenrhythm（kimi-k2.7-code）；sensenova / ark 备用
+# 密钥放仓库根 .env：TOKENRHYTHM_API_KEY=...（备用 SENSENOVA_API_KEY / ARK_API_KEY）
 llm:
-  default_provider: "sensenova"
+  default_provider: "tokenrhythm"
   custom_providers:
     ark:
       base_url: "https://ark.cn-beijing.volces.com/api/v3"
@@ -23,14 +23,14 @@ llm:
         fast: "sensenova-6.8-flash-lite"
         strong: "sensenova-6.8-flash-lite"
   model_routing:
-    conversation: "sensenova:fast"
-    narrative: "sensenova:strong"
-    consciousness: "sensenova:fast"
-    dream: "sensenova:fast"
-    creation: "sensenova:fast"
-    reflection: "sensenova:strong"
-    fact: "sensenova:fast"
-    look: "sensenova:fast"
+    conversation: "tokenrhythm:fast"
+    narrative: "tokenrhythm:strong"
+    consciousness: "tokenrhythm:fast"
+    dream: "tokenrhythm:fast"
+    creation: "tokenrhythm:fast"
+    reflection: "tokenrhythm:strong"
+    fact: "tokenrhythm:fast"
+    look: "tokenrhythm:fast"
 
 # 心跳配置
 rhythm:
