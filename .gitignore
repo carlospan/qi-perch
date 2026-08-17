@@ -52,3 +52,5 @@ embodiment/desktop/src-tauri/target/
 qi/embodiment/desktop/_*.png
 
 qi/embodiment/desktop/public/avatars/*.vrm
+# VRM 表情补丁等本地备份，勿提交
+*.vrm.bak
