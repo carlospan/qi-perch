@@ -36,6 +36,24 @@ async def test_delegate_search_success(db):
     web.search.assert_awaited_once()
 
 
+def test_delegate_explore_drift_skips_together_pool():
+    from qi.action.together import candidates_from_action_result
+
+    result = {
+        "type": "explore_drift",
+        "delegate": True,
+        "source": "web_delegate",
+        "outcome": "success",
+        "found": {
+            "entries": [
+                {"title": "天气", "url": "https://weather.example.com", "snippet": "雨"},
+            ],
+            "source": "web_delegate",
+        },
+    }
+    assert candidates_from_action_result(result) == []
+
+
 def test_looks_like_delegate_search_phrases():
     assert looks_like_delegate_search("帮我查一下量子纠缠")
     assert not looks_like_delegate_search("你好")

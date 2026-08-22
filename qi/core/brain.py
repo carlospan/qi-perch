@@ -1347,6 +1347,9 @@ class Brain:
             return
         if result.get("outcome") != "success":
             return
+        # 用户请查资料（天气/新闻等）≠ 自主走神见闻，不跟「要不要一起看看？」
+        if result.get("delegate") or result.get("source") == "web_delegate":
+            return
         try:
             from qi.action.permission import can_together
             from qi.action.together import pool_has_openable

@@ -200,6 +200,9 @@ def candidates_from_action_result(result: dict[str, Any] | None) -> list[dict[st
     rtype = result.get("type")
 
     if rtype == "explore_drift":
+        # 委托查资料复用 explore_drift 卡片 UI，但不进同看池（勿在查天气后软邀「一起看」）
+        if result.get("delegate") or result.get("source") == "web_delegate":
+            return now_placeholder
         found = result.get("found") or {}
         entries = found.get("entries") if isinstance(found, dict) else None
         if isinstance(entries, list):
