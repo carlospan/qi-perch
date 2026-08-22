@@ -10,6 +10,7 @@ from qi.core.emotion import EmotionState
 from qi.core.expression import (
     REPLY_DEDUP_THRESHOLD,
     Expression,
+    _EMPTY_CARD_SAFE,
     char_jaccard,
     is_duplicate_reply,
     recent_qi_replies_from_messages,
@@ -41,7 +42,7 @@ def test_free_talk_template_does_not_dump_memory():
     )
     text = render_template(card)
     assert mem[:20] not in text
-    assert "没对准" in text or "再说" in text
+    assert "接好" in text or "再说" in text
 
 
 def test_answer_chase_template_not_bare_嗯():
@@ -68,7 +69,19 @@ def test_answer_chase_template_not_bare_嗯():
         topic="今晚月亮",
         materials=[Material(tag="none", text="")],
     )
-    assert render_template(plain, user_message="今晚月亮很亮") == "……嗯。"
+    assert render_template(plain, user_message="今晚月亮很亮") == _EMPTY_CARD_SAFE
+
+
+def test_empty_card_template_relationship_question():
+    """实证：关系问句空卡不得只回「……嗯。」"""
+    card = IntentionCard(
+        act="free_talk",
+        topic="我们两个现在是什么关系",
+        materials=[Material(tag="none", text="")],
+    )
+    text = render_template(card, user_message="我们两个现在是什么关系")
+    assert text == _EMPTY_CARD_SAFE
+    assert text.strip() != "……嗯。"
 
 
 @pytest.mark.asyncio

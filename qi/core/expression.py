@@ -41,7 +41,9 @@ _FACT_CONSISTENCY_CONSTRAINT = (
     "不要引入素材中没有的具体人名。不确定就说不确定，或用意象/比喻。"
 )
 # free_talk 模板勿粘贴 memory 原文（曾致 #1483/#1485 答非所问 + 恰 84 字截断感）
-_FREE_TALK_SAFE = "……嗯。我好像没对准你刚问的。你再说一遍好吗？"
+_EMPTY_CARD_SAFE = "……刚才那句，我没接好。能再说一次吗？"
+# 保留旧名：单测 / 去重用例仍引用
+_FREE_TALK_SAFE = _EMPTY_CARD_SAFE
 _DEDUP_SAFE = "……我好像卡住重复了。你刚才那句，能再说一次吗？"
 # 催答空卡/空返回：接住催促，不编实质答案（实证 #1678）
 _ANSWER_CHASE_SAFE = (
@@ -145,6 +147,12 @@ def is_duplicate_reply(
     return False
 
 
+def _empty_primary_fallback(*, chase: bool) -> str:
+    if chase:
+        return _ANSWER_CHASE_SAFE
+    return _EMPTY_CARD_SAFE
+
+
 def render_template(card: IntentionCard, *, user_message: str = "") -> str:
     """断网/空返回模板：朴素、有出处，只使用卡内素材。"""
     if card.silence:
@@ -160,11 +168,11 @@ def render_template(card: IntentionCard, *, user_message: str = "") -> str:
         if primary:
             text = f"{primary}……嗯。"
         else:
-            text = "……嗯，这个我现在想不清楚。"
+            text = _empty_primary_fallback(chase=chase)
     elif act == "acknowledge":
         text = f"……我听见了。{primary}" if primary else "……我听见了。"
     elif act == "share_state":
-        text = f"……{primary}。" if primary else "……嗯。"
+        text = f"……{primary}。" if primary else _empty_primary_fallback(chase=chase)
     elif act == "recall":
         text = f"记得。{primary}。" if primary else "……我不确定自己还记不记得。"
     elif act == "comfort_back":
@@ -182,22 +190,22 @@ def render_template(card: IntentionCard, *, user_message: str = "") -> str:
                 for m in card.materials
             )
         ):
-            text = _FREE_TALK_SAFE
+            text = _EMPTY_CARD_SAFE
         elif chase and not primary:
             text = _ANSWER_CHASE_SAFE
         else:
-            text = f"……嗯。{primary}" if primary else "……嗯。"
+            text = f"……嗯。{primary}" if primary else _EMPTY_CARD_SAFE
     elif act == "silence":
         return ""
     else:
         if chase and not primary:
             text = _ANSWER_CHASE_SAFE
         else:
-            text = f"……嗯。{primary}" if primary else "……嗯。"
+            text = f"……嗯。{primary}" if primary else _EMPTY_CARD_SAFE
 
     text = text.strip()
-    # 催答安全句勿被 short 截断成半句（否则又像敷衍）
-    if short and len(text) > 40 and text != _ANSWER_CHASE_SAFE:
+    # 催答 / 空卡安全句勿被 short 截断成半句（否则又像敷衍）
+    if short and len(text) > 40 and text not in (_ANSWER_CHASE_SAFE, _EMPTY_CARD_SAFE):
         text = text[:40].rstrip("。…") + "…"
     return text
 

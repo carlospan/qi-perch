@@ -104,7 +104,8 @@ def test_template_answer_none():
         must=["不假装记得"],
     )
     text = render_template(card)
-    assert "想不清楚" in text
+    assert "接好" in text
+    assert "再说" in text
 
 
 def test_template_recall_and_n5_blacklist():
@@ -306,13 +307,15 @@ async def test_last_intention_written_with_outcome():
         brain.inner_life = None
         brain.first_times = None
 
+        from qi.core.expression import _EMPTY_CARD_SAFE
+
         brain._pending_queue.append("你还记得哈尔滨冰球俱乐部吗")
         await brain._heartbeat()
         card = await db.get_body_memory(LAST_INTENTION_KEY)
         assert card is not None
         assert card.get("outcome") == "template"
         assert brain._pending_speech is not None
-        assert "想不清楚" in brain._pending_speech.text or "接住" in brain._pending_speech.text or "嗯" in brain._pending_speech.text
+        assert brain._pending_speech.text == _EMPTY_CARD_SAFE
         brain.memory.vector_store.close()
         await db.close()
 
