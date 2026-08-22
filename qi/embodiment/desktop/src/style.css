@@ -51,9 +51,9 @@
   --main-pad-x: 28px;
   --main-pad-y: 18px;
   --presence-vrm-w: 42%;
-  --desk-aside-w: min(38%, 400px);
-  --page-pad-x: 32px;
-  --page-pad-y: 24px;
+  --desk-aside-w: 280px;
+  --page-pad-x: 28px;
+  --page-pad-y: 22px;
 
   font-family: var(--serif);
 }
@@ -115,6 +115,8 @@ html.qi-resizing .composer-dock {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  container-type: inline-size;
+  container-name: desk-main;
 }
 
 .desk-scroll {
@@ -223,4 +225,10 @@ html.qi-resizing .composer-dock {
   height: 28px;
   color: var(--ember);
   opacity: 0.92;
+}
+
+/* 最大化时略放宽氛围栏，默认窗宽留给内容多列 */
+html.qi-maximized {
+  --desk-aside-w: min(30vw, 360px);
+  --page-pad-x: 32px;
 }

@@ -133,9 +133,21 @@ function kindClass(kind: string) {
 <style scoped>
 .entry-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 24px 26px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px 24px;
   align-items: start;
+}
+
+@container desk-main (min-width: 720px) {
+  .entry-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container desk-main (min-width: 1080px) {
+  .entry-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .empty {

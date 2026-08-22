@@ -297,9 +297,21 @@ function exploreBody(card: ExploreCard) {
 
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 22px 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 22px;
   align-items: start;
+}
+
+@container desk-main (min-width: 720px) {
+  .card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container desk-main (min-width: 1080px) {
+  .card-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .empty {
