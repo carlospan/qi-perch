@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import type { QiView } from "../types";
 
-defineProps<{
-  modelValue: QiView;
-}>();
+withDefaults(
+  defineProps<{
+    modelValue: QiView;
+    layout?: "horizontal" | "vertical";
+  }>(),
+  { layout: "vertical" }
+);
 
 const emit = defineEmits<{
   "update:modelValue": [v: QiView];
@@ -18,7 +22,7 @@ const tabs: { id: QiView; label: string }[] = [
 </script>
 
 <template>
-  <nav class="tabs" aria-label="相处方式">
+  <nav class="tabs" :class="layout" aria-label="相处方式">
     <button
       v-for="t in tabs"
       :key="t.id"
@@ -34,10 +38,19 @@ const tabs: { id: QiView; label: string }[] = [
 <style scoped>
 .tabs {
   display: flex;
+  pointer-events: auto;
+}
+
+.tabs.horizontal {
   justify-content: center;
   gap: 22px;
-  margin-bottom: 12px;
-  pointer-events: auto;
+}
+
+.tabs.vertical {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
 }
 
 button {
@@ -50,31 +63,74 @@ button {
   letter-spacing: 2px;
   padding: 2px 4px;
   position: relative;
-  transition: color 0.35s ease;
+  transition:
+    color 0.35s ease,
+    background 0.35s ease;
+}
+
+.tabs.vertical button {
+  text-align: left;
+  padding: 11px 14px;
+  border-radius: 11px;
+  letter-spacing: 0.22em;
+  font-size: 13px;
 }
 
 button::after {
   content: "";
   position: absolute;
+  background: var(--seal);
+  transition:
+    width 0.35s ease,
+    height 0.35s ease,
+    opacity 0.35s ease;
+}
+
+.tabs.horizontal button::after {
   left: 50%;
   bottom: -4px;
   width: 0;
   height: 2px;
   border-radius: 1px;
-  background: var(--seal);
   transform: translateX(-50%);
-  transition: width 0.35s ease;
+}
+
+.tabs.vertical button::after {
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 0;
+  border-radius: 0 2px 2px 0;
+  transform: translateY(-50%);
+  opacity: 0;
 }
 
 button.active {
   color: var(--ink);
 }
 
+.tabs.vertical button.active {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
 button.active::after {
+  opacity: 1;
+}
+
+.tabs.horizontal button.active::after {
   width: 14px;
+}
+
+.tabs.vertical button.active::after {
+  height: 18px;
 }
 
 button:hover {
   color: var(--ink-dim);
+}
+
+.tabs.vertical button:hover:not(.active) {
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
 }
 </style>

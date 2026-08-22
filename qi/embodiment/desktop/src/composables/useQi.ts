@@ -143,7 +143,10 @@ function createQi() {
       }
       if (row?.type === "explore_drift") {
         const entries = row.found?.entries;
-        const okSource = row.source === "web" || row.source === "journal";
+        const okSource =
+          row.source === "web" ||
+          row.source === "journal" ||
+          row.source === "web_delegate";
         if (!okSource || !Array.isArray(entries) || entries.length === 0) continue;
         const card: ExploreCard = {
           type: "explore_drift",
@@ -432,7 +435,9 @@ function createQi() {
         if (payload?.type === "explore_drift") {
           const entries = payload.found?.entries;
           const okSource =
-            payload.source === "web" || payload.source === "journal";
+            payload.source === "web" ||
+            payload.source === "journal" ||
+            payload.source === "web_delegate";
           if (okSource && Array.isArray(entries) && entries.length > 0) {
             appendCard(payload);
           }

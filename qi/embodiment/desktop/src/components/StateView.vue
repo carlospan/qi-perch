@@ -12,7 +12,6 @@ type DimRow = {
   label: string;
   hint: string;
   value: number | undefined;
-  /** 展示用 0~1（valence 从 -1~1 映到 0~1） */
   bar: number;
   gloss: string;
 };
@@ -131,98 +130,85 @@ const summary = computed(() => (props.emotion.description || "").trim());
 </script>
 
 <template>
-  <div class="panel">
-    <header class="hero">
-      <h2>状态</h2>
-      <p class="hero-sub">
-        栖此刻的六维心境。上面是她的话，下面是结构里的量。
-      </p>
-      <p v-if="!connected" class="empty">未连上，还读不到她。</p>
-      <p v-else-if="summary" class="summary">{{ summary }}</p>
-      <p v-else class="empty">尚无心境描述，等下一拍状态。</p>
-    </header>
+  <div class="desk-page state">
+    <div class="desk-main">
+      <header class="page-hero">
+        <div class="page-hero-row">
+          <h2>状态</h2>
+        </div>
+        <p class="page-hero-sub">
+          栖此刻的六维心境。上面是她的话，下面是结构里的量。
+        </p>
+        <p v-if="!connected" class="status-note empty">未连上，还读不到她。</p>
+        <p v-else-if="summary" class="status-note summary">{{ summary }}</p>
+        <p v-else class="status-note empty">尚无心境描述，等下一拍状态。</p>
+      </header>
 
-    <div class="dims" role="list">
-      <article v-for="r in rows" :key="r.key" class="dim" role="listitem">
-        <div class="dim-top">
-          <div class="names">
-            <span class="label">{{ r.label }}</span>
-            <span class="hint">{{ r.hint }}</span>
-          </div>
-          <span class="num" :title="r.hint">{{
-            fmt(r.value, r.key === "valence")
-          }}</span>
+      <div class="desk-scroll">
+        <div class="dims" role="list">
+          <article v-for="r in rows" :key="r.key" class="dim" role="listitem">
+            <div class="dim-top">
+              <div class="names">
+                <span class="label">{{ r.label }}</span>
+                <span class="hint">{{ r.hint }}</span>
+              </div>
+              <span class="num" :title="r.hint">{{
+                fmt(r.value, r.key === "valence")
+              }}</span>
+            </div>
+            <div class="bar" aria-hidden="true">
+              <i :style="{ width: `${Math.round(r.bar * 100)}%` }" />
+            </div>
+            <p class="gloss">{{ r.gloss }}</p>
+          </article>
         </div>
-        <div class="bar" aria-hidden="true">
-          <i :style="{ width: `${Math.round(r.bar * 100)}%` }" />
-        </div>
-        <p class="gloss">{{ r.gloss }}</p>
-      </article>
+      </div>
     </div>
+
+    <aside class="desk-aside" aria-hidden="true">
+      <div class="desk-aside-bg" />
+      <div class="desk-aside-veil" />
+      <div class="desk-aside-copy">
+        <p class="desk-aside-eyebrow">MOOD</p>
+        <p class="desk-aside-quote">
+          {{ summary || "她还没说清自己，但数值已经在轻轻呼吸。" }}
+        </p>
+      </div>
+    </aside>
   </div>
 </template>
 
 <style scoped>
-.panel {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: color-mix(in srgb, var(--panel-veil) 72%, transparent);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
-  overflow: hidden;
-}
-
-.hero {
-  padding: 1rem 1.05rem 0.75rem;
-  flex-shrink: 0;
-}
-
-.hero h2 {
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 400;
-  letter-spacing: 0.2em;
-}
-
-.hero-sub {
-  margin: 0.4rem 0 0;
-  font-size: 0.78rem;
-  line-height: 1.5;
-  color: var(--ink-dim);
+.status-note {
+  margin: 16px 0 0;
+  max-width: 48ch;
+  font-size: 15px;
+  line-height: 1.75;
   font-weight: 300;
+  letter-spacing: 0.03em;
 }
 
 .summary {
-  margin: 0.75rem 0 0;
-  font-size: 0.92rem;
-  line-height: 1.55;
-  font-weight: 300;
-  color: var(--ink);
-  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--ink) 90%, transparent);
 }
 
 .empty {
-  margin: 0.75rem 0 0;
-  font-size: 0.82rem;
   color: var(--ink-faint);
-  font-weight: 300;
 }
 
 .dims {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0.25rem 1.05rem 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 18px;
+  padding-bottom: 8px;
 }
 
 .dim {
-  padding-top: 0.65rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 18px 18px 16px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
 .dim-top {
@@ -240,8 +226,8 @@ const summary = computed(() => (props.emotion.description || "").trim());
 }
 
 .label {
-  font-size: 0.9rem;
-  letter-spacing: 0.12em;
+  font-size: 0.95rem;
+  letter-spacing: 0.14em;
 }
 
 .hint {
@@ -253,33 +239,43 @@ const summary = computed(() => (props.emotion.description || "").trim());
 
 .num {
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   color: var(--ember);
   letter-spacing: 0.04em;
   flex-shrink: 0;
 }
 
 .bar {
-  margin-top: 0.4rem;
-  height: 3px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.06);
+  margin-top: 0.55rem;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
   overflow: hidden;
 }
 
 .bar i {
   display: block;
   height: 100%;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--ember) 55%, var(--mist));
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--mist) 70%, transparent),
+    color-mix(in srgb, var(--ember) 75%, transparent)
+  );
   transition: width 1.2s ease;
 }
 
 .gloss {
-  margin: 0.35rem 0 0;
-  font-size: 0.78rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
   color: var(--ink-dim);
   font-weight: 300;
   letter-spacing: 0.02em;
+}
+
+@media (max-width: 1100px) {
+  .dims {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

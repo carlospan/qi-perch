@@ -7,10 +7,15 @@ import ExploreCard from "./ExploreCard.vue";
 
 const WAITING_LINES = ["……", "嗯……", "我在想。", "稍等……"] as const;
 
-const props = defineProps<{
-  groups: TalkDayGroup[];
-  typing?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    groups: TalkDayGroup[];
+    typing?: boolean;
+    /** desktop：右栏对话面板，弱化全屏遮罩 */
+    layout?: "default" | "desktop";
+  }>(),
+  { layout: "default" }
+);
 
 const emit = defineEmits<{
   send: [text: string];
@@ -61,7 +66,7 @@ watch(
 </script>
 
 <template>
-  <div class="panel">
+  <div class="panel" :class="{ desktop: layout === 'desktop' }">
     <div class="panel-head">
       <span class="t">相处</span>
       <span class="sub">此刻的对话</span>
@@ -139,11 +144,30 @@ watch(
   pointer-events: auto;
 }
 
+.panel.desktop {
+  position: relative;
+  height: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.panel.desktop .panel-head {
+  border-bottom-color: color-mix(in srgb, var(--ink) 8%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--panel-veil) 42%, transparent) 0%,
+    transparent 100%
+  );
+}
+
 .panel-head {
-  padding: 8px 4px 10px;
+  padding: 10px 14px 12px;
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
 .panel-head .t {
@@ -163,14 +187,14 @@ watch(
 .panel-body {
   flex: 1;
   overflow-y: auto;
-  padding: 6px 2px 18px;
+  padding: 12px 14px 18px;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--ink) 12%, transparent) transparent;
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    #000 12px,
-    #000 calc(100% - 16px),
+    #000 10px,
+    #000 calc(100% - 14px),
     transparent 100%
   );
 }
@@ -212,7 +236,7 @@ watch(
 }
 
 .msg {
-  max-width: 82%;
+  max-width: min(72%, 520px);
   margin-bottom: 14px;
   animation: rise 0.5s ease both;
 }
@@ -249,10 +273,16 @@ watch(
 }
 
 .msg.qi .txt {
-  background: var(--talk-qi-bg);
+  background: color-mix(in srgb, var(--talk-qi-bg) 88%, var(--panel-veil));
   border: 1px solid var(--talk-qi-bd);
   border-radius: 4px 14px 14px 14px;
   color: var(--ink);
+  backdrop-filter: blur(6px);
+}
+
+.panel.desktop .msg.qi .txt {
+  background: color-mix(in srgb, var(--panel-veil) 72%, transparent);
+  border-color: color-mix(in srgb, var(--talk-qi-bd) 80%, transparent);
 }
 
 .msg.qi.card {
@@ -269,12 +299,17 @@ watch(
 }
 
 .msg.me .txt {
-  background: var(--talk-me-bg);
+  background: color-mix(in srgb, var(--talk-me-bg) 88%, var(--panel-veil));
   border: 1px solid var(--talk-me-bd);
   border-radius: 14px 4px 14px 14px;
   color: var(--talk-me-ink);
   display: inline-block;
   text-align: left;
+  backdrop-filter: blur(6px);
+}
+
+.panel.desktop .msg.me .txt {
+  background: color-mix(in srgb, var(--panel-veil) 68%, var(--talk-me-bg));
 }
 
 .when {

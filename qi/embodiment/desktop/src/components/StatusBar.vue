@@ -50,10 +50,10 @@ const modeLabel: Record<string, string> = {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.2rem;
-  max-width: 11.5rem;
+  gap: 0.25rem;
+  max-width: 22rem;
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   color: var(--ink-dim);
   letter-spacing: 0.04em;
 }

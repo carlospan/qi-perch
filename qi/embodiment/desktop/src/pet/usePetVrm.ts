@@ -49,9 +49,20 @@ const EXPR_TARGETS: Record<PetFaceExpression, Record<string, number>> = {
   curious: { curious: 1 },
 };
 
+export type PetVrmFraming = "pet" | "presence";
+
+export type PetVrmOptions = {
+  /** 取景：presence = 单窗相处（全身、朝向你） */
+  framing?: PetVrmFraming;
+  /** 是否加载 walk（相处页不需要） */
+  loadWalk?: boolean;
+};
+
 export type PetVrmHandle = {
   ready: Promise<void>;
   destroy: () => void;
+  /** 切走相处页时暂停渲染，模型仍常驻内存 */
+  setActive: (active: boolean) => void;
   setLocomotion: (mode: PetLocomotion, facing?: PetFacing) => void;
   /** 被点及时：看向你 + 身体微晃（不用 Joy 浅笑，会眯眼像眨眼） */
   notice: (durationMs?: number) => void;
@@ -60,9 +71,14 @@ export type PetVrmHandle = {
 };
 
 /**
- * 透明桌宠：VRM + 待机/走路切换 + 眨眼。
+ * VRM 渲染：桌宠或单窗相处（idle + 表情 + notice）。
  */
-export function createPetVrm(container: HTMLElement): PetVrmHandle {
+export function createPetVrm(
+  container: HTMLElement,
+  options: PetVrmOptions = {}
+): PetVrmHandle {
+  const framing = options.framing ?? "pet";
+  const loadWalk = options.loadWalk ?? true;
   let destroyed = false;
   let renderer: THREE.WebGLRenderer | null = null;
   let vrm: VRM | null = null;
@@ -73,6 +89,7 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
   let noticeUntil = 0;
   let noticeStart = 0;
   let raf = 0;
+  let rendering = true;
   let faceExpr: PetFaceExpression = "neutral";
   /** 当前已应用到模型的权重，向目标缓动 */
   const faceWeights: Record<string, number> = {};
@@ -94,14 +111,84 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
   scene.add(fill);
   scene.add(new THREE.AmbientLight(0xffffff, 0.55));
 
-  const onResize = () => {
+  let resizeTimer = 0;
+
+  const resolvePixelRatio = () => {
+    const dpr = window.devicePixelRatio || 1;
+    // 相处页人物是视觉焦点，略提高上限减少「人小发糊」
+    const cap = framing === "presence" ? 2.5 : 2;
+    return Math.min(dpr, cap);
+  };
+
+  const applyResize = () => {
     if (!renderer || destroyed) return;
     const w = container.clientWidth || 1;
     const h = container.clientHeight || 1;
-    renderer.setSize(w, h, false);
+    renderer.setPixelRatio(resolvePixelRatio());
+    renderer.setSize(w, h, true);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    if (vrm) frameCamera(camera, vrm);
+    if (vrm) frameCamera(camera, vrm, framing);
+  };
+
+  const onResize = () => {
+    window.clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(applyResize, 100);
+  };
+
+  const onWindowResizing = () => {
+    window.clearTimeout(resizeTimer);
+  };
+
+  const onLayoutSettled = () => {
+    window.clearTimeout(resizeTimer);
+    applyResize();
+  };
+
+  const scheduleTick = () => {
+    if (raf || destroyed || !rendering) return;
+    raf = requestAnimationFrame(tick);
+  };
+
+  const setActive = (active: boolean) => {
+    rendering = active;
+    if (!active) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+      return;
+    }
+    clock.getDelta();
+    applyResize();
+    scheduleTick();
+  };
+
+  const tick = () => {
+    raf = 0;
+    if (destroyed || !renderer || !vrm || !rendering) return;
+    const delta = clock.getDelta();
+    mixer?.update(delta);
+    lockMouth(vrm);
+    const noticing = clock.elapsedTime < noticeUntil;
+    if (noticing) {
+      updateLookAtTarget();
+      applyNoticeReaction(vrm, clock.elapsedTime, noticeStart, noticeUntil);
+      clearEyeBlink(vrm);
+    } else {
+      if (faceExpr === "sleepy") {
+        clearEyeBlink(vrm);
+      } else {
+        applyBlink(vrm, clock.elapsedTime);
+      }
+      if (vrm.lookAt) vrm.lookAt.target = null;
+    }
+    applyFaceExpression(vrm, faceExpr, faceWeights, delta);
+    vrm.update(delta);
+    if (noticing) {
+      clearEyeBlink(vrm);
+      vrm.expressionManager?.update();
+    }
+    renderer.render(scene, camera);
+    scheduleTick();
   };
 
   const setFacing = (facing: PetFacing, mode: PetLocomotion) => {
@@ -113,7 +200,7 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
       // 朝向与窗体平移同向（先前符号反了会倒退）
       vrm.scene.rotation.y = facing === 1 ? Math.PI / 2 : -Math.PI / 2;
     }
-    frameCamera(camera, vrm);
+    frameCamera(camera, vrm, framing);
   };
 
   const setLocomotion = (mode: PetLocomotion, facing: PetFacing = 1) => {
@@ -180,10 +267,12 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
       premultipliedAlpha: false,
     });
     renderer.setClearColor(0x000000, 0);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(resolvePixelRatio());
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(renderer.domElement);
     window.addEventListener("resize", onResize);
+    window.addEventListener("qi-window-resizing", onWindowResizing);
+    window.addEventListener("qi-layout-settled", onLayoutSettled);
 
     const loader = new GLTFLoader();
     loader.register((parser) => new VRMLoaderPlugin(parser));
@@ -219,17 +308,19 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
     }
 
     try {
-      const walkClip = await loadMixamoAnimation(WALK_URL, loaded, {
-        name: "walk",
-        inPlace: true,
-        omitBones: FACE_LOCK_BONES,
-      });
-      if (destroyed) return;
-      walkAction = mixer.clipAction(walkClip);
-      walkAction.setLoop(THREE.LoopRepeat, Infinity);
-      walkAction.timeScale = 0.9;
-      walkAction.enabled = true;
-      walkAction.setEffectiveWeight(0);
+      if (loadWalk) {
+        const walkClip = await loadMixamoAnimation(WALK_URL, loaded, {
+          name: "walk",
+          inPlace: true,
+          omitBones: FACE_LOCK_BONES,
+        });
+        if (destroyed) return;
+        walkAction = mixer.clipAction(walkClip);
+        walkAction.setLoop(THREE.LoopRepeat, Infinity);
+        walkAction.timeScale = 0.9;
+        walkAction.enabled = true;
+        walkAction.setEffectiveWeight(0);
+      }
     } catch (err) {
       console.error("[pet] walk 加载失败", err);
     }
@@ -241,48 +332,22 @@ export function createPetVrm(container: HTMLElement): PetVrmHandle {
 
     loaded.update(0);
     onResize();
-
-    const tick = () => {
-      if (destroyed || !renderer || !vrm) return;
-      const delta = clock.getDelta();
-      mixer?.update(delta);
-      lockMouth(vrm);
-      const noticing = clock.elapsedTime < noticeUntil;
-      if (noticing) {
-        updateLookAtTarget();
-        applyNoticeReaction(vrm, clock.elapsedTime, noticeStart, noticeUntil);
-        clearEyeBlink(vrm);
-      } else {
-        // sleepy 自带半闭眼，减弱自动眨眼以免打架
-        if (faceExpr === "sleepy") {
-          clearEyeBlink(vrm);
-        } else {
-          applyBlink(vrm, clock.elapsedTime);
-        }
-        if (vrm.lookAt) vrm.lookAt.target = null;
-      }
-      applyFaceExpression(vrm, faceExpr, faceWeights, delta);
-      vrm.update(delta);
-      // Joy/update 之后再清一次，避免眯眼被当成眨眼
-      if (noticing) {
-        clearEyeBlink(vrm);
-        vrm.expressionManager?.update();
-      }
-      renderer.render(scene, camera);
-      raf = requestAnimationFrame(tick);
-    };
-    tick();
+    scheduleTick();
   })();
 
   return {
     ready,
+    setActive,
     setLocomotion,
     notice,
     setExpression,
     destroy() {
       destroyed = true;
       cancelAnimationFrame(raf);
+      window.clearTimeout(resizeTimer);
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("qi-window-resizing", onWindowResizing);
+      window.removeEventListener("qi-layout-settled", onLayoutSettled);
       mixer?.stopAllAction();
       mixer = null;
       idleAction = null;
@@ -380,25 +445,67 @@ function applyNoticeReaction(
   }
 }
 
-function frameCamera(camera: THREE.PerspectiveCamera, model: VRM) {
+function frameCamera(
+  camera: THREE.PerspectiveCamera,
+  model: VRM,
+  framing: PetVrmFraming = "pet"
+) {
+  model.scene.position.set(0, 0, 0);
   model.scene.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(model.scene);
+
+  let box = new THREE.Box3().setFromObject(model.scene);
   if (box.isEmpty()) return;
 
-  const size = box.getSize(new THREE.Vector3());
+  if (framing === "presence") {
+    const preCenter = box.getCenter(new THREE.Vector3());
+    model.scene.position.x = -preCenter.x;
+    model.scene.updateMatrixWorld(true);
+    box.setFromObject(model.scene);
+  }
+
+  const fullSize = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
-  const padding = 1.22;
-  const fitH = Math.max(size.y * padding, 0.9);
-  const fitW = Math.max(size.x * padding, 0.4);
+  const focusX = framing === "presence" ? 0 : center.x;
+
+  let fitH: number;
+  let fitW: number;
+  let distScale: number;
+  let cameraY: number;
+  let lookY: number;
+
+  if (framing === "presence") {
+    // 相处页：全身入镜，略留边；比先前更近，人物更大
+    const footPad = fullSize.y * 0.09;
+    const headPad = fullSize.y * 0.03;
+    const frameMinY = box.min.y - footPad;
+    const frameMaxY = box.max.y + headPad;
+    const frameH = frameMaxY - frameMinY;
+    const frameCenterY = (frameMinY + frameMaxY) * 0.5;
+
+    fitH = Math.max(frameH * 1.02, 0.98);
+    fitW = Math.max(fullSize.x * 1.03, 0.44);
+    distScale = 0.93;
+    cameraY = frameCenterY + fullSize.y * 0.008;
+    lookY = frameCenterY + fullSize.y * 0.015;
+  } else {
+    fitH = Math.max(fullSize.y * 1.22, 0.9);
+    fitW = Math.max(fullSize.x * 1.22, 0.4);
+    distScale = 1.05;
+    cameraY = center.y + fullSize.y * 0.02;
+    lookY = center.y - fullSize.y * 0.04;
+  }
 
   const vFov = THREE.MathUtils.degToRad(camera.fov);
   const distH = fitH / 2 / Math.tan(vFov / 2);
   const distW = fitW / 2 / Math.tan(vFov / 2) / Math.max(camera.aspect, 0.2);
-  const dist = Math.max(distH, distW) * 1.05;
+  const dist =
+    framing === "presence"
+      ? distH * distScale
+      : Math.max(distH, distW) * distScale;
 
-  camera.position.set(center.x, center.y + size.y * 0.02, center.z + dist);
+  camera.position.set(focusX, cameraY, center.z + dist);
   camera.near = Math.max(0.05, dist / 80);
   camera.far = Math.max(40, dist * 12);
-  camera.lookAt(center.x, center.y - size.y * 0.04, center.z);
+  camera.lookAt(focusX, lookY, center.z);
   camera.updateProjectionMatrix();
 }

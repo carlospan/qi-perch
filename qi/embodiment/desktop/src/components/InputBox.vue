@@ -12,9 +12,9 @@ const emit = defineEmits<{
 const text = ref("");
 const field = ref<HTMLTextAreaElement | null>(null);
 
-/** 大厂常见：约 1～5 行可视，超出内部滚动 */
+/** 桌面端：约 2～8 行可视 */
 const MIN_HEIGHT_PX = 44;
-const MAX_HEIGHT_PX = 132; // ~5 行 @ 14px/1.5
+const MAX_HEIGHT_PX = 168;
 
 function resize() {
   const el = field.value;
@@ -56,10 +56,9 @@ watch(text, () => {
       v-model="text"
       rows="1"
       maxlength="500"
-      :placeholder="disabled ? '通道还没连上……' : '说点什么……'"
+      :placeholder="disabled ? '通道还没连上……' : '说点什么……（Enter 发送，Shift+Enter 换行）'"
       :disabled="disabled"
       autocomplete="off"
-      enterkeyhint="send"
       @keydown="onKeydown"
       @input="resize"
     />
@@ -68,7 +67,7 @@ watch(text, () => {
       aria-label="发送"
       :disabled="disabled || !text.trim()"
     >
-      说
+      发送
     </button>
   </form>
 </template>
@@ -115,17 +114,18 @@ textarea:focus {
 
 button {
   flex-shrink: 0;
-  width: 38px;
-  height: 38px;
-  margin-bottom: 3px;
+  min-width: 64px;
+  height: 40px;
+  margin-bottom: 2px;
+  padding: 0 14px;
   border: none;
-  border-radius: 50%;
-  padding: 0;
+  border-radius: 10px;
   background: linear-gradient(135deg, #8fb4c6, #5c8296);
   color: #0e1620;
   cursor: pointer;
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: 13px;
+  letter-spacing: 2px;
   display: grid;
   place-items: center;
   transition:

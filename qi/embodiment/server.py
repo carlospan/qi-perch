@@ -423,9 +423,9 @@ class EmbodimentServer:
 
         cards: list[dict] = []
         if db is not None:
-            oldest = messages[0]["at"] if messages else None
-            creations = await build_history_creation_cards(db, oldest_at_ms=oldest)
-            explores = await build_history_explore_cards(db, oldest_at_ms=oldest)
+            # 创作/见闻按条数上限回灌；勿用对话 oldest 裁剪，否则「回顾」会变空
+            creations = await build_history_creation_cards(db, oldest_at_ms=None)
+            explores = await build_history_explore_cards(db, oldest_at_ms=None)
             cards = sorted(
                 [*creations, *explores],
                 key=lambda c: int(c.get("at") or 0),

@@ -72,28 +72,29 @@ function exploreBody(card: ExploreCard) {
 </script>
 
 <template>
-  <div class="panel">
-    <header class="hero">
-      <div class="hero-title">
-        <h2>她留下的</h2>
-        <svg class="quill" viewBox="0 0 28 28" aria-hidden="true">
-          <path
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.35"
-            stroke-linecap="round"
-            d="M5 23c2.2-1.2 5.5-6.5 8.2-12.2C15.5 5.5 18.8 2 23 1.2"
-          />
-          <path
-            fill="currentColor"
-            d="M19.8 2.2c2.2 1.4 3.2 3.2 2.8 4.8-2.2-.1-4.6-1.6-6.4-3.4.9-.6 2.1-1 3.6-1.4z"
-          />
-        </svg>
-      </div>
-      <p class="hero-sub">回顾她的创作与见闻，那些被记得的瞬间。</p>
-    </header>
+  <div class="desk-page review">
+    <div class="desk-main">
+      <header class="page-hero">
+        <div class="page-hero-row">
+          <h2>她留下的</h2>
+          <svg class="page-hero-mark quill" viewBox="0 0 28 28" aria-hidden="true">
+            <path
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.35"
+              stroke-linecap="round"
+              d="M5 23c2.2-1.2 5.5-6.5 8.2-12.2C15.5 5.5 18.8 2 23 1.2"
+            />
+            <path
+              fill="currentColor"
+              d="M19.8 2.2c2.2 1.4 3.2 3.2 2.8 4.8-2.2-.1-4.6-1.6-6.4-3.4.9-.6 2.1-1 3.6-1.4z"
+            />
+          </svg>
+        </div>
+        <p class="page-hero-sub">回顾她的创作与见闻，那些被记得的瞬间。</p>
+      </header>
 
-    <div class="chips" role="tablist" aria-label="回顾分类">
+      <div class="chips" role="tablist" aria-label="回顾分类">
       <button
         v-for="c in chips"
         :key="c.id"
@@ -129,15 +130,16 @@ function exploreBody(card: ExploreCard) {
         </svg>
         {{ c.label }}
       </button>
-    </div>
+      </div>
 
-    <div class="panel-body">
-      <p v-if="list.length === 0" class="empty">
-        <template v-if="filter === 'creation'">还没有递过创作。</template>
-        <template v-else>还没有留下见闻。</template>
-      </p>
+      <div class="desk-scroll">
+        <p v-if="list.length === 0" class="empty">
+          <template v-if="filter === 'creation'">还没有递过创作。</template>
+          <template v-else>还没有留下见闻。</template>
+        </p>
 
-      <article
+        <div v-else class="card-grid">
+          <article
         v-for="(item, idx) in list"
         :key="item.id"
         class="card"
@@ -225,86 +227,58 @@ function exploreBody(card: ExploreCard) {
         </div>
       </article>
 
-      <div v-if="list.length > 0" class="more">
-        <span class="line" />
-        <span class="txt">还有更多被收藏的片段</span>
-        <span class="line" />
+          <div class="more">
+            <span class="line" />
+            <span class="txt">还有更多被收藏的片段</span>
+            <span class="line" />
+          </div>
+        </div>
       </div>
     </div>
+
+    <aside class="desk-aside" aria-hidden="true">
+      <div class="desk-aside-bg" />
+      <div class="desk-aside-veil" />
+      <div class="desk-aside-copy">
+        <p class="desk-aside-eyebrow">ARCHIVE</p>
+        <p class="desk-aside-quote">
+          纸页会泛黄，字句却还在。这里收着她愿意递出来的那一部分。
+        </p>
+      </div>
+    </aside>
   </div>
 </template>
 
 <style scoped>
-.panel {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  background: color-mix(in srgb, var(--panel-veil) 42%, transparent);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  pointer-events: auto;
-}
-
-.hero {
-  padding: 12px 12px 0;
-  flex-shrink: 0;
-}
-
-.hero-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.hero-title h2 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: 5px;
-  color: var(--ink);
-}
-
 .quill {
-  width: 20px;
-  height: 20px;
-  color: var(--ember);
   transform: rotate(-12deg);
-}
-
-.hero-sub {
-  margin: 10px 0 0;
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--ink-faint);
-  font-weight: 300;
 }
 
 .chips {
   display: flex;
-  justify-content: center;
-  gap: 12px;
-  padding: 18px 4px 16px;
+  gap: 10px;
+  padding: 20px var(--page-pad-x) 18px;
   flex-shrink: 0;
 }
 
 .chips button {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
-  background: color-mix(in srgb, #070b14 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, #070b14 38%, transparent);
   color: var(--ink-faint);
   font-family: var(--serif);
   font-size: 13px;
-  letter-spacing: 2px;
-  padding: 8px 18px;
+  letter-spacing: 0.14em;
+  padding: 9px 20px;
   cursor: pointer;
   transition:
     background 0.25s ease,
     color 0.25s ease,
-    box-shadow 0.25s ease;
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
 }
 
 .chips button .ico {
@@ -318,29 +292,28 @@ function exploreBody(card: ExploreCard) {
   background: linear-gradient(180deg, #dfc39a 0%, #c49a68 100%);
   box-shadow:
     0 0 0 1px color-mix(in srgb, #b88855 40%, transparent),
-    0 6px 18px color-mix(in srgb, var(--ember) 32%, transparent);
+    0 8px 22px color-mix(in srgb, var(--ember) 28%, transparent);
 }
 
-.panel-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 2px 14px 20px;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--ink) 12%, transparent) transparent;
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 22px 24px;
+  align-items: start;
 }
 
 .empty {
-  margin: 48px 12px;
+  margin: 56px auto;
+  max-width: 28ch;
   text-align: center;
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 1.8;
   color: var(--ink-faint);
   font-weight: 300;
 }
 
 .card {
   position: relative;
-  margin: 0 0 22px;
   animation: up 0.45s ease both;
 }
 
@@ -348,8 +321,7 @@ function exploreBody(card: ExploreCard) {
   transform: rotate(-0.35deg);
 }
 .card.tilt-b {
-  transform: rotate(0.5deg);
-  margin-left: 8px;
+  transform: rotate(0.45deg);
 }
 
 .sheet,
@@ -478,7 +450,8 @@ function exploreBody(card: ExploreCard) {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 4px 2px 10px;
+  margin: 28px 2px 8px;
+  grid-column: 1 / -1;
 }
 
 .more .line {

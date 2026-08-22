@@ -20,174 +20,139 @@ function kindClass(kind: string) {
 </script>
 
 <template>
-  <div class="panel">
-    <header class="hero">
-      <div class="hero-title">
-        <h2>内在</h2>
-        <svg class="cage" viewBox="0 0 28 28" aria-hidden="true">
-          <path
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.35"
-            stroke-linejoin="round"
-            d="M8 11c0-3.5 2.5-6.5 6-6.5s6 3 6 6.5v8.5H8V11z"
-          />
-          <path
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.35"
-            stroke-linecap="round"
-            d="M7 19.5h14M14 4.5v2M10.5 23h7"
-          />
-          <path
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.1"
-            d="M11 11.5v6M14 10v7.5M17 11.5v6"
-            opacity="0.55"
-          />
-        </svg>
-      </div>
-      <p class="hero-sub">
-        这里是她的内在日记，有些事，或许可以看，或许不看，取决于你。
-      </p>
-    </header>
-
-    <div class="panel-body">
-      <p v-if="entries.length === 0" class="empty">栖还没写下什么。</p>
-
-      <article
-        v-for="e in entries"
-        :key="e.id"
-        class="card"
-        :class="kindClass(e.kind)"
-      >
-        <span class="stack a" aria-hidden="true" />
-        <span class="stack b" aria-hidden="true" />
-
-        <div class="face">
-          <span class="pill">{{ e.kind }}</span>
-
-          <!-- 梦：右侧新月 -->
-          <svg
-            v-if="e.kind === '梦'"
-            class="watermark moon"
-            viewBox="0 0 120 120"
-            aria-hidden="true"
-          >
+  <div class="desk-page journal">
+    <div class="desk-main">
+      <header class="page-hero">
+        <div class="page-hero-row">
+          <h2>内在</h2>
+          <svg class="page-hero-mark cage" viewBox="0 0 28 28" aria-hidden="true">
             <path
-              fill="currentColor"
-              d="M72 18a42 42 0 100 84 48 48 0 01-8-94 42 42 0 018 10z"
-            />
-            <circle cx="28" cy="32" r="1.6" fill="currentColor" opacity="0.7" />
-            <circle cx="40" cy="22" r="1.1" fill="currentColor" opacity="0.55" />
-            <circle cx="22" cy="48" r="1.2" fill="currentColor" opacity="0.5" />
-          </svg>
-
-          <!-- 独白：右侧枝叶 -->
-          <svg
-            v-else
-            class="watermark leaf"
-            viewBox="0 0 120 140"
-            aria-hidden="true"
-          >
-            <path
-              fill="currentColor"
-              d="M88 16c-28 14-48 42-52 72 20-6 44-20 58-42 4 18-4 38-20 52 30-10 46-36 44-62-12 8-18 2-30-20z"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.35"
+              stroke-linejoin="round"
+              d="M8 11c0-3.5 2.5-6.5 6-6.5s6 3 6 6.5v8.5H8V11z"
             />
             <path
               fill="none"
               stroke="currentColor"
-              stroke-width="1.6"
-              d="M82 24c-14 16-28 38-34 58"
-              opacity="0.65"
+              stroke-width="1.35"
+              stroke-linecap="round"
+              d="M7 19.5h14M14 4.5v2M10.5 23h7"
             />
             <path
-              fill="currentColor"
-              d="M70 48c-8 6-14 14-16 22 6-2 12-6 18-12 1 6-1 12-6 16 10-2 16-10 16-18-4 2-8 0-12-8z"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.1"
+              d="M11 11.5v6M14 10v7.5M17 11.5v6"
               opacity="0.55"
             />
           </svg>
-
-          <p class="body">{{ e.text }}</p>
-          <div class="when">{{ whenLabel(e.at) }}</div>
         </div>
-      </article>
+        <p class="page-hero-sub">
+          这里是她的内在日记，有些事，或许可以看，或许不看，取决于你。
+        </p>
+      </header>
+
+      <div class="desk-scroll">
+        <p v-if="entries.length === 0" class="empty">栖还没写下什么。</p>
+
+        <div v-else class="entry-grid">
+          <article
+            v-for="e in entries"
+            :key="e.id"
+            class="card"
+            :class="kindClass(e.kind)"
+          >
+            <span class="stack a" aria-hidden="true" />
+            <span class="stack b" aria-hidden="true" />
+
+            <div class="face">
+              <span class="pill">{{ e.kind }}</span>
+
+              <svg
+                v-if="e.kind === '梦'"
+                class="watermark moon"
+                viewBox="0 0 120 120"
+                aria-hidden="true"
+              >
+                <path
+                  fill="currentColor"
+                  d="M72 18a42 42 0 100 84 48 48 0 01-8-94 42 42 0 018 10z"
+                />
+                <circle cx="28" cy="32" r="1.6" fill="currentColor" opacity="0.7" />
+                <circle cx="40" cy="22" r="1.1" fill="currentColor" opacity="0.55" />
+                <circle cx="22" cy="48" r="1.2" fill="currentColor" opacity="0.5" />
+              </svg>
+
+              <svg
+                v-else
+                class="watermark leaf"
+                viewBox="0 0 120 140"
+                aria-hidden="true"
+              >
+                <path
+                  fill="currentColor"
+                  d="M88 16c-28 14-48 42-52 72 20-6 44-20 58-42 4 18-4 38-20 52 30-10 46-36 44-62-12 8-18 2-30-20z"
+                />
+                <path
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  d="M82 24c-14 16-28 38-34 58"
+                  opacity="0.65"
+                />
+                <path
+                  fill="currentColor"
+                  d="M70 48c-8 6-14 14-16 22 6-2 12-6 18-12 1 6-1 12-6 16 10-2 16-10 16-18-4 2-8 0-12-8z"
+                  opacity="0.55"
+                />
+              </svg>
+
+              <p class="body">{{ e.text }}</p>
+              <div class="when">{{ whenLabel(e.at) }}</div>
+            </div>
+          </article>
+        </div>
+      </div>
     </div>
+
+    <aside class="desk-aside" aria-hidden="true">
+      <div class="desk-aside-bg" />
+      <div class="desk-aside-veil" />
+      <div class="desk-aside-copy">
+        <p class="desk-aside-eyebrow">INNER</p>
+        <p class="desk-aside-quote">
+          未寄出的字句，先落在自己的页上。你看不见的时候，她也在写。
+        </p>
+      </div>
+    </aside>
   </div>
 </template>
 
 <style scoped>
-.panel {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  background: color-mix(in srgb, var(--panel-veil) 48%, transparent);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  pointer-events: auto;
-}
-
-.hero {
-  padding: 12px 12px 4px;
-  flex-shrink: 0;
-}
-
-.hero-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.hero-title h2 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: 8px;
-  color: var(--ink);
-}
-
-.cage {
-  width: 22px;
-  height: 22px;
-  color: var(--ember);
-  opacity: 0.92;
-}
-
-.hero-sub {
-  margin: 12px 0 0;
-  font-size: 12px;
-  line-height: 1.75;
-  color: var(--ink-faint);
-  font-weight: 300;
-  max-width: 96%;
-}
-
-.panel-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px 12px 22px;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--ink) 12%, transparent) transparent;
+.entry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px 26px;
+  align-items: start;
 }
 
 .empty {
-  margin: 40px 12px;
+  margin: 56px auto;
+  max-width: 28ch;
   text-align: center;
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 1.8;
   color: var(--ink-faint);
   font-weight: 300;
 }
 
 .card {
   position: relative;
-  margin: 0 2px 22px;
   animation: rise 0.45s ease both;
 }
 
-/* 叠层：效果图里卡片背后淡淡的第二、三层 */
 .stack {
   position: absolute;
   inset: 0;
@@ -208,7 +173,8 @@ function kindClass(kind: string) {
 .face {
   position: relative;
   z-index: 1;
-  padding: 18px 18px 16px;
+  min-height: 168px;
+  padding: 20px 20px 18px;
   border-radius: 16px;
   overflow: hidden;
   background: color-mix(in srgb, #1a2438 58%, transparent);
@@ -232,8 +198,8 @@ function kindClass(kind: string) {
   display: inline-block;
   font-family: var(--serif);
   font-size: 11px;
-  letter-spacing: 2px;
-  padding: 3px 10px;
+  letter-spacing: 0.16em;
+  padding: 4px 11px;
   border-radius: 999px;
   margin-bottom: 14px;
   color: #f3e6d8;
@@ -281,10 +247,10 @@ function kindClass(kind: string) {
   position: relative;
   z-index: 1;
   margin: 0;
-  padding-right: 36px;
+  padding-right: 28px;
   font-family: var(--serif);
-  font-size: 14px;
-  line-height: 1.9;
+  font-size: 15px;
+  line-height: 1.92;
   font-weight: 300;
   color: color-mix(in srgb, var(--ink) 88%, transparent);
 }
@@ -292,11 +258,11 @@ function kindClass(kind: string) {
 .when {
   position: relative;
   z-index: 1;
-  margin-top: 16px;
+  margin-top: 18px;
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--ink-faint);
-  letter-spacing: 0.4px;
+  letter-spacing: 0.04em;
 }
 
 @keyframes rise {
