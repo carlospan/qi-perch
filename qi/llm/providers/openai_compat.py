@@ -1,4 +1,4 @@
-"""OpenAI 兼容端点的统一 provider（sensenova / tokenrhythm / ark 等）。"""
+"""OpenAI 兼容端点的统一 provider（modelscope / sensenova / tokenrhythm / ark 等）。"""
 
 from __future__ import annotations
 

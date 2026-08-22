@@ -20,7 +20,7 @@
 pip install -e ".[dev]"
 
 copy .env.example .env
-# 编辑 .env：填 SENSENOVA_API_KEY=...（备用可填 TOKENRHYTHM_API_KEY / ARK_API_KEY）
+# 编辑 .env：填 ARK_API_KEY=...（备用可填 MODELSCOPE_API_KEY / TOKENRHYTHM_API_KEY / SENSENOVA_API_KEY）
 
 mkdir data 2>nul
 copy qi\config\settings.example.yaml data\settings.yaml
