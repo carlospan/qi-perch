@@ -1014,6 +1014,7 @@ class Brain:
                         op=op,
                         target_path=target_path,
                         confirmed=True,
+                        last_user_interaction=self.last_interaction,
                     )
                     if action_type == "assist":
                         self.last_assist_request = None

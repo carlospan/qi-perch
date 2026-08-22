@@ -261,6 +261,85 @@ async def test_autonomous_interval_is_hard_gate(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_execute_kind_confirmed_does_not_bypass_look_interval(tmp_path):
+    """GWS 自主瞥带 confirmed=True 时仍须遵守防连瞥（回归）。"""
+    db = Database(str(tmp_path / "qi.db"))
+    await db.initialize()
+    config = {"action": {"look": {"min_interval_minutes": 15}}}
+    layer = ActionLayer(
+        db,
+        config,
+        llm=MagicMock(),  # type: ignore[arg-type]
+    )
+    layer.look._capture_fn = lambda: (b"\xff\xd8\xff", "Editor", False)
+    layer.look.llm = MagicMock()
+    layer.look.llm.call = AsyncMock(return_value="瞥见一点光。")
+    now = datetime(2026, 8, 23, 12, 0)
+    emotion = EmotionState(mode=ConsciousnessMode.AMBIENT, curiosity=0.7)
+    r1 = await layer.execute_kind(
+        "look",
+        emotion,
+        "friend",
+        "spring",
+        now,
+        mode="ambient",
+        confirmed=True,
+    )
+    assert r1 is not None
+    r2 = await layer.execute_kind(
+        "look",
+        emotion,
+        "friend",
+        "spring",
+        now + timedelta(minutes=2),
+        mode="ambient",
+        confirmed=True,
+    )
+    assert r2 is None
+
+
+@pytest.mark.asyncio
+async def test_execute_kind_respects_chat_grace(tmp_path):
+    """刚聊完不久，GWS 自主瞥应被聊后缓冲挡住。"""
+    db = Database(str(tmp_path / "qi.db"))
+    await db.initialize()
+    config = {"action": {"look": {"chat_grace_minutes": 5}}}
+    layer = ActionLayer(
+        db,
+        config,
+        llm=MagicMock(),  # type: ignore[arg-type]
+    )
+    layer.look._capture_fn = lambda: (b"\xff\xd8\xff", "Editor", False)
+    layer.look.llm = MagicMock()
+    layer.look.llm.call = AsyncMock(return_value="瞥见一点光。")
+    chatted = datetime(2026, 8, 23, 12, 0)
+    now = chatted + timedelta(minutes=2)
+    emotion = EmotionState(mode=ConsciousnessMode.AMBIENT, curiosity=0.7)
+    blocked = await layer.execute_kind(
+        "look",
+        emotion,
+        "friend",
+        "spring",
+        now,
+        mode="ambient",
+        confirmed=True,
+        last_user_interaction=chatted,
+    )
+    assert blocked is None
+    ok = await layer.execute_kind(
+        "look",
+        emotion,
+        "friend",
+        "spring",
+        chatted + timedelta(minutes=6),
+        mode="ambient",
+        confirmed=True,
+        last_user_interaction=chatted,
+    )
+    assert ok is not None
+
+
+@pytest.mark.asyncio
 async def test_reactive_invite_bypasses_interval(tmp_path):
     """邀看不受防连瞥限制。"""
     db = Database(str(tmp_path / "qi.db"))

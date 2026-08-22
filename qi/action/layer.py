@@ -344,6 +344,7 @@ class ActionLayer:
         payload: Any | None = None,
         selected_index: int | None = None,
         motive: dict | None = None,
+        last_user_interaction: datetime | None = None,
     ) -> dict | None:
         """GWS 分发：执行指定行动 kind，跳过 tick 内随机软门。"""
         self.last_result = None
@@ -470,7 +471,8 @@ class ActionLayer:
                     now=now,
                 )
         elif kind == "look":
-            reactive = op == "invite" or bool(confirmed)
+            # GWS 自主分发会带 confirmed=True（assist 等）；瞥视仅 op=invite 才算响应式
+            reactive = op == "invite"
             result = await self.look.glance(
                 relationship_stage=relationship_stage,
                 season=season,
@@ -478,6 +480,7 @@ class ActionLayer:
                 reactive=reactive,
                 user_question=target_path if reactive else None,
                 mode=mode,
+                last_user_interaction=last_user_interaction,
             )
             if (
                 result is not None
