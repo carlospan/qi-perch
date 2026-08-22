@@ -8,15 +8,18 @@
 
 | 任务 | 说明 |
 |------|------|
+| [`2026-08-17-催答空回复兜底.md`](2026-08-17-催答空回复兜底.md) | 表达层催答兜底（编码已完；感受验待维护者） |
 | [`2026-08-13-L7-世界触达四能力-冻结.md`](2026-08-13-L7-世界触达四能力-冻结.md) | **范围真源**：look / open / write / together（+ disk）；工程已落地 |
-| （并行）感受验 | [`../../how-to/L7世界触达-感受验清单.md`](../../how-to/L7世界触达-感受验清单.md) |
+| （并行）感受验 | [`../../how-to/L7世界触达-感受验清单.md`](../../how-to/L7世界触达-感受验清单.md)（相处勾选） |
+| （改码后）自动感受批 | [`../../how-to/感受验收-自动跑批.md`](../../how-to/感受验收-自动跑批.md) |
 | （L7 其后）删白名单 | **未开包**（open/write 另开刀） |
-| （L7 其后）irreversible | **未开包**：见 `reference/layers/L7-action.md` |
+| （L7 其后）irreversible | **未开包**：发消息等；见 `reference/layers/L7-action.md` |
 
 ## 已迁 archive（查总索引）
 
 | 桶 | 主题 |
 |----|------|
+| [`../archive/2026-08-22-L7-judgment/`](../archive/2026-08-22-L7-judgment/INDEX.md) | 判断制 + 委托检索（非 irreversible） |
 | [`../archive/2026-08-15-L7-world-reach/`](../archive/2026-08-15-L7-world-reach/INDEX.md) | look / open / disk / write / together 任务包 |
 | [`../archive/2026-08-08-L7-explore/`](../archive/2026-08-08-L7-explore/INDEX.md) | explore 真搜索 C |
 | [`../archive/2026-08-09-L7-n3-scar-share/`](../archive/2026-08-09-L7-n3-scar-share/INDEX.md) | N3 / 伤疤 / share cooldown |
@@ -29,4 +32,4 @@
 
 ---
 
-*tasks 索引 · 2026-08-15 · 迁档收束*
+*tasks 索引 · 2026-08-22 · 判断制包迁档*

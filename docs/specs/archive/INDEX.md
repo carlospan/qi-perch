@@ -30,6 +30,7 @@
 | [`2026-08-08-相处验证收口/`](2026-08-08-相处验证收口/INDEX.md) | L1–L6 相处验证收口 | ✅ 闭环 |
 | [`2026-08-09-L7-n3-scar-share/`](2026-08-09-L7-n3-scar-share/INDEX.md) | N3 / 伤疤 / share cooldown | ✅ 闭环 |
 | [`2026-08-15-L7-world-reach/`](2026-08-15-L7-world-reach/INDEX.md) | 世界触达 look/open/disk/write/together | ✅ 工程闭环 |
+| [`2026-08-22-L7-judgment/`](2026-08-22-L7-judgment/INDEX.md) | L7 判断制 + 委托检索（非 irreversible） | ✅ 工程闭环（感受验待维护者） |
 | [`2026-08-09-L7-assist/`](2026-08-09-L7-assist/INDEX.md) | L7 assist 八包 + 隐私小刀（追问 preview / 全文分块 / 整体叙事 / explore 文件红线） | ✅ 工程闭环 |
 
 ## 归档纪律
@@ -40,4 +41,4 @@
 
 ---
 
-*总索引 · 2026-08-15 回写（tasks 大批迁档）*
+*总索引 · 2026-08-22 回写（判断制包迁档）*

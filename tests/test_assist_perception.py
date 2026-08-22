@@ -109,7 +109,7 @@ def _brain_for_assist(tmp: str) -> Brain:
 class TestBrainAssistRequestStorage:
     @pytest.mark.asyncio
     async def test_receive_user_message_stores_assist_request(self):
-        """assist-4：对话拍直触发后 pending 存请求；last_assist_request 消费清空。"""
+        """assist-4：判断制直触发后消费 last_assist_request；不挂 assist pending。"""
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             brain = _brain_for_assist(tmp)
             await brain._db.initialize()
@@ -123,9 +123,9 @@ class TestBrainAssistRequestStorage:
                 await brain.receive_user_message("帮我看一下 D:/test.txt")
             assert brain.last_user_message == "帮我看一下 D:/test.txt"
             assert brain.last_assist_request is None
-            assert brain.pending_assist_confirmation is not None
-            assert brain.pending_assist_confirmation.op == "read_file"
-            assert "test.txt" in brain.pending_assist_confirmation.target_path
+            assert brain.pending_assist_confirmation is None
+            assert brain.last_assist_target is not None
+            assert "test.txt" in brain.last_assist_target
             await brain._db.close()
 
     @pytest.mark.asyncio

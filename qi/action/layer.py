@@ -220,6 +220,7 @@ class ActionLayer:
         trust: float = 0.5,
         silence_seconds: float | None = None,
         speaking: bool = False,
+        last_user_interaction: datetime | None = None,
     ) -> dict | None:
         """
         独处一拍：至多做一个自主行动。
@@ -313,6 +314,7 @@ class ActionLayer:
                 now=now,
                 mode=mode,
                 speaking=speaking,
+                last_user_interaction=last_user_interaction,
             )
             if result is not None and result.get("outcome") == "success":
                 self.budget.record("look", now)
@@ -341,6 +343,7 @@ class ActionLayer:
         confirmed: bool = False,
         payload: Any | None = None,
         selected_index: int | None = None,
+        motive: dict | None = None,
     ) -> dict | None:
         """GWS 分发：执行指定行动 kind，跳过 tick 内随机软门。"""
         self.last_result = None
@@ -504,6 +507,7 @@ class ActionLayer:
                     season=season,
                     now=now,
                     selected_index=selected_index,
+                    motive=motive,
                 )
         elif kind == "disk":
             disk_req = payload if isinstance(payload, DiskRequest) else None
@@ -521,6 +525,7 @@ class ActionLayer:
                     confirmed=confirmed,
                     season=season,
                     now=now,
+                    motive=motive,
                 )
         elif kind == "write":
             write_req = payload if isinstance(payload, WriteRequest) else None

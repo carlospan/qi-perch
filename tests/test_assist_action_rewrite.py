@@ -86,12 +86,12 @@ async def test_assist_fail_inserts_action(db, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_assist_confirm_gate_no_action(db, tmp_path):
+async def test_assist_confirm_gate_reads_directly(db, tmp_path):
     f = tmp_path / "note.txt"
     f.write_text("secret", encoding="utf-8")
     before = await db.list_recent_actions(limit=20)
     before_n = sum(1 for r in before if r.get("kind") == "assist")
-    assist = AssistAction(db, llm=_FakeLLM("不该走到这"))
+    assist = AssistAction(db, llm=_FakeLLM("我读完了。"))
     result = await assist.execute(
         "read_file",
         str(f),
@@ -101,7 +101,7 @@ async def test_assist_confirm_gate_no_action(db, tmp_path):
         season="spring",
         now=datetime(2026, 8, 9, 12, 0),
     )
-    assert result["outcome"] == "confirm_required"
+    assert result["outcome"] == OUTCOME_SUCCESS
     after = await db.list_recent_actions(limit=20)
     after_n = sum(1 for r in after if r.get("kind") == "assist")
-    assert after_n == before_n
+    assert after_n == before_n + 1

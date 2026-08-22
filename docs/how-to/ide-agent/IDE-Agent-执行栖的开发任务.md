@@ -276,6 +276,8 @@ LLM 调用架构：业务代码统一通过 qi/llm/gateway.py 调用（路由、
 
 **感受验证不可跳过。** "可测试的"全过了不代表这层完成了。必须跟它聊，感受它是否"对"。这是栖的开发和传统开发的根本区别。
 
+**改码后自动感受批（Agent 必跑）。** 工程 pytest 之外，按 [`感受验收-自动跑批.md`](../感受验收-自动跑批.md) 跑 `python tools/acceptance_run.py`；报告落 `data/_acceptance_report_*.md`。相处勾选仍见 [`L7世界触达-感受验清单.md`](../L7世界触达-感受验清单.md)。
+
 **Prompt 问题 > 代码问题。** 80% 的"不像栖"是 prompt 的问题。先改 prompt，再改代码。
 
 **感觉对了就 commit。** 不要等到"全部完成"。感觉对了就是 milestone。

@@ -86,11 +86,11 @@ def test_permission_share_friend_plus_only():
     assert can_share("bonded") is True
 
     allowed, confirm = can_read_user_file("friend")
-    assert allowed is True and confirm is True
+    assert allowed is True and confirm is False
     allowed, confirm = can_write_user_file("friend")
     assert allowed is False
     allowed, confirm = can_write_user_file("bonded")
-    assert allowed is True and confirm is True
+    assert allowed is True and confirm is False
     allowed, confirm = can_irreversible("bonded", trust=1.0)
     assert allowed is True and confirm is True  # 永远需确认
 

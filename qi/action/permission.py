@@ -33,23 +33,33 @@ def can_look(relationship_stage: str) -> bool:
 
 
 def can_open(relationship_stage: str) -> bool:
-    """打开链接/白名单应用：acquaintance+；执行侧仍每次确认。"""
+    """打开链接/白名单应用：acquaintance+；判断制，非逐步确认。"""
     return stage_at_least(relationship_stage, "acquaintance")
 
 
 def can_disk(relationship_stage: str) -> bool:
-    """列 D: 目录 / 打开 D: 文件：acquaintance+；执行侧仍每次确认。"""
+    """列 D: 目录 / 打开 D: 文件：acquaintance+。"""
     return stage_at_least(relationship_stage, "acquaintance")
 
 
 def can_write(relationship_stage: str) -> bool:
-    """约定路径写下：acquaintance+；执行侧仍每次确认。"""
+    """约定路径写下：acquaintance+。"""
     return stage_at_least(relationship_stage, "acquaintance")
 
 
 def can_together(relationship_stage: str) -> bool:
-    """同看：acquaintance+；执行侧仍每次确认。"""
+    """同看：acquaintance+。"""
     return stage_at_least(relationship_stage, "acquaintance")
+
+
+def can_allow_app(
+    relationship_stage: str,
+    scars: list[dict] | None = None,
+) -> bool:
+    """写入应用白名单：friend+（严于 open）。"""
+    if scar_blocks_kind("open", scars):
+        return False
+    return relationship_stage in FRIEND_PLUS
 
 
 def can_archive(
@@ -83,14 +93,14 @@ def can_read_user_file(
 ) -> tuple[bool, bool]:
     """
     读用户文件：(allowed, needs_confirmation)。
-    friend+ 允许但需确认。伤疤谨慎会收紧（见 scar_blocks_kind）。
+    判断制：friend+ 允许且不需逐步确认；仅 irreversible 保留确认。
     """
-    _ = trust  # 预留：将来可用信任阈值微调
+    _ = trust
     if scar_blocks_kind("assist", scars):
-        return False, True
+        return False, False
     if stage_at_least(relationship_stage, "friend"):
-        return True, True
-    return False, True
+        return True, False
+    return False, False
 
 
 def can_write_user_file(
@@ -98,13 +108,13 @@ def can_write_user_file(
     trust: float = 0.5,
     scars: list[dict] | None = None,
 ) -> tuple[bool, bool]:
-    """写用户文件：bonded 允许但需确认。"""
+    """写用户文件：bonded 允许；判断制无逐步确认。"""
     _ = trust
     if scar_blocks_kind("assist", scars):
-        return False, True
+        return False, False
     if relationship_stage == "bonded":
-        return True, True
-    return False, True
+        return True, False
+    return False, False
 
 
 def can_irreversible(

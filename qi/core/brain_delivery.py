@@ -136,12 +136,10 @@ async def deliver_action_result(brain: Brain, result: dict, now: datetime) -> No
             str(result["qi_line"]), now, proactive=True
         )
 
-    # open 确认：谈区正文已是完整问句（含多候选 1/2），再叠 AssistConfirmCard 会重复
-    if result.get("type") == "assist_confirm_request" and result.get("kind") in (
-        "open",
-        "disk",
-        "write",
-        "together",
+    # open 复述 / 确认：谈区正文已是完整问句，不叠 AssistConfirmCard
+    if result.get("type") in ("assist_confirm_request", "open_recap") and (
+        result.get("kind") in ("open", "disk", "write", "together")
+        or result.get("type") == "open_recap"
     ):
         return
 

@@ -53,6 +53,8 @@ function creationTitle(card: CreationCard) {
 }
 
 function exploreTitle(card: ExploreCard) {
+  const src = (card.source || card.found?.source || "").trim();
+  if (src === "web_delegate") return "帮忙 · 查资料";
   const season = seasonOf(card);
   if (season === "秋") return "见闻 · 秋分";
   return season ? `见闻 · ${season}` : "见闻";
@@ -217,7 +219,7 @@ function exploreBody(card: ExploreCard) {
             <div class="kicker">{{ exploreTitle(item.card) }}</div>
             <p class="body">{{ exploreBody(item.card) }}</p>
             <footer class="foot">
-              <span>{{ whenLabel(item.at) }} · 来自 她的见闻</span>
+              <span>{{ whenLabel(item.at) }} · {{ (item.card.source === 'web_delegate' || item.card.found?.source === 'web_delegate') ? '你请她查的' : '来自 她的见闻' }}</span>
             </footer>
           </template>
         </div>

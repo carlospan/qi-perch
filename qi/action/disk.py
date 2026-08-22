@@ -32,6 +32,7 @@ logger = logging.getLogger("qi.action.disk")
 DEFAULT_ALLOWED_ROOT = Path("D:/")
 LIST_CAP = 40
 DEBOUNCE_KEY = "disk_open_debounce"
+LIST_DEBOUNCE_KEY = "disk_list_debounce"
 DEBOUNCE_SECONDS = 8.0
 LISTING_STICKY_MINUTES = 5.0
 
@@ -44,8 +45,8 @@ _D_DRIVE_MENTION = re.compile(
     r"(?:[Dd]\s*盘|[Dd]:\\?|(?:^|[^\w])[Dd]:(?:\\|$))", re.I
 )
 _LIST_CUES = re.compile(
-    r"(列(一下|出|目录)|看看?.{0,8}(有什么|有哪些|里面)|目录|文件夹里|有哪些文件|"
-    r"里面有什么|有什么文件)",
+    r"(列(一下|出|目录)|看看?.{0,8}(有什么|有哪些|有啥|里面)|目录|文件夹里|有哪些文件|"
+    r"里面有什么|有什么文件|有啥)",
     re.I,
 )
 _OPEN_FILE_CUES = re.compile(
@@ -121,7 +122,9 @@ def looks_like_disk_intent(text: str) -> bool:
     path = extract_win_path(t)
     if not path:
         if mentions_d_drive(t) and (
-            _LIST_CUES.search(t) or re.search(r"(打开|开一下|帮我开)", t)
+            _LIST_CUES.search(t)
+            or re.search(r"(打开|开一下|帮我开)", t)
+            or re.search(r"(看下|看看|瞧瞧).{0,8}(有啥|有什么|有哪些)", t)
         ):
             return True
         return False
@@ -308,8 +311,10 @@ class DiskAction:
         confirmed: bool = False,
         season: str = "spring",
         now: datetime | None = None,
+        motive: dict | None = None,
     ) -> dict[str, Any]:
         now = now or datetime.now()
+        self._trace_motive = motive
         if not can_disk(relationship_stage):
             return await self._fail(
                 "我们再熟一点，我再帮你看盘上的东西。",
@@ -357,25 +362,12 @@ class DiskAction:
         season: str,
         now: datetime,
     ) -> dict[str, Any]:
-        """白话能力问：说明能看 D 盘，并邀列根目录（挂 list_dir pending）。"""
+        """白话能力问：说明能看 D 盘，直接列根目录一层。"""
         root = normalize_under_root(req.path) or allowed_root().resolve()
-        msg = (
-            f"能。我可以看 D 盘里的东西——每次会先问你，一次只看一层，不会自己乱翻。"
-            f"要我现在列一下「{root}」吗？"
+        list_req = DiskRequest(intent="list_dir", path=str(root))
+        return await self._list_dir(
+            root, confirmed=True, season=season, now=now
         )
-        return {
-            "type": "assist_confirm_request",
-            "kind": "disk",
-            "target_path": str(root),
-            "summary": msg,
-            "qi_line": msg,
-            "speak": True,
-            "outcome": "confirm_required",
-            "needs_confirmation": True,
-            "confirm_label": "列吧",
-            "promote_intent": "list_dir",
-            "list_path": str(root),
-        }
 
     async def _list_dir(
         self,
@@ -385,20 +377,20 @@ class DiskAction:
         season: str,
         now: datetime,
     ) -> dict[str, Any]:
-        if not confirmed:
-            msg = f"要我列一下「{path}」里有什么吗？（只看这一层）"
+        if await self._list_debounced(str(path), now):
+            qi_line = (
+                "刚列过这一层了，上面那些还在。"
+                "要说哪个我再帮你开，或者说进哪个文件夹。"
+            )
             return {
-                "type": "assist_confirm_request",
-                "kind": "disk",
-                "target_path": str(path),
-                "summary": msg,
-                "qi_line": msg,
+                "type": "disk_result",
+                "summary": "list_debounce",
+                "qi_line": qi_line,
                 "speak": True,
-                "outcome": "confirm_required",
-                "needs_confirmation": True,
-                "confirm_label": "列吧",
+                "outcome": OUTCOME_SUCCESS,
+                "intent": "list_dir",
+                "listing_dir": str(path),
             }
-
         if not path.exists():
             return await self._fail(
                 f"「{path}」好像不存在。",
@@ -468,9 +460,11 @@ class DiskAction:
             season=season,
             now=now,
             detail_json=json.dumps(
-                {"count": total, "shown": len(shown)}, ensure_ascii=False
+                {"count": total, "shown": len(shown), "motive": self._trace_motive or {}},
+                ensure_ascii=False,
             ),
         )
+        await self._mark_list_debounce(str(path), now)
         return {
             "type": "disk_result",
             "summary": f"listed {path} ({total})",
@@ -491,20 +485,6 @@ class DiskAction:
         season: str,
         now: datetime,
     ) -> dict[str, Any]:
-        if not confirmed:
-            msg = f"要我打开「{path.name}」吗？"
-            return {
-                "type": "assist_confirm_request",
-                "kind": "disk",
-                "target_path": str(path),
-                "summary": msg,
-                "qi_line": msg,
-                "speak": True,
-                "outcome": "confirm_required",
-                "needs_confirmation": True,
-                "confirm_label": "开吧",
-            }
-
         if not path.exists():
             return await self._fail(
                 f"「{path}」好像不存在。",
@@ -584,9 +564,27 @@ class DiskAction:
             return False
         return (now - at).total_seconds() < DEBOUNCE_SECONDS
 
+    async def _list_debounced(self, target: str, now: datetime) -> bool:
+        raw = await self.db.get_body_memory(LIST_DEBOUNCE_KEY)
+        if not isinstance(raw, dict):
+            return False
+        if str(raw.get("target")) != target:
+            return False
+        try:
+            at = datetime.fromisoformat(str(raw.get("at")))
+        except Exception:
+            return False
+        return (now - at).total_seconds() < DEBOUNCE_SECONDS
+
     async def _mark_debounce(self, target: str, now: datetime) -> None:
         await self.db.set_body_memory(
             DEBOUNCE_KEY,
+            {"target": target, "at": now.isoformat(timespec="seconds")},
+        )
+
+    async def _mark_list_debounce(self, target: str, now: datetime) -> None:
+        await self.db.set_body_memory(
+            LIST_DEBOUNCE_KEY,
             {"target": target, "at": now.isoformat(timespec="seconds")},
         )
 

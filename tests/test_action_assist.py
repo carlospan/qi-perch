@@ -50,11 +50,11 @@ async def test_assist_read_file_success(db, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_assist_not_confirmed_returns_confirm_gate(db, tmp_path):
-    """friend+ 未确认 → confirm_gate，不执行。"""
+async def test_assist_friend_reads_without_confirm(db, tmp_path):
+    """friend+ 判断制：未传 confirmed 也直接读。"""
     f = tmp_path / "note.txt"
     f.write_text("secret", encoding="utf-8")
-    assist = AssistAction(db, llm=_FakeLLM("不该走到这"))
+    assist = AssistAction(db, llm=_FakeLLM("我读完了。"))
     result = await assist.execute(
         "read_file",
         str(f),
@@ -64,9 +64,8 @@ async def test_assist_not_confirmed_returns_confirm_gate(db, tmp_path):
         season="spring",
         now=datetime(2026, 8, 9),
     )
-    assert result["outcome"] == "confirm_required"
-    assert "说一声" in result["qi_line"]
-    assert result.get("needs_confirmation") is True
+    assert result["outcome"] == OUTCOME_SUCCESS
+    assert result.get("needs_confirmation") is not True
 
 
 @pytest.mark.asyncio

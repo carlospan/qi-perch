@@ -34,7 +34,7 @@ _PRIVACY_LINE = "不外传用户文件内容原文"
 class AssistAction:
     """
     响应式协助：读用户文件并用栖语气复述。
-    红线：绝不主动（contract 第 25 条）；需确认；不外传原文。
+    红线：绝不主动（contract 第 25 条）；判断制直接读；不外传原文。
     """
 
     def __init__(
@@ -72,7 +72,7 @@ class AssistAction:
                 now=now,
             )
 
-        allowed, needs_confirm = can_read_user_file(
+        allowed, _needs_confirm = can_read_user_file(
             relationship_stage, trust, scars
         )
         if not allowed:
@@ -83,9 +83,6 @@ class AssistAction:
                 season=season,
                 now=now,
             )
-        if needs_confirm and not confirmed:
-            return self._confirm_gate(target_path)
-
         try:
             path = Path(target_path).expanduser().resolve()
             if not path.is_file():
@@ -250,19 +247,6 @@ class AssistAction:
                 tags=["assist", "file_read"],
             )
         return summary
-
-    def _confirm_gate(self, target_path: str) -> dict[str, Any]:
-        """未确认 → 不执行，请求确认。"""
-        msg = f"要我看 {Path(target_path).name} 的话，说一声我就看。"
-        return {
-            "type": "assist_confirm_request",
-            "target_path": target_path,
-            "summary": msg,
-            "qi_line": msg,
-            "speak": True,
-            "outcome": "confirm_required",
-            "needs_confirmation": True,
-        }
 
     async def _fail(
         self,

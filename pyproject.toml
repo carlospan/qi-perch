@@ -36,7 +36,7 @@ qi = "qi.cli:main_desktop"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 # basetemp 不再固化仓库内（规避 Windows ACL 损坏，见包18）；由 verify_package / 调用方传系统临时区
-addopts = "-p no:cacheprovider"
+addopts = "-p no:cacheprovider --basetemp=.pytest_basetemp"
 
 [build-system]
 requires = ["setuptools>=68"]

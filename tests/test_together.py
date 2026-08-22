@@ -98,20 +98,14 @@ async def test_confirm_then_open(db):
         title="例",
         source="explore",
     )
-    gate = await action.execute(
-        req, relationship_stage="acquaintance", confirmed=False
-    )
-    assert gate.get("needs_confirmation") is True
-    assert gate.get("kind") == "together"
-    assert "一起看" in (gate.get("qi_line") or "")
-
     with patch("qi.action.together.webbrowser.open") as open_fn:
-        done = await action.execute(
-            req, relationship_stage="acquaintance", confirmed=True
+        gate = await action.execute(
+            req, relationship_stage="acquaintance", confirmed=False
         )
         open_fn.assert_called_once()
-    assert done.get("outcome") == "success"
-    assert "一起" in (done.get("qi_line") or "")
+    assert gate.get("outcome") == "success"
+    assert gate.get("type") == "together_result"
+    assert "一起" in (gate.get("qi_line") or "")
 
 
 @pytest.mark.asyncio
@@ -148,4 +142,4 @@ async def test_layer_together(db):
         payload=req,
         confirmed=False,
     )
-    assert gate and gate.get("needs_confirmation")
+    assert gate and gate.get("outcome") == "success"

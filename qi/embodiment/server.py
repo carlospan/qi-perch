@@ -124,7 +124,7 @@ async def build_history_explore_cards(
             continue
         entries = found.get("entries")
         source = str(detail.get("source") or found.get("source") or "")
-        if source not in ("web", "journal"):
+        if source not in ("web", "journal", "web_delegate"):
             continue
         if not isinstance(entries, list) or not entries:
             continue

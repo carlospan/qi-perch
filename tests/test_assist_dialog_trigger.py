@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from qi.action.layer import ActionLayer
-from qi.action.permission import OUTCOME_FAILED_CAPABILITY
+from qi.action.permission import OUTCOME_FAILED_CAPABILITY, OUTCOME_SUCCESS
 from qi.core.brain import Brain
 from qi.core.emotion import ConsciousnessMode, EmotionState
 from qi.storage.database import Database
@@ -76,9 +76,8 @@ async def test_receive_user_message_with_assist_request_triggers_execute_kind(
 
         ek.assert_awaited()
         assert ek.await_args.args[0] == "assist"
-        assert ek.await_args.kwargs.get("confirmed") is False
+        assert ek.await_args.kwargs.get("confirmed") is True
         assert line is not None
-        assert "看" in line
         assert len(brain._pending_queue) == 0
         hb.assert_not_awaited()
         await brain._db.close()
@@ -117,23 +116,21 @@ async def test_assist_request_stranger_fails(tmp_path):
         f.write_text("secret", encoding="utf-8")
 
         with patch.object(
-            brain, "_deliver_action_result", new_callable=AsyncMock
+            brain, "_deliver_qi_message", new_callable=AsyncMock
         ) as deliver:
             line = await brain.receive_user_message(f"帮我看一下 {f}")
 
         assert line is not None
         assert "熟一点" in line
         deliver.assert_awaited()
-        result = deliver.await_args.args[0]
-        assert result.get("outcome") == OUTCOME_FAILED_CAPABILITY
-        assert result.get("needs_confirmation") is not True
         assert brain.pending_assist_confirmation is None
         assert len(brain._pending_queue) == 0
         await brain._db.close()
 
 
 @pytest.mark.asyncio
-async def test_assist_request_friend_confirm_gate_stores_pending(tmp_path):
+async def test_assist_request_friend_reads_directly(tmp_path):
+    """判断制：friend+ 直接读，不挂 assist pending。"""
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         brain = _brain(tmp, stage="friend")
         await brain._db.initialize()
@@ -146,10 +143,9 @@ async def test_assist_request_friend_confirm_gate_stores_pending(tmp_path):
             line = await brain.receive_user_message(f"帮我看一下 {f}")
 
         assert line is not None
-        assert "说一声我就看" in line or "要我看" in line
-        assert brain.pending_assist_confirmation is not None
-        assert brain.pending_assist_confirmation.op == "read_file"
-        path = brain.pending_assist_confirmation.target_path.replace("\\", "/")
+        assert brain.pending_assist_confirmation is None
+        assert brain.last_assist_target is not None
+        path = brain.last_assist_target.replace("\\", "/")
         assert str(f).replace("\\", "/") in path or path.endswith("note.txt")
         assert brain.last_assist_request is None
         assert len(brain._pending_queue) == 0
@@ -158,7 +154,7 @@ async def test_assist_request_friend_confirm_gate_stores_pending(tmp_path):
 
 @pytest.mark.asyncio
 async def test_confirm_after_pending_consumed_re_executes(tmp_path):
-    """B1：夹杂追问后「好你读吧」仍用粘性 target 补执行。"""
+    """B1：先读过后夹杂追问，「好你读吧」仍用粘性 target 补执行。"""
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         brain = _brain(tmp)
         await brain._db.initialize()
@@ -170,13 +166,6 @@ async def test_confirm_after_pending_consumed_re_executes(tmp_path):
             brain, "_deliver_action_result", new_callable=AsyncMock
         ):
             await brain.receive_user_message(f"帮我看一下 {path}")
-        assert brain.pending_assist_confirmation is not None
-        assert brain.last_assist_target is not None
-
-        with patch.object(
-            brain, "_deliver_action_result", new_callable=AsyncMock
-        ):
-            await brain.receive_user_message("看吧")
         assert brain.pending_assist_confirmation is None
         assert brain.last_assist_target is not None
 

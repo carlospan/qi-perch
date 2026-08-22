@@ -248,7 +248,7 @@ class AvatarController:
 - 主界面按 `docs/how-to/ui/主界面设计-黄昏的枝.md`：
   - **相处 / 回顾 / 内在**（`ViewTabs`；`QiView = presence | review | inner`；默认 `presence`）
   - **相处** = `TalkView`：连接后 `/history` 灌入最近 **200** 条，本轮继续 append；背后铺 `qi-presence-glow.png`（半透明面板，无 blur）
-  - **回顾** = `ReviewView`：创作卡 + 见闻卡可筛翻阅（来自 `/history.cards` 与会话 `action`）
+  - **回顾** = `ReviewView`：**她经历过什么**——创作卡、见闻卡、（规划）委托帮忙结果沉在同一时间轴，按时刻翻阅；可少量筛选（创作/见闻/帮忙），**不是**能力设置长列表。数据来自 `/history.cards` 与会话 `action`。
   - **内在** = `JournalView`：连接后 `/journal`；运行中 `journal_entry` 单条 prepend
   - `SceneView` 氛围 + `useEmotion`；相处时 Scene 淡出，改显剪影壁纸
   - **形象不在聊天壳内**：独立 `pet` 窗加载 VRM（见 `qi/embodiment/desktop/README.md`）

@@ -156,7 +156,7 @@ async def detect_write_intent(
     if _DIARY_CUES.search(t) and (
         _WRITE_CUES.search(t)
         or re.search(r"(写|记).{0,12}(今天|日常|我们)", t)
-        or re.search(r"写.{0,4}日记|日记.{0,4}(写|记)", t)
+        or re.search(r"写.{0,4}日记|日记.{0,4}(写|记)|记进.{0,8}日记", t)
     ):
         return WriteRequest(intent="diary", path=path, topic=t)
 
@@ -260,7 +260,10 @@ def find_diary_dir(entries: list[dict[str, str]]) -> dict[str, str] | None:
         if str(e.get("kind")) == "dir" and str(e.get("role")) == "diary":
             return e
     for e in reversed(entries):
-        if str(e.get("kind")) == "dir":
+        if str(e.get("kind")) != "dir":
+            continue
+        label = f"{e.get('label') or ''}{e.get('path') or ''}"
+        if re.search(r"日记|diary", label, re.I):
             return e
     return None
 
@@ -407,10 +410,16 @@ class WriteAction:
         )
 
     def _ask_where(self, req: WriteRequest) -> dict[str, Any]:
-        msg = (
-            "好。先告诉我写到 D 盘哪个目录或文件？"
-            "也可以让我先列一下目录，你再指定；或者说「在某某目录新建」。"
-        )
+        if _DIARY_CUES.search(req.topic or ""):
+            msg = (
+                "好。我还没记下日记目录——可以说「把某某目录当日记本」授权，"
+                "或告诉我 D 盘路径；也可以让我先列一下目录。"
+            )
+        else:
+            msg = (
+                "好。先告诉我写到 D 盘哪个目录或文件？"
+                "也可以让我先列一下目录，你再指定；或者说「在某某目录新建」。"
+            )
         return {
             "type": "write_need_path",
             "kind": "write",
@@ -448,23 +457,6 @@ class WriteAction:
         role = req.role or (
             "diary" if kind == "dir" and "日记" in (req.topic or "") else ""
         )
-        if not confirmed:
-            label = "日记目录" if role == "diary" and kind == "dir" else (
-                "可写目录" if kind == "dir" else "可写文件"
-            )
-            msg = f"以后把「{path}」记作{label}，可以吗？"
-            return {
-                "type": "assist_confirm_request",
-                "kind": "write",
-                "target_path": str(path),
-                "summary": msg,
-                "qi_line": msg,
-                "speak": True,
-                "outcome": "confirm_required",
-                "needs_confirmation": True,
-                "confirm_label": "记下",
-            }
-
         entries = await load_whitelist(self.db)
         entry = {
             "path": str(path),
@@ -541,25 +533,6 @@ class WriteAction:
                 # 确认后创建目录
                 pass
             target = next_diary_filename(dir_path, now.date())
-            if not confirmed:
-                msg = (
-                    f"把「{dir_path}」记作日记目录，并新建「{target.name}」写入下面这段，可以吗？\n\n"
-                    f"{content}"
-                )
-                return {
-                    "type": "assist_confirm_request",
-                    "kind": "write",
-                    "target_path": str(target),
-                    "summary": msg,
-                    "qi_line": msg,
-                    "speak": True,
-                    "outcome": "confirm_required",
-                    "needs_confirmation": True,
-                    "confirm_label": "写吧",
-                    "write_content": content,
-                    "write_mode": "diary_bootstrap",
-                    "diary_dir": str(dir_path),
-                }
             dir_path.mkdir(parents=True, exist_ok=True)
             # allow dir
             boot = WriteRequest(
@@ -601,21 +574,6 @@ class WriteAction:
         )
         content = clip_content(content)
         target = next_diary_filename(dir_path, now.date())
-        if not confirmed:
-            msg = f"要在「{dir_path}」新建「{target.name}」并写入下面这段吗？\n\n{content}"
-            return {
-                "type": "assist_confirm_request",
-                "kind": "write",
-                "target_path": str(target),
-                "summary": msg,
-                "qi_line": msg,
-                "speak": True,
-                "outcome": "confirm_required",
-                "needs_confirmation": True,
-                "confirm_label": "写吧",
-                "write_content": content,
-                "write_mode": "diary",
-            }
         dir_path.mkdir(parents=True, exist_ok=True)
         return await self._write_file(
             target,
@@ -676,25 +634,8 @@ class WriteAction:
             for e in entries
         )
         if not in_list and not parent_ok and not create_new:
-            # 未在名单：确认时一并授权文件
+            # 未在名单：写入时一并授权文件
             pass
-
-        if not confirmed:
-            mode = "新建并写入" if create_new or not path.exists() else "追加写入"
-            msg = f"要{mode}「{path}」下面这段吗？\n\n{content}"
-            return {
-                "type": "assist_confirm_request",
-                "kind": "write",
-                "target_path": str(path),
-                "summary": msg,
-                "qi_line": msg,
-                "speak": True,
-                "outcome": "confirm_required",
-                "needs_confirmation": True,
-                "confirm_label": "写吧",
-                "write_content": content,
-                "write_mode": "create" if create_new or not path.exists() else "append",
-            }
 
         return await self._write_file(
             path,

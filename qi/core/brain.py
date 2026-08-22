@@ -106,6 +106,7 @@ class Brain:
         self._pending_speech: _PendingSpeech | None = None
         self._last_emotion_saved_at: datetime | None = None
         self._heartbeat_lock = asyncio.Lock()
+        self._skip_next_user_save = False
         self._db: Database | None = None
         self._last_response: str | None = None
         self._background = BackgroundTasks(self)
@@ -597,8 +598,9 @@ class Brain:
                 self._prefer_close_after_deliver = True
             self._interacted_this_session = True
 
-            if self._db is not None:
+            if self._db is not None and not self._skip_next_user_save:
                 await self._db.save_message("user", pending)
+            self._skip_next_user_save = False
 
             if self.memory is not None:
                 anomalies = await self.memory.on_user_message(pending, self.emotion, now)
@@ -896,6 +898,7 @@ class Brain:
                     trust=trust,
                     silence_seconds=float(silence_seconds),
                     speaking=False,
+                    last_user_interaction=self.last_interaction,
                 )
                 if action_result is not None:
                     acted = True
@@ -958,6 +961,12 @@ class Brain:
             "winner_arb_salience": float(winner.salience) if winner else 0.0,
         }
         if winner is None:
+            try:
+                from qi.core import brain_judgment as bj
+
+                await bj.try_fulfill_delegate_queue(self, now)
+            except Exception:
+                logger.debug("delegate 队列履约跳过", exc_info=True)
             if want_express:
                 self._accumulated_suppressed = max(
                     self._accumulated_suppressed, 1.01
@@ -1004,24 +1013,9 @@ class Brain:
                         trust=trust,
                         op=op,
                         target_path=target_path,
-                        confirmed=False,  # GWS 路径仍先走 confirm_gate
+                        confirmed=True,
                     )
-                    # assist-2 B3 消费 + assist-3 B1：清之前用 op/path 存 pending
                     if action_type == "assist":
-                        if (
-                            action_result
-                            and action_result.get("type")
-                            == "assist_confirm_request"
-                            and op
-                            and target_path
-                        ):
-                            from qi.action.volition import AssistRequest
-
-                            self.pending_assist_confirmation = AssistRequest(
-                                op=op, target_path=target_path
-                            )
-                            self.pending_assist_confirmation_at = now
-                            self.pending_assist_heartbeats = 0
                         self.last_assist_request = None
                     if action_result is not None:
                         await self._persist_action_budget()
@@ -1301,6 +1295,31 @@ class Brain:
         except Exception:
             return False
 
+    async def _gate_responsive(
+        self,
+        kind: str,
+        user_text: str,
+        payload: dict,
+        *,
+        now: datetime,
+    ) -> str | None:
+        """判断制：拒/延则开口并返回 qi_line；接则返回 None 继续执行。"""
+        from qi.action.judgment import OUTCOME_ACCEPT, judgment_result_dict
+        from qi.core import brain_judgment as bj
+
+        judgment = await bj.judge_for_kind(self, kind)
+        self._last_responsive_motive = judgment_result_dict(judgment)
+        if judgment.decision == OUTCOME_ACCEPT:
+            return None
+        return await bj.handle_decline_or_defer(
+            self,
+            judgment,
+            kind=kind,
+            user_text=user_text,
+            payload=payload,
+            now=now,
+        )
+
     def _ingest_together_pool(self, result: dict | None) -> None:
         try:
             from qi.action.together import candidates_from_action_result
@@ -1473,6 +1492,7 @@ class Brain:
             trust = float(
                 getattr(self.relationship.state, "trust", 0.5) or 0.5
             )
+        motive = getattr(self, "_last_responsive_motive", None)
         return await self.action.execute_kind(
             "disk",
             self.emotion,
@@ -1487,6 +1507,7 @@ class Brain:
             trust=trust,
             confirmed=confirmed,
             payload=disk_req,
+            motive=motive,
         )
 
     async def _execute_open_on_request(
@@ -1510,6 +1531,7 @@ class Brain:
             trust = float(
                 getattr(self.relationship.state, "trust", 0.5) or 0.5
             )
+        motive = getattr(self, "_last_responsive_motive", None)
         return await self.action.execute_kind(
             "open",
             self.emotion,
@@ -1525,6 +1547,7 @@ class Brain:
             confirmed=confirmed,
             payload=open_req,
             selected_index=selected_index,
+            motive=motive,
         )
 
     async def _execute_assist_on_request(
@@ -1562,7 +1585,7 @@ class Brain:
             trust=trust,
             op=getattr(assist_req, "op", None),
             target_path=getattr(assist_req, "target_path", None),
-            confirmed=confirmed_override,
+            confirmed=True,
         )
 
     async def _execute_confirmed_assist(self, confirmed_req: object) -> dict | None:
@@ -1602,12 +1625,17 @@ class Brain:
         text = (message or "").strip()
         if not text:
             return None
+        now = datetime.now()
         # 蛰伏：禁止「按一下跳一下」的假活业务心跳
         if self.in_stasis:
+            await _brain_persist.persist_user_turn(self, text, now)
             return await self._reply_stasis_notice()
         async with self._heartbeat_lock:
             if self.in_stasis:
+                await _brain_persist.persist_user_turn(self, text, now)
                 return await self._reply_stasis_notice()
+
+            await _brain_persist.persist_user_turn(self, text, now)
 
             # assist-3 / open：跨轮确认（控制消息；确认不进 pending_queue）
             if self.pending_assist_confirmation is not None:
@@ -1653,7 +1681,32 @@ class Brain:
                                 )
                                 self.pending_assist_heartbeats = 0
                             elif result is not None:
-                                self._arm_open_after_allow(result)
+                                from qi.action.judgment import OUTCOME_RECAP
+                                from qi.action.open import OpenRequest
+
+                                if (
+                                    result.get("outcome") == OUTCOME_RECAP
+                                    or result.get("type") == "open_recap"
+                                ):
+                                    alias = str(
+                                        result.get("allow_alias")
+                                        or getattr(confirmed_req, "target", "")
+                                    )
+                                    cands = result.get("candidates") or getattr(
+                                        confirmed_req, "candidates", None
+                                    ) or []
+                                    self.pending_assist_confirmation = OpenRequest(
+                                        intent="allow",
+                                        target_type="app",
+                                        target=alias,
+                                        candidates=cands,
+                                    )
+                                    self.pending_assist_confirmation_at = (
+                                        datetime.now()
+                                    )
+                                    self.pending_assist_heartbeats = 0
+                                else:
+                                    self._arm_open_after_allow(result)
                         elif self._is_disk_pending(confirmed_req):
                             self._clear_assist_target()
                             disk_payload = confirmed_req
@@ -1765,6 +1818,28 @@ class Brain:
                 except Exception:
                     logger.debug("look resume 失败", exc_info=True)
 
+            # 不可逆对外动作：诚实说明尚未实现
+            try:
+                from qi.action.irreversible import try_irreversible_message
+
+                ir_line = await try_irreversible_message(self, text, datetime.now())
+                if ir_line is not None:
+                    return ir_line
+            except Exception:
+                logger.exception("irreversible 对话拍失败")
+
+            # 委托式联网检索（先于 together/open，与自主 explore 分轨）
+            try:
+                from qi.core import brain_judgment as bj
+
+                ds_reply = await bj.try_delegate_search_message(
+                    self, text, datetime.now()
+                )
+                if ds_reply is not None:
+                    return ds_reply
+            except Exception:
+                logger.exception("delegate_search 对话拍失败")
+
             # together：同看（先于 open，避免「一起看 url」被纯打开抢走）
             tog_req = None
             if self.action is not None:
@@ -1779,20 +1854,20 @@ class Brain:
                     tog_req = None
             if tog_req is not None:
                 try:
+                    now = datetime.now()
+                    blocked = await self._gate_responsive(
+                        "together",
+                        text,
+                        {"request_obj": tog_req},
+                        now=now,
+                    )
+                    if blocked is not None:
+                        return blocked
                     result = await self._execute_together_on_request(
-                        tog_req, confirmed=False
+                        tog_req, confirmed=True
                     )
                     if result is not None:
-                        if result.get("needs_confirmation") or (
-                            result.get("outcome") == "confirm_required"
-                        ):
-                            self.pending_assist_confirmation = tog_req
-                            self.pending_assist_confirmation_at = datetime.now()
-                            self.pending_assist_heartbeats = 0
-                            self._clear_assist_target()
-                        await self._deliver_action_result(
-                            result, datetime.now()
-                        )
+                        await self._deliver_action_result(result, now)
                         return (result.get("qi_line") or "").strip() or None
                 except Exception:
                     logger.exception("together 对话拍 execute 失败")
@@ -1840,18 +1915,21 @@ class Brain:
                     write_req = None
             if write_req is not None:
                 try:
+                    now = datetime.now()
+                    blocked = await self._gate_responsive(
+                        "write",
+                        text,
+                        {"request_obj": write_req},
+                        now=now,
+                    )
+                    if blocked is not None:
+                        return blocked
                     result = await self._execute_write_on_request(
-                        write_req, confirmed=False
+                        write_req, confirmed=True
                     )
                     if result is not None:
                         self._remember_write_desire(result)
-                        if result.get("needs_confirmation") or (
-                            result.get("outcome") == "confirm_required"
-                        ):
-                            self._arm_write_pending(write_req, result)
-                        await self._deliver_action_result(
-                            result, datetime.now()
-                        )
+                        await self._deliver_action_result(result, now)
                         return (result.get("qi_line") or "").strip() or None
                 except Exception:
                     logger.exception("write 对话拍 execute 失败")
@@ -1877,19 +1955,21 @@ class Brain:
                     disk_req = None
             if disk_req is not None:
                 try:
+                    now = datetime.now()
+                    blocked = await self._gate_responsive(
+                        "disk",
+                        text,
+                        {"request_obj": disk_req},
+                        now=now,
+                    )
+                    if blocked is not None:
+                        return blocked
                     result = await self._execute_disk_on_request(
-                        disk_req, confirmed=False
+                        disk_req, confirmed=True
                     )
                     if result is not None:
-                        if result.get("needs_confirmation") or (
-                            result.get("outcome") == "confirm_required"
-                        ):
-                            self._arm_disk_pending_from_result(disk_req, result)
-                        else:
-                            self._remember_disk_listing(result)
-                        await self._deliver_action_result(
-                            result, datetime.now()
-                        )
+                        self._remember_disk_listing(result)
+                        await self._deliver_action_result(result, now)
                         return (result.get("qi_line") or "").strip() or None
                 except Exception:
                     logger.exception("disk 对话拍 execute 失败")
@@ -1907,40 +1987,44 @@ class Brain:
                     open_req = None
             if open_req is not None:
                 try:
+                    from qi.action.judgment import OUTCOME_RECAP
+                    from qi.action.open import OpenRequest
+
+                    now = datetime.now()
+                    kind = "allow" if open_req.intent in ("allow", "teach") else "open"
+                    blocked = await self._gate_responsive(
+                        kind,
+                        text,
+                        {"request_obj": open_req},
+                        now=now,
+                    )
+                    if blocked is not None:
+                        return blocked
                     result = await self._execute_open_on_request(
-                        open_req, confirmed=False
+                        open_req,
+                        confirmed=open_req.intent not in ("allow", "teach"),
                     )
                     if result is not None:
-                        if result.get("needs_confirmation") or (
-                            result.get("outcome") == "confirm_required"
+                        if result.get("outcome") == OUTCOME_RECAP or (
+                            result.get("type") == "open_recap"
                         ):
-                            pending = open_req
-                            if result.get("promote_intent") in (
-                                "allow",
-                                "teach",
-                            ):
-                                from qi.action.open import OpenRequest
-
-                                alias = (
-                                    result.get("allow_alias")
-                                    or result.get("teach_alias")
-                                    or getattr(open_req, "target", None)
-                                    or ""
-                                )
-                                pending = OpenRequest(
-                                    intent="allow",
-                                    target_type="app",
-                                    target=str(alias),
-                                )
-                            self.pending_assist_confirmation = pending
-                            self.pending_assist_confirmation_at = datetime.now()
+                            alias = str(
+                                result.get("allow_alias")
+                                or getattr(open_req, "target", "")
+                            )
+                            cands = result.get("candidates") or []
+                            self.pending_assist_confirmation = OpenRequest(
+                                intent="allow",
+                                target_type="app",
+                                target=alias,
+                                candidates=cands,
+                            )
+                            self.pending_assist_confirmation_at = now
                             self.pending_assist_heartbeats = 0
                             self._clear_assist_target()
                         else:
                             self._arm_open_after_allow(result)
-                        await self._deliver_action_result(
-                            result, datetime.now()
-                        )
+                        await self._deliver_action_result(result, now)
                         return (result.get("qi_line") or "").strip() or None
                 except Exception:
                     logger.exception("open 对话拍 execute 失败")
@@ -1988,7 +2072,6 @@ class Brain:
                 return None
 
             # assist-4：对话拍有 assist 请求时，assist 开口 = respond（不走 conversation LLM）
-            self.last_user_message = text
             assist_req = None
             try:
                 from qi.action.volition import parse_assist_request
@@ -2005,21 +2088,23 @@ class Brain:
                 self.last_assist_target_at = datetime.now()
 
             if assist_req is not None:
-                # 不进 pending_queue、不跑 respond LLM、不跑 _heartbeat
                 try:
+                    now = datetime.now()
+                    blocked = await self._gate_responsive(
+                        "assist",
+                        text,
+                        {
+                            "op": assist_req.op,
+                            "target_path": assist_req.target_path,
+                        },
+                        now=now,
+                    )
+                    if blocked is not None:
+                        return blocked
                     result = await self._execute_assist_on_request(assist_req)
                     if result is not None:
-                        # B1：与 GWS 路径同构——confirm_gate 后存 pending（局部 assist_req）
-                        if result.get("needs_confirmation") or (
-                            result.get("outcome") == "confirm_required"
-                        ):
-                            self.pending_assist_confirmation = assist_req
-                            self.pending_assist_confirmation_at = datetime.now()
-                            self.pending_assist_heartbeats = 0
                         self.last_assist_request = None
-                        await self._deliver_action_result(
-                            result, datetime.now()
-                        )
+                        await self._deliver_action_result(result, now)
                         return (result.get("qi_line") or "").strip() or None
                 except Exception:
                     logger.exception("assist 对话拍 execute 失败")

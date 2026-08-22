@@ -79,8 +79,12 @@ def load_config(path: str | Path | None = None) -> dict:
     _load_dotenv()
 
     if path is None:
-        candidates = user_config_candidates()
-        path = next((c for c in candidates if c.exists()), candidates[-1])
+        qcfg = os.environ.get("QI_CONFIG")
+        if qcfg and Path(qcfg).is_file():
+            path = Path(qcfg)
+        else:
+            candidates = user_config_candidates()
+            path = next((c for c in candidates if c.exists()), candidates[-1])
     else:
         path = Path(path)
 

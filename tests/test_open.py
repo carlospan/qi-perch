@@ -16,6 +16,7 @@ from qi.action.open import (
     load_whitelist,
     looks_like_open_intent,
 )
+from qi.action.judgment import OUTCOME_RECAP
 from qi.action.permission import can_open
 from qi.core.emotion import ConsciousnessMode, EmotionState
 
@@ -96,15 +97,11 @@ def test_can_open_acquaintance():
 
 
 @pytest.mark.asyncio
-async def test_open_url_needs_confirm_then_opens(db):
+async def test_open_url_opens_directly(db):
     action = OpenAction(db)
     req = OpenRequest(
         intent="open", target_type="url", target="https://example.com/z"
     )
-    gate = await action.execute(
-        req, relationship_stage="acquaintance", confirmed=False
-    )
-    assert gate.get("needs_confirmation")
     with patch("qi.action.open.webbrowser.open") as opener:
         done = await action.execute(
             req, relationship_stage="acquaintance", confirmed=True
@@ -126,30 +123,46 @@ async def test_open_url_rejects_file_scheme(db):
 
 
 @pytest.mark.asyncio
-async def test_open_app_not_in_whitelist_offers_allow(db):
+async def test_open_app_not_in_whitelist_offers_allow(db, tmp_path):
+    fake = tmp_path / "cloud.exe"
+    fake.write_text("x")
     action = OpenAction(db)
     req = OpenRequest(intent="open", target_type="app", target="网易云")
-    out = await action.execute(
-        req, relationship_stage="acquaintance", confirmed=False
-    )
-    assert out.get("outcome") == "confirm_required"
-    assert out.get("needs_confirmation") is True
-    assert out.get("promote_intent") == "allow"
+    with patch(
+        "qi.action.open.find_app_candidates",
+        return_value=[
+            {"alias": "网易云", "path": str(fake), "label": "cloud.exe"},
+        ],
+    ):
+        out = await action.execute(
+            req, relationship_stage="acquaintance", confirmed=False
+        )
+    assert out.get("outcome") == OUTCOME_RECAP
+    assert out.get("type") == "open_recap"
     assert out.get("allow_alias") == "网易云"
-    assert "以后" in (out.get("qi_line") or "") and "帮你开" in (
+    assert "以后" in (out.get("qi_line") or "") or "你是说" in (
         out.get("qi_line") or ""
     )
     assert "教" not in (out.get("qi_line") or "")
 
 
 @pytest.mark.asyncio
-async def test_open_app_not_in_whitelist_confirmed_still_fails(db):
+async def test_open_app_not_in_whitelist_confirmed_still_recaps(db, tmp_path):
+    """判断制：不在白名单时仍先复述 allow，不 silent fail。"""
+    fake = tmp_path / "cloud.exe"
+    fake.write_text("x")
     action = OpenAction(db)
     req = OpenRequest(intent="open", target_type="app", target="网易云")
-    out = await action.execute(
-        req, relationship_stage="acquaintance", confirmed=True
-    )
-    assert out.get("outcome") == "failed_capability"
+    with patch(
+        "qi.action.open.find_app_candidates",
+        return_value=[
+            {"alias": "网易云", "path": str(fake), "label": "cloud.exe"},
+        ],
+    ):
+        out = await action.execute(
+            req, relationship_stage="acquaintance", confirmed=True
+        )
+    assert out.get("outcome") == OUTCOME_RECAP
 
 
 @pytest.mark.asyncio
@@ -166,12 +179,12 @@ async def test_allow_then_open_app(db, tmp_path):
         ],
     )
     gate = await action.execute(
-        req, relationship_stage="acquaintance", confirmed=False
+        req, relationship_stage="friend", confirmed=False
     )
-    assert gate.get("needs_confirmation")
+    assert gate.get("outcome") == OUTCOME_RECAP
 
     allowed = await action.execute(
-        req, relationship_stage="acquaintance", confirmed=True
+        req, relationship_stage="friend", confirmed=True
     )
     assert allowed.get("outcome") == "success"
     assert allowed.get("offer_open_now") is True
@@ -261,9 +274,9 @@ async def test_layer_execute_kind_open(db):
             datetime.now(),
             mode="ambient",
             payload=req,
-            confirmed=False,
+            confirmed=True,
         )
-    assert gate and gate.get("needs_confirmation")
+    assert gate and gate.get("outcome") == "success"
 
 
 @pytest.mark.asyncio
@@ -327,7 +340,7 @@ async def test_brain_whitelist_miss_要_promotes_allow(tmp_path):
         ):
             line = await brain.receive_user_message("打开企微")
             assert line is not None
-            assert "以后" in line or "帮你开" in line
+            assert "你是说" in line or "以后" in line or "帮你开" in line
             assert "教" not in line
             pending = brain.pending_assist_confirmation
             assert pending is not None
@@ -336,28 +349,20 @@ async def test_brain_whitelist_miss_要_promotes_allow(tmp_path):
 
             line2 = await brain.receive_user_message("要")
             assert line2 is not None
-            assert "以后都可以帮你开" in line2 or "找到这些" in line2
+            assert "记下了" in line2 and "没开" in line2
+            assert "现在开吗" in line2
             pending2 = brain.pending_assist_confirmation
             assert pending2 is not None
-            assert getattr(pending2, "intent", None) == "allow"
-            assert getattr(pending2, "candidates", None)
-
-            line3 = await brain.receive_user_message("开吧")
-            assert line3 is not None
-            assert "记下了" in line3 and "没开" in line3
-            assert "现在开吗" in line3
-            pending3 = brain.pending_assist_confirmation
-            assert pending3 is not None
-            assert getattr(pending3, "intent", None) == "open"
-            assert getattr(pending3, "target", None) == "企微"
+            assert getattr(pending2, "intent", None) == "open"
+            assert getattr(pending2, "target", None) == "企微"
             entries = await load_whitelist(db)
             assert find_whitelist_entry(entries, "企微")
 
             with patch.object(
                 OpenAction, "_launch_path"
             ) as launch:
-                line4 = await brain.receive_user_message("开吧")
-                assert "开了" in (line4 or "")
+                line3 = await brain.receive_user_message("开吧")
+                assert "打开" in (line3 or "")
                 launch.assert_called_once()
             assert brain.pending_assist_confirmation is None
 
@@ -495,25 +500,24 @@ async def test_open_confirm_speaks_without_assist_card():
     brain.embodiment = MagicMock()
     brain.embodiment.broadcast = fake_broadcast
 
-    msg = "以后都可以帮你开「qq」吗？我找到这些，回 1/2 或说开吧（默认 1）："
+    msg = "你是说以后可以帮你开「qq」吗？"
     await brain._deliver_action_result(
         {
-            "type": "assist_confirm_request",
+            "type": "open_recap",
             "kind": "open",
+            "intent": "allow",
             "target_path": "C:/QQ/QQ.exe",
             "summary": msg,
             "qi_line": msg,
             "speak": True,
-            "outcome": "confirm_required",
-            "needs_confirmation": True,
-            "confirm_label": "好",
+            "outcome": OUTCOME_RECAP,
         },
         datetime(2026, 8, 15, 4, 55),
     )
     assert delivered == [msg]
     assert broadcasts == []
 
-    # assist（非 open）仍广播确认卡
+    # 非 open 的 assist_confirm 仍广播确认卡（仅 irreversible 等遗留路径）
     delivered.clear()
     await brain._deliver_action_result(
         {

@@ -61,6 +61,11 @@ def min_interval_minutes(config: dict | None) -> float:
     return float(_look_cfg(config).get("min_interval_minutes", 15.0))
 
 
+def chat_grace_minutes(config: dict | None) -> float:
+    """刚聊完不久不自主瞥，避免开发/连发时连瞥。"""
+    return float(_look_cfg(config).get("chat_grace_minutes", 5.0))
+
+
 def silence_boost_minutes(config: dict | None) -> float:
     return float(_look_cfg(config).get("silence_boost_minutes", 20.0))
 
@@ -396,6 +401,7 @@ class LookAction:
         speaking: bool = False,
         mode: str = "solitary",
         force_soft: bool = False,
+        last_user_interaction: datetime | None = None,
     ) -> dict[str, Any] | None:
         """
         执行一次瞥视。reactive=True 时跳过防连瞥与自主让路。
@@ -412,6 +418,7 @@ class LookAction:
                 speaking=speaking,
                 mode=mode,
                 force_soft=False,
+                last_user_interaction=last_user_interaction,
             )
         async with self._autonomous_lock:
             return await self._glance_unlocked(
@@ -423,6 +430,7 @@ class LookAction:
                 speaking=speaking,
                 mode=mode,
                 force_soft=force_soft,
+                last_user_interaction=last_user_interaction,
             )
 
     async def _glance_unlocked(
@@ -436,6 +444,7 @@ class LookAction:
         speaking: bool,
         mode: str,
         force_soft: bool,
+        last_user_interaction: datetime | None = None,
     ) -> dict[str, Any] | None:
         if not can_look(relationship_stage):
             await self._reset_soft_block()
@@ -447,6 +456,11 @@ class LookAction:
 
         if not reactive and speaking:
             return None
+
+        if not reactive and last_user_interaction is not None:
+            grace = chat_grace_minutes(self.config) * 60.0
+            if (now - last_user_interaction).total_seconds() < grace:
+                return None
 
         paused = await self.is_paused(now)
         if paused and not reactive:
@@ -562,6 +576,7 @@ class LookAction:
         mode: str,
         speaking: bool = False,
         force_soft: bool = False,
+        last_user_interaction: datetime | None = None,
     ) -> dict[str, Any] | None:
         return await self.glance(
             relationship_stage=relationship_stage,
@@ -571,4 +586,5 @@ class LookAction:
             mode=mode,
             speaking=speaking,
             force_soft=force_soft,
+            last_user_interaction=last_user_interaction,
         )

@@ -1496,12 +1496,12 @@ class Database:
         return [dict(r) for r in rows]
 
     async def list_recent_explore_card_actions(self, limit: int = 40) -> list[dict]:
-        """最近带 detail_json 的 explore（见闻卡真源），新→旧。"""
+        """最近带 detail_json 的 explore / 委托检索（见闻卡真源），新→旧。"""
         conn = self._require_conn()
         async with conn.execute(
             """
             SELECT * FROM actions
-            WHERE kind = 'explore'
+            WHERE kind IN ('explore', 'delegate_search')
               AND detail_json IS NOT NULL
               AND detail_json != ''
             ORDER BY timestamp DESC, id DESC

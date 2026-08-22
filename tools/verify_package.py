@@ -71,7 +71,14 @@ def _repo_root() -> Path:
 
 def _run(cmd: list[str], cwd: Path) -> tuple[int, str, str]:
     """运行子进程，返回 (returncode, stdout, stderr)。"""
-    proc = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True)
+    proc = subprocess.run(
+        cmd,
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     return proc.returncode, proc.stdout, proc.stderr
 
 

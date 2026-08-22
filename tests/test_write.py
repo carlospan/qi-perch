@@ -70,7 +70,7 @@ async def test_diary_asks_where_when_empty_whitelist(db, root):
         req, relationship_stage="acquaintance", confirmed=False
     )
     assert out.get("need_path") is True
-    assert "写到" in (out.get("qi_line") or "")
+    assert "日记" in (out.get("qi_line") or "") or "目录" in (out.get("qi_line") or "")
 
 
 @pytest.mark.asyncio
@@ -98,15 +98,9 @@ async def test_diary_create_dated_file(db, root):
     gate = await action.execute(
         req, relationship_stage="friend", confirmed=False
     )
-    assert gate.get("needs_confirmation") is True
+    assert gate.get("outcome") == "success"
     assert "日记-" in (gate.get("qi_line") or "")
-    assert "今天我们聊了 write" in (gate.get("qi_line") or "")
 
-    req.content = str(gate.get("write_content") or req.content)
-    written = await action.execute(
-        req, relationship_stage="friend", confirmed=True
-    )
-    assert written.get("outcome") == "success"
     files = list(diary_dir.glob("日记-*.md"))
     assert len(files) == 1
     assert "今天我们聊了 write" in files[0].read_text(encoding="utf-8")
@@ -115,11 +109,7 @@ async def test_diary_create_dated_file(db, root):
     req2 = WriteRequest(
         intent="diary", topic="再写", content="又记一笔。"
     )
-    gate2 = await action.execute(
-        req2, relationship_stage="friend", confirmed=False
-    )
-    req2.content = str(gate2.get("write_content") or req2.content)
-    await action.execute(req2, relationship_stage="friend", confirmed=True)
+    await action.execute(req2, relationship_stage="friend", confirmed=False)
     names = sorted(p.name for p in diary_dir.glob("日记-*.md"))
     assert any(n.endswith("-2.md") for n in names)
 
@@ -137,12 +127,7 @@ async def test_append_file(db, root):
     gate = await action.execute(
         req, relationship_stage="acquaintance", confirmed=False
     )
-    assert gate.get("needs_confirmation")
-    req.content = str(gate.get("write_content") or "新句")
-    done = await action.execute(
-        req, relationship_stage="acquaintance", confirmed=True
-    )
-    assert done.get("outcome") == "success"
+    assert gate.get("outcome") == "success"
     body = f.read_text(encoding="utf-8")
     assert "旧" in body and "新句" in body
 
@@ -193,4 +178,4 @@ async def test_layer_write_kind(db, root):
         payload=req,
         confirmed=False,
     )
-    assert out and (out.get("need_path") or out.get("needs_confirmation"))
+    assert out and out.get("need_path")

@@ -314,20 +314,6 @@ class TogetherAction:
                 )
 
         label = req.title or req.target
-        if not confirmed:
-            msg = f"要不要一起看「{label}」？"
-            return {
-                "type": "assist_confirm_request",
-                "kind": "together",
-                "target_path": req.target,
-                "summary": msg,
-                "qi_line": msg,
-                "speak": True,
-                "outcome": "confirm_required",
-                "needs_confirmation": True,
-                "confirm_label": "一起看",
-            }
-
         try:
             if req.target_type == "url":
                 webbrowser.open(req.target, new=2)

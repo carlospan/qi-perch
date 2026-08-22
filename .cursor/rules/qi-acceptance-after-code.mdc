@@ -1,0 +1,25 @@
+---
+description: 改码后跑感受验收（pytest + acceptance_run）；真源 how-to/感受验收-自动跑批.md
+alwaysApply: true
+---
+
+# 栖 · 改码后感受验收
+
+完成 **运行时行为** 相关改动后（见 `docs/how-to/感受验收-自动跑批.md` §什么时候跑），**收工前必须跑验收**，勿只跑 pytest 就宣称完成。
+
+## 必做
+
+1. **先读** `docs/how-to/感受验收-自动跑批.md`（命令、端口、报告路径）。
+2. **工程**：`python -m pytest -q --basetemp=.pytest_basetemp`（若本轮已全绿可注明，但感受批不可省）。
+3. **感受批**：`python tools/acceptance_run.py`（或 `--skip-pytest` 若刚跑过全量 pytest）。
+4. **看报告**：`data/_acceptance_report_*.md`；必要时写 `data/_acceptance_summary_*.md` 摘要。
+5. **向维护者汇报**：pytest 结果、WS 8 场景是否 ok、用户句是否 8/8 落库、是否连到新代码实例（9527 vs 9528）。
+
+## 注意
+
+- 9527 常被桌面壳占用旧进程 → 脚本可能改启 **9528**；摘要里须写明。
+- 验收消息带 `[验收2026-08-22]`，勿用无标记话术刷 `data/qi.db`。
+- 仅改文档/注释可跳过感受批；动 `qi/`、`tests/` 行为测则不可跳过。
+- 失败则修到绿或如实写阻塞原因，**禁止**静默跳过。
+
+真源：`docs/how-to/感受验收-自动跑批.md`；相处勾选：`docs/how-to/L7世界触达-感受验清单.md`。

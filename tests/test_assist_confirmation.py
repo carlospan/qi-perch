@@ -52,8 +52,8 @@ def _brain(tmp: str) -> Brain:
 
 
 @pytest.mark.asyncio
-async def test_b1_pending_stored_from_op_path(tmp_path):
-    """B1：confirm_gate 后 pending 用 op/target_path 存住。"""
+async def test_gws_assist_executes_without_confirm_pending(tmp_path):
+    """判断制：GWS assist 直接真读，不挂 confirm pending。"""
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         brain = _brain(tmp)
         await brain._db.initialize()
@@ -65,17 +65,17 @@ async def test_b1_pending_stored_from_op_path(tmp_path):
         winner = Contender(kind="action:assist", salience=0.9, reason="t")
         with patch("qi.core.gws.arbitrate", return_value=winner), patch.object(
             brain, "_deliver_action_result", new_callable=AsyncMock
-        ), patch.object(
+        ) as deliver, patch.object(
             brain, "_persist_action_budget", new_callable=AsyncMock
         ):
             await brain._heartbeat_gws_idle(
                 want_express=False, now=datetime(2026, 8, 9, 12, 0)
             )
-        assert brain.pending_assist_confirmation is not None
-        assert str(f) in brain.pending_assist_confirmation.target_path.replace(
-            "\\", "/"
-        ) or brain.pending_assist_confirmation.target_path.endswith("note.txt")
+        assert brain.pending_assist_confirmation is None
         assert brain.last_assist_request is None
+        deliver.assert_awaited()
+        result = deliver.await_args[0][0]
+        assert result.get("outcome") == "success"
         await brain._db.close()
 
 
@@ -126,11 +126,8 @@ async def test_b3_new_request_not_treated_as_confirm(tmp_path):
             ),
         ):
             await brain.receive_user_message("帮我看一下 D:/notes/y.txt")
-        # assist-4：新请求清旧 pending 后走对话拍 assist，存新 pending（不当确认）
-        assert brain.pending_assist_confirmation is not None
-        assert (
-            brain.pending_assist_confirmation.target_path == "D:/notes/y.txt"
-        )
+        # 判断制：新 assist 直接执行，不叠 confirm pending
+        assert brain.pending_assist_confirmation is None
         assert brain.last_assist_request is None
         await brain._db.close()
 

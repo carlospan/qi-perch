@@ -16,9 +16,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
+from qi.action.judgment import OUTCOME_RECAP
 from qi.action.permission import (
     OUTCOME_FAILED_CAPABILITY,
     OUTCOME_SUCCESS,
+    can_allow_app,
     can_open,
 )
 
@@ -643,6 +645,12 @@ class OpenAction:
         self.config = config or {}
         self.look = look
 
+    def _detail_json(self, data: dict) -> str:
+        motive = getattr(self, "_trace_motive", None)
+        if motive:
+            data = {**data, "motive": motive}
+        return json.dumps(data, ensure_ascii=False)
+
     async def execute(
         self,
         req: OpenRequest,
@@ -652,8 +660,10 @@ class OpenAction:
         season: str = "spring",
         now: datetime | None = None,
         selected_index: int | None = None,
+        motive: dict | None = None,
     ) -> dict[str, Any]:
         now = now or datetime.now()
+        self._trace_motive = motive
         if selected_index is not None:
             req.selected_index = selected_index
         if req.target_type == "app":
@@ -673,7 +683,11 @@ class OpenAction:
         if req.intent in ("allow", "teach"):
             req.intent = "allow"
             return await self._execute_allow(
-                req, confirmed=confirmed, season=season, now=now
+                req,
+                confirmed=confirmed,
+                season=season,
+                now=now,
+                relationship_stage=relationship_stage,
             )
 
         if req.target_type == "url":
@@ -699,7 +713,16 @@ class OpenAction:
         confirmed: bool,
         season: str,
         now: datetime,
+        relationship_stage: str = "stranger",
+        scars: list[dict] | None = None,
     ) -> dict[str, Any]:
+        if not can_allow_app(relationship_stage, scars):
+            return await self._fail(
+                "记应用白名单这事，我们得再熟一点再说。",
+                f"allow 关系不够：{relationship_stage}",
+                season=season,
+                now=now,
+            )
         if not req.candidates:
             req.candidates = find_app_candidates(req.target, limit=3)
         if not req.candidates:
@@ -710,7 +733,7 @@ class OpenAction:
                 now=now,
             )
         if not confirmed:
-            return self._confirm_gate_allow(req)
+            return self._recap_gate_allow(req)
 
         idx = max(0, min(req.selected_index, len(req.candidates) - 1))
         chosen = req.candidates[idx]
@@ -738,8 +761,8 @@ class OpenAction:
             outcome=OUTCOME_SUCCESS,
             season=season,
             now=now,
-            detail_json=json.dumps(
-                {"intent": "allow", "alias": req.target}, ensure_ascii=False
+            detail_json=self._detail_json(
+                {"intent": "allow", "alias": req.target},
             ),
         )
         return {
@@ -771,24 +794,6 @@ class OpenAction:
                 season=season,
                 now=now,
             )
-        if not confirmed:
-            look_hint = (
-                "开完我瞥一眼告诉你。"
-                if req.intent == "open_and_look"
-                else ""
-            )
-            msg = f"要我打开这个链接吗？{look_hint}".strip()
-            return {
-                "type": "assist_confirm_request",
-                "kind": "open",
-                "target_path": url,
-                "summary": msg,
-                "qi_line": msg,
-                "speak": True,
-                "outcome": "confirm_required",
-                "needs_confirmation": True,
-                "confirm_label": "开吧",
-            }
 
         if await self._debounced(url, now):
             return {
@@ -811,7 +816,7 @@ class OpenAction:
             )
 
         await self._mark_debounce(url, now)
-        qi_line = "开了，你看看对不对。"
+        qi_line = "好，我打开看看。"
         if req.intent == "open_and_look":
             glance_line = await self._glance_after_open(
                 relationship_stage=relationship_stage,
@@ -828,8 +833,8 @@ class OpenAction:
             outcome=OUTCOME_SUCCESS,
             season=season,
             now=now,
-            detail_json=json.dumps(
-                {"intent": req.intent, "target_type": "url"}, ensure_ascii=False
+            detail_json=self._detail_json(
+                {"intent": req.intent, "target_type": "url"},
             ),
         )
         return {
@@ -862,45 +867,24 @@ class OpenAction:
                     season=season,
                     now=now,
                 )
-            # 未确认：要约授权（brain 会把 pending 升成 allow）
-            if not confirmed:
-                msg = (
-                    f"「{req.target}」我还不会开——"
-                    "以后要不要让我帮你开？你说一声就行。"
+            # 不在白名单：口头复述后走 allow（判断制已接活意图）
+            req.candidates = find_app_candidates(req.target, limit=3)
+            if not req.candidates:
+                return await self._fail(
+                    f"我还找不到「{req.target}」在哪。",
+                    f"无候选：{req.target}",
+                    season=season,
+                    now=now,
                 )
-                return {
-                    "type": "assist_confirm_request",
-                    "kind": "open",
-                    "target_path": "",
-                    "summary": msg,
-                    "qi_line": msg,
-                    "speak": True,
-                    "outcome": "confirm_required",
-                    "needs_confirmation": True,
-                    "promote_intent": "allow",
-                    "allow_alias": req.target,
-                    "confirm_label": "要",
-                }
-            return await self._fail(
-                f"「{req.target}」还不在我能开的名单里。",
-                f"不在白名单：{req.target}",
-                season=season,
-                now=now,
+            return self._recap_gate_allow(
+                OpenRequest(
+                    intent="allow",
+                    target_type="app",
+                    target=req.target,
+                    candidates=req.candidates,
+                )
             )
         path = entry["path"]
-        if not confirmed:
-            msg = f"要我打开「{req.target}」吗？"
-            return {
-                "type": "assist_confirm_request",
-                "kind": "open",
-                "target_path": path,
-                "summary": msg,
-                "qi_line": msg,
-                "speak": True,
-                "outcome": "confirm_required",
-                "needs_confirmation": True,
-                "confirm_label": "开吧",
-            }
 
         if await self._debounced(path, now):
             return {
@@ -923,8 +907,7 @@ class OpenAction:
             )
 
         await self._mark_debounce(path, now)
-        # startfile/Popen 只表示已托给系统，窗口冷启动常晚几秒；开口要说清「已点开、请稍等」
-        qi_line = "开了——窗口起来可能稍慢，你稍等一下看看。"
+        qi_line = "好，我打开看看。"
         if req.intent == "open_and_look":
             glance_line = await self._glance_after_open(
                 relationship_stage=relationship_stage,
@@ -941,8 +924,8 @@ class OpenAction:
             outcome=OUTCOME_SUCCESS,
             season=season,
             now=now,
-            detail_json=json.dumps(
-                {"intent": req.intent, "alias": req.target}, ensure_ascii=False
+            detail_json=self._detail_json(
+                {"intent": req.intent, "alias": req.target},
             ),
         )
         return {
@@ -957,26 +940,27 @@ class OpenAction:
             "allow_alias": req.target,
         }
 
-    def _confirm_gate_allow(self, req: OpenRequest) -> dict[str, Any]:
+    def _recap_gate_allow(self, req: OpenRequest) -> dict[str, Any]:
         lines = []
         for i, c in enumerate(req.candidates[:3], start=1):
             lines.append(f"{i}. {c.get('label') or c['path']}")
         body = "\n".join(lines)
         msg = (
-            f"以后都可以帮你开「{req.target}」吗？我找到这些，回 1/{len(req.candidates)} 或说开吧（默认 1）：\n{body}"
+            f"你是说以后可以帮你开「{req.target}」吗？我找到这些，"
+            f"回 1/{len(req.candidates[:3])} 或说「对」：\n{body}"
         )
         display = req.candidates[0]["path"]
         return {
-            "type": "assist_confirm_request",
+            "type": "open_recap",
             "kind": "open",
+            "intent": "allow",
             "target_path": display,
             "summary": msg,
             "qi_line": msg,
             "speak": True,
-            "outcome": "confirm_required",
-            "needs_confirmation": True,
-            "confirm_label": "好",
+            "outcome": OUTCOME_RECAP,
             "candidates": req.candidates[:3],
+            "allow_alias": req.target,
         }
 
     async def _glance_after_open(

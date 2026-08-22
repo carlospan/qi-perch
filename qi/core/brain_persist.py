@@ -48,3 +48,12 @@ async def persist_action_budget(brain: Brain) -> None:
     if brain.action is None:
         return
     await brain.action.persist_budget()
+
+
+async def persist_user_turn(brain: Brain, text: str, now: datetime) -> None:
+    """用户每轮输入落库（含 L7 短路路径）；正常对话 heartbeat 见 _skip_next_user_save。"""
+    brain.last_user_message = text
+    brain.last_interaction = now
+    if brain._db is not None:
+        await brain._db.save_message("user", text)
+    brain._skip_next_user_save = True

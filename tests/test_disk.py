@@ -83,10 +83,9 @@ async def test_offer_list_promotes_list_dir(db, root):
     gate = await action.execute(
         req, relationship_stage="acquaintance", confirmed=False
     )
-    assert gate.get("needs_confirmation") is True
-    assert gate.get("promote_intent") == "list_dir"
-    assert "能" in (gate.get("qi_line") or "")
-    assert gate.get("list_path")
+    assert gate.get("outcome") == "success"
+    assert gate.get("intent") == "list_dir"
+    assert "能" in (gate.get("qi_line") or "") or "看到" in (gate.get("qi_line") or "")
 
 
 @pytest.mark.asyncio
@@ -98,15 +97,8 @@ async def test_list_dir_confirm_then_list(db, root):
     action = DiskAction(db)
     req = DiskRequest(intent="list_dir", path=str(folder))
 
-    gate = await action.execute(
-        req, relationship_stage="acquaintance", confirmed=False
-    )
-    assert gate.get("needs_confirmation") is True
-    assert gate.get("kind") == "disk"
-    assert "列" in (gate.get("qi_line") or "")
-
     done = await action.execute(
-        req, relationship_stage="acquaintance", confirmed=True
+        req, relationship_stage="acquaintance", confirmed=False
     )
     assert done.get("outcome") == "success"
     assert done.get("listing_sticky") is True
@@ -172,18 +164,13 @@ async def test_open_file_launches(db, root):
     f.write_text("hello", encoding="utf-8")
     action = DiskAction(db)
     req = DiskRequest(intent="open_file", path=str(f))
-    gate = await action.execute(
-        req, relationship_stage="acquaintance", confirmed=False
-    )
-    assert gate.get("needs_confirmation") is True
-
     with patch.object(DiskAction, "_launch_path") as launch:
-        done = await action.execute(
-            req, relationship_stage="acquaintance", confirmed=True
+        gate = await action.execute(
+            req, relationship_stage="acquaintance", confirmed=False
         )
         launch.assert_called_once()
-    assert done.get("outcome") == "success"
-    assert "稍慢" in (done.get("qi_line") or "")
+    assert gate.get("outcome") == "success"
+    assert "稍慢" in (gate.get("qi_line") or "")
 
 
 @pytest.mark.asyncio
@@ -227,4 +214,4 @@ async def test_layer_disk_kind(db, root):
         payload=req,
         confirmed=False,
     )
-    assert gate and gate.get("needs_confirmation")
+    assert gate and gate.get("outcome") == "success"
