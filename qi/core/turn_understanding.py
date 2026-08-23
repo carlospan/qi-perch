@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from qi.core.perception import looks_like_typo_correction
+
 if TYPE_CHECKING:
     from qi.core.brain import Brain
 
@@ -23,6 +25,7 @@ class SituationHints:
     user_disclosure: bool = False
     user_request: bool = False
     user_comfort: bool = False
+    user_typo_correction: bool = False
 
 
 @dataclass
@@ -49,7 +52,6 @@ def infer_situation_hints(
     perception_intent: str | None = None,
 ) -> SituationHints:
     """从时钟与 perception intent 推断处境（不用话题关键词表）。"""
-    _ = text  # Phase 1：保留参数供后续扩展
     hour = now.hour
     late = hour < 5 or hour >= 23
     intent = (perception_intent or "").strip().lower()
@@ -59,6 +61,7 @@ def infer_situation_hints(
         user_disclosure=intent == "disclosure",
         user_request=intent == "request",
         user_comfort=intent == "comfort",
+        user_typo_correction=looks_like_typo_correction(text),
     )
 
 
@@ -126,6 +129,8 @@ def turn_understanding_to_extras(tu: TurnUnderstanding) -> dict[str, str]:
         tags.append("user_comfort")
     if tu.relationship.bonded:
         tags.append("bonded")
+    if tu.situation.user_typo_correction:
+        tags.append("user_typo_correction")
     extras: dict[str, str] = {}
     if tags:
         extras["turn_situation"] = ",".join(tags)
@@ -155,6 +160,10 @@ def turn_situation_expression_hint(extras: dict[str, str]) -> str:
         parts.append("深夜语境：可自然表达对身体或休息的在乎，勿空泛宣告在场。")
     if "user_comfort" in tags:
         parts.append("用户在寻求安慰；先回应情绪，再展开。")
+    if "user_typo_correction" in tags:
+        parts.append(
+            "用户在纠正笔误或澄清本意；轻声确认即可，勿调侃「被抓到」「说中了」。"
+        )
     return " ".join(parts)
 
 
@@ -170,6 +179,15 @@ def apply_dialogue_modulation(card, extras: dict[str, str]) -> None:
         line = (
             "对方在深夜吐露自己的状态；先自然接住，可表达对身体或休息的在乎，"
             "勿只用「我知道你在」类宣告了事。"
+        )
+        if line not in card.must:
+            card.must.append(line)
+    if "user_typo_correction" in tags:
+        if card.act == "take_tease":
+            card.act = "acknowledge"
+        line = (
+            "用户在纠正笔误或澄清本意；平静接住即可，"
+            "不要调侃「被抓到」「说中了」或当成互相拆台。"
         )
         if line not in card.must:
             card.must.append(line)

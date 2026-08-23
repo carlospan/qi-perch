@@ -60,7 +60,17 @@ ROUNDS: list[list[tuple[str, str]]] = [
         ("look停", "你先别看了"),
         ("晚安", "那我先去躺会儿，晚安。"),
     ],
+    [
+        ("爱好", "你喜欢看电影吗"),
+        ("口误", "没，我只是好奇你有没有什么星期爱好"),
+        ("纠正", "我刚刚打错字了，是兴趣才对"),
+        ("澄清", "我不是那个意思，就是随便聊聊兴趣"),
+    ],
 ]
+
+# meta 沟通回合：栖回复不应出现调侃「被抓到」类口吻
+_META_TEASE_BAN = ("被抓到", "说中了", "抓到了", "被你说中")
+_META_TURN_NAMES = frozenset({"纠正", "澄清"})
 
 _qi_proc: subprocess.Popen | None = None
 
@@ -78,6 +88,13 @@ class TurnResult:
     @property
     def ok(self) -> bool:
         return self.user_saved and bool(self.speeches or self.actions)
+
+    def meta_comm_ok(self) -> bool:
+        """meta 澄清/纠正回合：回复不得含调侃拆台口吻。"""
+        if self.name not in _META_TURN_NAMES:
+            return True
+        blob = "\n".join(self.speeches)
+        return not any(b in blob for b in _META_TEASE_BAN)
 
     def ok_with_db(self, after_id: int) -> bool:
         if not self.user_saved:
@@ -385,6 +402,8 @@ def write_report(
 ) -> Path:
     report = ROOT / "data" / f"_coexist_report_{datetime.now():%Y%m%d-%H%M}.md"
     ok_n = sum(1 for r in results if r.ok_with_db(after_id))
+    meta_n = sum(1 for r in results if r.meta_comm_ok())
+    meta_total = sum(1 for r in results if r.name in _META_TURN_NAMES)
     msgs = messages_after(after_id)
     first_ts = msgs[0]["timestamp"] if msgs else ""
     lines = [
@@ -393,6 +412,7 @@ def write_report(
         f"- 端口: **{port}**（pid={pid or '沿用'}）",
         f"- 轮数: {max((r.round_idx for r in results), default=0)}",
         f"- 回合: {len(results)}；通过启发: **{ok_n}/{len(results)}**",
+        f"- meta 沟通（无调侃拆台）: **{meta_n}/{meta_total or '—'}**",
         f"- messages id > {after_id}（首条 `{first_ts}`）",
         "",
         "## 回合明细",
@@ -400,6 +420,8 @@ def write_report(
     ]
     for r in results:
         flag = "✓" if r.ok_with_db(after_id) else "✗"
+        if r.name in _META_TURN_NAMES and not r.meta_comm_ok():
+            flag = "✗meta"
         lines.append(f"### R{r.round_idx} · {r.name} {flag}")
         lines.append(f"- 用户: {r.user_text}")
         lines.append(f"- 落库: {r.user_saved} | 耗时: {r.elapsed_s}s")
@@ -437,6 +459,11 @@ def write_report(
 
     issues: list[str] = []
     by_name = {r.name: r for r in results}
+    meta_bad = [r for r in results if r.name in _META_TURN_NAMES and not r.meta_comm_ok()]
+    if meta_bad:
+        issues.append(
+            f"meta 沟通回合含调侃拆台口吻：{', '.join(r.name for r in meta_bad)}"
+        )
     if not by_name.get("委托", TurnResult(0, "", "")).ok_with_db(after_id):
         issues.append("委托检索未开口或未落库")
     if not by_name.get("disk白话", TurnResult(0, "", "")).user_saved:
@@ -469,8 +496,8 @@ def write_report(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=9528)
-    parser.add_argument("--rounds", type=int, default=4, choices=range(1, 6))
-    parser.add_argument("--from-round", type=int, default=1, choices=range(1, 6))
+    parser.add_argument("--rounds", type=int, default=4, choices=range(1, 7))
+    parser.add_argument("--from-round", type=int, default=1, choices=range(1, 7))
     parser.add_argument("--keep-qi", action="store_true")
     args = parser.parse_args()
 

@@ -584,7 +584,8 @@ def build_intention_card(
                 source_parts.append("knowledge_miss")
         elif meta_q:
             # 「答非所问/你怎么了」→ 空素材诚实接住，勿灌旧叙事（#1485/#1487）
-            act = "acknowledge" if default_act in ("acknowledge", "free_talk") else default_act
+            # 感知误判 tease 时也不得 take_tease（实证：纠偏句被调侃接住）
+            act = "acknowledge"
             materials.append(Material(tag="none", text=""))
             source_parts.append("meta_no_mem")
         elif has_mem and (intent == "request" or remember_q):

@@ -1,8 +1,7 @@
 """感知层——把外界变成栖能感受到的东西。
 
-过渡止血——冲击主路径改 LLM JSON 判别，加深了对远程模型的依赖，
-与架构方案「换心」方向相反；待阶段三随本地基质回收。关键词仅作
-超时/离线/失败回退与明显辱骂短路。
+过渡止血——冲击主路径改 LLM JSON 判别；关键词仅作超时/离线/失败回退、
+明显辱骂短路，以及澄清句对 tease 误判的否决（不跳过 LLM 主判）。
 """
 
 from __future__ import annotations
@@ -67,6 +66,24 @@ _TRIVIAL_UTTERANCES = frozenset(
 )
 _TRIVIAL_ONLY_RE = re.compile(r"^[\s\.。…!！?？~～哈呵嗯啊哦喔]+$")
 
+# 用户在纠正笔误或澄清本意——启发式否决层（不代替 LLM 主判，只纠错 tease 误判）
+_META_CLARIFICATION_RE = re.compile(
+    r"打错[了了]?字|说错[了了]?|写错[了了]?|"
+    r"是\s*.+\s*才对|应该是|"
+    r"我不是那个意思|不是那个意思|"
+    r"你理解错了|你误会了|误会你了|"
+    r"我的意思是|我想说的是"
+)
+
+
+def looks_like_typo_correction(text: str) -> bool:
+    """弱信号：像用户在纠正笔误或澄清本意（供否决层 / 回合调制，非唯一入口）。"""
+    return bool(_META_CLARIFICATION_RE.search((text or "").strip()))
+
+
+# 别名：语义上含打错字与意图澄清
+looks_like_user_clarification = looks_like_typo_correction
+
 _EXCLAIM = ("！", "!", "…", "...", "？", "?")
 _IMPACT_LLM_TIMEOUT = 2.0
 _CONTEXT_DEFAULT = 4
@@ -82,6 +99,15 @@ _VALID_INTENTS = frozenset(
 )
 
 
+def veto_clarification_intent(
+    intent: IntentKind | None, text: str
+) -> IntentKind | None:
+    """LLM 将澄清句误判 tease 时否决为 neutral；不代替 LLM 主判。"""
+    if intent == "tease" and looks_like_user_clarification(text):
+        return "neutral"
+    return intent
+
+
 @dataclass
 class ImpactAssessment:
     """一次冲击判别的完整结果——供关系层复用 intent。"""
@@ -90,7 +116,19 @@ class ImpactAssessment:
     intent: IntentKind | None = None
     intimacy: float = 0.0
     ambiguous: bool = False
-    source: str = "keyword"  # keyword | llm | short_circuit
+    source: str = "keyword"  # keyword | llm | llm_veto | short_circuit
+
+
+def keyword_fallback_assessment(text: str, keyword_value: float) -> ImpactAssessment:
+    """LLM 不可用时的关键词回退；澄清弱信号补 neutral intent。"""
+    intent_fb: IntentKind | None = None
+    if looks_like_user_clarification(text):
+        intent_fb = "neutral"
+    return ImpactAssessment(
+        impact=keyword_value,
+        intent=intent_fb,
+        source="keyword",
+    )
 
 
 def count_hits_negation_aware(text: str, words: tuple[str, ...]) -> int:
@@ -240,18 +278,19 @@ class Perception:
             )
         except Exception:
             logger.debug("冲击 LLM 失败，回退关键词", exc_info=True)
-            self.last_assessment = ImpactAssessment(
-                impact=keyword_value, source="keyword"
-            )
+            self.last_assessment = keyword_fallback_assessment(text, keyword_value)
             return keyword_value
 
         if parsed is None:
-            self.last_assessment = ImpactAssessment(
-                impact=keyword_value, source="keyword"
-            )
+            self.last_assessment = keyword_fallback_assessment(text, keyword_value)
             return keyword_value
 
         raw, intent, intimacy, ambiguous = parsed
+        source = "llm"
+        vetoed = veto_clarification_intent(intent, text)
+        if vetoed != intent:
+            intent = vetoed
+            source = "llm_veto"
         modulated_raw = apply_intent_modulation(raw, intent)
         llm_value = max(
             -1.0, min(1.0, modulate_impact(modulated_raw, emotion, stage))
@@ -272,7 +311,7 @@ class Perception:
             intent=intent,
             intimacy=intimacy,
             ambiguous=ambiguous,
-            source="llm",
+            source=source,
         )
         return final
 

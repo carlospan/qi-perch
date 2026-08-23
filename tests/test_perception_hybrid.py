@@ -11,6 +11,8 @@ from qi.core.perception import (
     ImpactAssessment,
     Perception,
     apply_intent_modulation,
+    looks_like_typo_correction,
+    veto_clarification_intent,
 )
 from qi.relationship.engine import assess_interaction, merge_impact_assessment
 
@@ -71,6 +73,57 @@ async def test_abuse_shortcircuit_skips_llm():
     assert calls["n"] == 0
     assert val == p.assess_impact("给我滚！", e)
     assert p.last_assessment.source == "short_circuit"
+
+
+@pytest.mark.asyncio
+async def test_typo_correction_vetoes_llm_tease_still_calls_llm():
+    """纠正句仍调感知 LLM；若误判 tease 则否决为 neutral（不跳过理解）。"""
+    calls = {"n": 0}
+
+    class _LLM:
+        async def call(self, **kwargs):
+            calls["n"] += 1
+            return json.dumps(
+                {
+                    "impact": -0.2,
+                    "intent": "tease",
+                    "intimacy": 0.7,
+                    "ambiguous": False,
+                }
+            )
+
+    p = Perception({}, llm=_LLM())  # type: ignore[arg-type]
+    e = EmotionState()
+    msg = "我刚刚打错字了，是 兴趣 才对"
+    assert looks_like_typo_correction(msg)
+    assert veto_clarification_intent("tease", msg) == "neutral"
+    await p.assess_impact_async(msg, e)
+    assert calls["n"] == 1
+    assert p.last_assessment is not None
+    assert p.last_assessment.source == "llm_veto"
+    assert p.last_assessment.intent == "neutral"
+
+
+@pytest.mark.asyncio
+async def test_clarification_llm_neutral_not_vetoed():
+    """LLM 已正确判 neutral 时保持 llm 来源。"""
+    class _LLM:
+        async def call(self, **kwargs):
+            return json.dumps(
+                {
+                    "impact": 0.05,
+                    "intent": "neutral",
+                    "intimacy": 0.5,
+                    "ambiguous": False,
+                }
+            )
+
+    p = Perception({}, llm=_LLM())  # type: ignore[arg-type]
+    e = EmotionState()
+    msg = "我刚刚打错字了，是 兴趣 才对"
+    await p.assess_impact_async(msg, e)
+    assert p.last_assessment.source == "llm"
+    assert p.last_assessment.intent == "neutral"
 
 
 @pytest.mark.asyncio

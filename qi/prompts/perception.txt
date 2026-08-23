@@ -7,6 +7,8 @@
 - intent: 下列之一 tease | comfort | disclosure | request | neutral | hurt
   - tease=亲昵调侃/玩笑贬低；hurt=真伤害或辱骂；comfort=安慰接纳；
     disclosure=自我披露；request=请求；neutral=其它
+  - 用户纠正自己打错字或澄清本意（如「打错字了」「是X才对」「我不是那个意思」）→ neutral，不是 tease
+  - 若你已判 tease 但句型明显是澄清/纠偏，应改判 neutral
 - intimacy: 0.0 到 1.0（这句话里关系亲密度）
 - ambiguous: true/false（意图或语气拿不准时为 true）
 

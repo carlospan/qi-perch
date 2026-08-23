@@ -75,6 +75,26 @@ def test_turn_situation_expression_hint():
     assert "恋人" in hint
 
 
+def test_typo_correction_modulation_not_tease():
+    from qi.core.turn_understanding import SituationHints
+
+    hints = infer_situation_hints(
+        "我刚刚打错字了，是 兴趣 才对",
+        datetime(2026, 8, 23, 20, 56),
+        perception_intent="tease",
+    )
+    assert hints.user_typo_correction is True
+
+    card = IntentionCard(act="take_tease", topic="纠正", stance="自然", must=[])
+    extras = {"turn_situation": "user_typo_correction"}
+    apply_dialogue_modulation(card, extras)
+    assert card.act == "acknowledge"
+    assert any("笔误" in m or "澄清" in m for m in card.must)
+
+    hint = turn_situation_expression_hint(extras)
+    assert "被抓到" in hint
+
+
 def test_dialogue_router_fallthrough_sentinel():
     from qi.core.dialogue_router import FALLTHROUGH
 
