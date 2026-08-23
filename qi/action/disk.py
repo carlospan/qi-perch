@@ -278,6 +278,69 @@ def resolve_listing_followup(
     return None
 
 
+_LISTING_CTX_RE = re.compile(r"刚才|那些|上面|列的|列表|里头|里面|当中|其中|里")
+_DOC_FOLDER_HINT = re.compile(r"doc|文档|document", re.I)
+
+
+def looks_like_listing_question(text: str) -> bool:
+    """列目录后的白话问询（读粘性列表，非口令）。"""
+    t = (text or "").strip()
+    if not t or len(t) > 80:
+        return False
+    if re.search(r"(有|有没有).*(吗|么|？|\?)", t):
+        return True
+    if re.search(r"哪些|几个", t) and re.search(r"文件夹|目录|文件|文档", t):
+        return True
+    if _LISTING_CTX_RE.search(t) and re.search(r"文件夹|目录|文件|文档", t):
+        return True
+    return False
+
+
+def answer_listing_question(
+    text: str, listing: dict[str, Any] | None
+) -> str | None:
+    """根据粘性列目录结果回答「有没有文档文件夹」类问句。"""
+    if not listing or not looks_like_listing_question(text):
+        return None
+    entries = listing.get("entries") or []
+    if not entries:
+        return None
+    dirs = [e for e in entries if e.get("is_dir")]
+    files = [e for e in entries if not e.get("is_dir")]
+    t = text
+
+    if re.search(r"文档", t) and re.search(r"文件夹|目录", t):
+        hits = [
+            str(e.get("name") or "")
+            for e in dirs
+            if _DOC_FOLDER_HINT.search(str(e.get("name") or ""))
+        ]
+        if hits:
+            sample = "」「".join(hits[:3])
+            tail = f"等 {len(hits)} 个" if len(hits) > 3 else ""
+            return f"有，像「{sample}」{tail}。"
+        return (
+            "刚才那一层里没看到名字带「文档」的文件夹；"
+            "你要是说别的名字，我可以帮你找或再列一层。"
+        )
+
+    if re.search(r"文件夹|目录", t):
+        if dirs:
+            names = "、".join(str(d.get("name") or "") for d in dirs[:6])
+            extra = f"（共 {len(dirs)} 个目录）" if len(dirs) > 6 else ""
+            return f"有。目录有：{names}{extra}。"
+        return "刚才列的那一层里没有子文件夹。"
+
+    if re.search(r"文件", t) and not re.search(r"文件夹|目录", t):
+        if files:
+            first = str(files[0].get("name") or "")
+            n = len(files)
+            return f"有，{'文件不少' if n > 3 else '有文件'}，比如「{first}」。"
+        return "刚才那一层里看到的主要是文件夹，没单独列出文件。"
+
+    return None
+
+
 def _parse_zh_or_int(s: str) -> int | None:
     s = (s or "").strip()
     if s.isdigit():

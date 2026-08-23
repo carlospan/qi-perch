@@ -805,7 +805,7 @@ class OpenAction:
             }
 
         try:
-            webbrowser.open(url, new=2)
+            await asyncio.to_thread(webbrowser.open, url, 2)
         except Exception as e:
             logger.debug("webbrowser.open 失败", exc_info=True)
             return await self._fail(

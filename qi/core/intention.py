@@ -530,6 +530,9 @@ def build_intention_card(
     intent = None
     if assessment is not None:
         intent = assessment.intent
+    pi = (extras.get("perception_intent") or "").strip()
+    if pi:
+        intent = pi
 
     materials: list[Material] = []
     act = "free_talk"

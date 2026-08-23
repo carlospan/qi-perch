@@ -9,8 +9,10 @@ import pytest
 from qi.action.disk import (
     DiskAction,
     DiskRequest,
+    answer_listing_question,
     detect_disk_intent,
     looks_like_disk_intent,
+    looks_like_listing_question,
     normalize_under_root,
     resolve_listing_followup,
 )
@@ -133,6 +135,28 @@ def test_resolve_listing_followup_by_index_and_name(root):
     assert into is not None
     assert into.intent == "list_dir"
     assert into.path == str(sub)
+
+
+def test_listing_question_doc_folder():
+    listing = {
+        "dir": "D:\\",
+        "entries": [
+            {"name": "docs", "path": "D:\\docs", "is_dir": True},
+            {"name": "a.txt", "path": "D:\\a.txt", "is_dir": False},
+        ],
+    }
+    assert looks_like_listing_question("刚才列的那些里，有文档文件夹吗")
+    line = answer_listing_question("刚才列的那些里，有文档文件夹吗", listing)
+    assert line is not None
+    assert "docs" in line or "有" in line
+
+    empty_dirs = {
+        "dir": "D:\\",
+        "entries": [{"name": "a.txt", "path": "D:\\a.txt", "is_dir": False}],
+    }
+    line2 = answer_listing_question("有文档文件夹吗", empty_dirs)
+    assert line2 is not None
+    assert "没看到" in line2
 
 
 @pytest.mark.asyncio

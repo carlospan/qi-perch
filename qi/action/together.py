@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -319,16 +320,16 @@ class TogetherAction:
         label = req.title or req.target
         try:
             if req.target_type == "url":
-                webbrowser.open(req.target, new=2)
+                await asyncio.to_thread(webbrowser.open, req.target, 2)
             else:
                 # 应用：交给 open 白名单路径较稳；此处仅尝试 start
                 import os
                 import sys
 
                 if sys.platform == "win32":
-                    os.startfile(req.target)  # type: ignore[attr-defined]
+                    await asyncio.to_thread(os.startfile, req.target)  # type: ignore[attr-defined]
                 else:
-                    webbrowser.open(req.target)
+                    await asyncio.to_thread(webbrowser.open, req.target)
         except Exception as e:
             return await self._fail(
                 "没打开成，我们换一个？",

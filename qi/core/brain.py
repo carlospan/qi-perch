@@ -42,7 +42,9 @@ from qi.core.emotion import (
     step_emotion,
 )
 from qi.core.expression import Expression
+from qi.core.dialogue_session import DialogueSessionContext
 from qi.core.intention import LAST_INTENTION_KEY, build_intention_card
+from qi.core.turn_understanding import apply_dialogue_modulation
 from qi.core.perception import Perception
 from qi.core.proactive import ProactiveGate, pick_proactive_kind
 from qi.core.rhythm import determine_mode, next_interval
@@ -121,20 +123,9 @@ class Brain:
         self.last_pressure_response = None  # PressureResponse | None（N3：供 explore 软调制）
         self.last_sensing = None  # SensingSnapshot | None（包 8）
         self.last_user_message: str | None = None  # assist-2：供 trace / 感知
-        self.last_assist_request = None  # AssistRequest | None（assist-2）
-        # assist-3 / open：跨轮确认（仅内存；AssistRequest | OpenRequest）
-        self.pending_assist_confirmation = None  # Assist|Open|Disk|Write|Together|None
-        self.pending_assist_confirmation_at: datetime | None = None
-        self.pending_assist_heartbeats: int = 0
-        # disk 列目录后粘性（名字/序号打开）；仅内存
-        self.last_disk_listing: dict | None = None
-        # write：无路径时短时记住想写什么；仅内存
-        self.write_desire: dict | None = None
-        # together：可同看对象池（explore/share/open）；仅内存
-        self.together_pool: list = []
-        # assist-5：粘性目标（确认成功后保留，供口头补执行）
-        self.last_assist_target: str | None = None
-        self.last_assist_target_at: datetime | None = None
+        self.session = DialogueSessionContext()
+        self._current_turn = None
+        self._primed_turn_message: str | None = None
         self.world = WorldModel()
         self.last_world = None  # dict | None（包 9：世界模型旁路快照）
         # 包 14：优雅停钩子（库内不 sys.exit；CLI 可注入）
@@ -157,8 +148,81 @@ class Brain:
     # 蛰伏时对用户的固定提示（非 LLM；唤醒走控制面）
     STASIS_USER_NOTICE = "……我先封存休息了。等你唤醒我。"
     STASIS_WAKE_NOTICE = "……嗯。我回来了。"
-    # 唤醒后赠予的滚动余额下限，避免瞬间再次断粮（滞回）
     STASIS_WAKE_BALANCE_FLOOR = 10.0
+
+    @property
+    def last_assist_request(self):
+        return self.session.last_assist_request
+
+    @last_assist_request.setter
+    def last_assist_request(self, value) -> None:
+        self.session.last_assist_request = value
+
+    @property
+    def pending_assist_confirmation(self):
+        return self.session.pending_assist_confirmation
+
+    @pending_assist_confirmation.setter
+    def pending_assist_confirmation(self, value) -> None:
+        self.session.pending_assist_confirmation = value
+
+    @property
+    def pending_assist_confirmation_at(self) -> datetime | None:
+        return self.session.pending_assist_confirmation_at
+
+    @pending_assist_confirmation_at.setter
+    def pending_assist_confirmation_at(self, value: datetime | None) -> None:
+        self.session.pending_assist_confirmation_at = value
+
+    @property
+    def pending_assist_heartbeats(self) -> int:
+        return self.session.pending_assist_heartbeats
+
+    @pending_assist_heartbeats.setter
+    def pending_assist_heartbeats(self, value: int) -> None:
+        self.session.pending_assist_heartbeats = value
+
+    @property
+    def last_disk_listing(self) -> dict | None:
+        return self.session.last_disk_listing
+
+    @last_disk_listing.setter
+    def last_disk_listing(self, value: dict | None) -> None:
+        self.session.last_disk_listing = value
+
+    @property
+    def write_desire(self) -> dict | None:
+        return self.session.write_desire
+
+    @write_desire.setter
+    def write_desire(self, value: dict | None) -> None:
+        self.session.write_desire = value
+
+    @property
+    def together_pool(self) -> list:
+        return self.session.together_pool
+
+    @together_pool.setter
+    def together_pool(self, value: list) -> None:
+        self.session.together_pool = value
+
+    @property
+    def last_assist_target(self) -> str | None:
+        return self.session.last_assist_target
+
+    @last_assist_target.setter
+    def last_assist_target(self, value: str | None) -> None:
+        self.session.last_assist_target = value
+
+    @property
+    def last_assist_target_at(self) -> datetime | None:
+        return self.session.last_assist_target_at
+
+    @last_assist_target_at.setter
+    def last_assist_target_at(self, value: datetime | None) -> None:
+        self.session.last_assist_target_at = value
+
+    # 唤醒后赠予的滚动余额下限，避免瞬间再次断粮（滞回）
 
     def public_mode(self) -> str:
         """前端可见模式：蛰伏时覆盖 emotion.mode，避免假「醒着」。"""
@@ -480,21 +544,7 @@ class Brain:
         note_snapshot_beat()
         now = datetime.now()
         # assist-3：pending 超时清理（5 分钟或 3 轮心跳，取先到）
-        if self.pending_assist_confirmation is not None:
-            self.pending_assist_heartbeats += 1
-            timed_out = False
-            if self.pending_assist_confirmation_at is not None:
-                elapsed = (
-                    now - self.pending_assist_confirmation_at
-                ).total_seconds()
-                if elapsed > 300:
-                    timed_out = True
-            if timed_out or self.pending_assist_heartbeats >= 3:
-                self.pending_assist_confirmation = None
-                self.pending_assist_confirmation_at = None
-                self.pending_assist_heartbeats = 0
-                self.last_assist_target = None
-                self.last_assist_target_at = None
+        self.session.tick_pending_timeout(now)
         try:
             self.ledger.tick_window(self.heartbeat_count)
         except Exception:
@@ -543,12 +593,23 @@ class Brain:
                 recent_for_impact = await self._db.load_recent_messages(limit=5)
                 self._ledger_safe_add_tokens(MEM_RETRIEVAL_TOKEN_COST)
 
-            impact = await self.perception.assess_impact_async(
-                pending,
-                self.emotion,
-                self.relationship_stage,
-                recent_messages=recent_for_impact,
-            )
+            impact: float | None = None
+            primed = self._primed_turn_message
+            if primed == pending:
+                assessment = self.perception.last_assessment
+                impact = (
+                    float(getattr(assessment, "impact", 0.0) or 0.0)
+                    if assessment is not None
+                    else 0.0
+                )
+                self._primed_turn_message = None
+            else:
+                impact = await self.perception.assess_impact_async(
+                    pending,
+                    self.emotion,
+                    self.relationship_stage,
+                    recent_messages=recent_for_impact,
+                )
 
             if self.relationship is not None:
                 rel = await self.relationship.on_user_message(
@@ -717,6 +778,7 @@ class Brain:
                 extras=ctx.extras,
                 open_loops=loops,
             )
+            apply_dialogue_modulation(card, ctx.extras)
             await self._persist_intention(card)
 
             self.avatar.set_thinking(True)
@@ -1170,9 +1232,7 @@ class Brain:
         return any(cue in t for cue in self._CONFIRM_CUES_REEXEC)
 
     def _assist_target_fresh(self, now: datetime) -> bool:
-        if self.last_assist_target_at is None:
-            return False
-        return now - self.last_assist_target_at <= timedelta(minutes=5)
+        return self.session.assist_target_fresh(now)
 
     def _is_reject_cue(self, text: str) -> bool:
         t = text.strip().lower()
@@ -1181,82 +1241,24 @@ class Brain:
         return any(cue in t for cue in self._REJECT_CUES)
 
     def _clear_pending_assist(self) -> None:
-        self.pending_assist_confirmation = None
-        self.pending_assist_confirmation_at = None
-        self.pending_assist_heartbeats = 0
+        self.session.clear_pending_assist()
 
     def _clear_assist_target(self) -> None:
-        self.last_assist_target = None
-        self.last_assist_target_at = None
+        self.session.clear_assist_target()
 
     def _remember_disk_listing(self, result: dict | None) -> None:
-        if not result or not result.get("listing_sticky"):
-            return
-        entries = result.get("listing_entries") or []
-        if not entries:
-            return
-        self.last_disk_listing = {
-            "dir": result.get("listing_dir"),
-            "entries": entries,
-            "at": datetime.now(),
-        }
+        self.session.remember_disk_listing(result)
 
     def _disk_listing_fresh(self, now: datetime | None = None) -> bool:
-        if not self.last_disk_listing:
-            return False
-        at = self.last_disk_listing.get("at")
-        if not isinstance(at, datetime):
-            return False
-        now = now or datetime.now()
-        try:
-            from qi.action.disk import LISTING_STICKY_MINUTES
-
-            mins = float(LISTING_STICKY_MINUTES)
-        except Exception:
-            mins = 5.0
-        return (now - at).total_seconds() <= mins * 60
+        return self.session.disk_listing_fresh(now)
 
     def _arm_disk_pending_from_result(
         self, disk_req: object, result: dict
     ) -> None:
-        """确认门：offer_list 升成 list_dir pending；其它保持原请求。"""
-        pending: object = disk_req
-        if result.get("promote_intent") == "list_dir":
-            try:
-                from qi.action.disk import DiskRequest
-
-                path = str(
-                    result.get("list_path")
-                    or getattr(disk_req, "path", "")
-                    or ""
-                )
-                pending = DiskRequest(intent="list_dir", path=path)
-            except Exception:
-                pending = disk_req
-        self.pending_assist_confirmation = pending
-        self.pending_assist_confirmation_at = datetime.now()
-        self.pending_assist_heartbeats = 0
-        self._clear_assist_target()
+        self.session.arm_disk_pending_from_result(disk_req, result)
 
     def _arm_open_after_allow(self, result: dict | None) -> None:
-        """allow 成功后挂 open pending（方案 A：记下了，问现在开吗）。"""
-        if not result or not result.get("offer_open_now"):
-            return
-        alias = str(result.get("allow_alias") or "").strip()
-        if not alias:
-            return
-        try:
-            from qi.action.open import OpenRequest
-        except Exception:
-            return
-        self.pending_assist_confirmation = OpenRequest(
-            intent="open",
-            target_type="app",
-            target=alias,
-        )
-        self.pending_assist_confirmation_at = datetime.now()
-        self.pending_assist_heartbeats = 0
-        self._clear_assist_target()
+        self.session.arm_open_after_allow(result)
 
     def _pending_selected_index(self, text: str) -> int | None:
         t = text.strip()
@@ -1322,25 +1324,7 @@ class Brain:
         )
 
     def _ingest_together_pool(self, result: dict | None) -> None:
-        try:
-            from qi.action.together import candidates_from_action_result
-        except Exception:
-            return
-        added = candidates_from_action_result(result)
-        if not added:
-            return
-        now = datetime.now()
-        for e in added:
-            e = dict(e)
-            e["at"] = now
-            self.together_pool = [
-                x
-                for x in self.together_pool
-                if str(x.get("target")) != str(e.get("target"))
-            ]
-            self.together_pool.append(e)
-        if len(self.together_pool) > 20:
-            self.together_pool = self.together_pool[-20:]
+        self.session.ingest_together_pool(result)
 
     async def _maybe_soft_invite_together(self, result: dict | None) -> None:
         if not result or result.get("type") != "explore_drift":
@@ -1401,44 +1385,13 @@ class Brain:
         )
 
     def _remember_write_desire(self, result: dict | None) -> None:
-        if not result or not result.get("remember_desire"):
-            return
-        self.write_desire = {
-            "intent": str(result.get("desire_intent") or "write"),
-            "topic": str(result.get("desire_topic") or ""),
-            "at": datetime.now(),
-        }
+        self.session.remember_write_desire(result)
 
     def _write_desire_fresh(self, now: datetime | None = None) -> bool:
-        if not self.write_desire:
-            return False
-        at = self.write_desire.get("at")
-        if not isinstance(at, datetime):
-            return False
-        now = now or datetime.now()
-        return (now - at).total_seconds() <= 10 * 60
+        return self.session.write_desire_fresh(now)
 
     def _arm_write_pending(self, write_req: object, result: dict) -> None:
-        try:
-            from qi.action.write import WriteRequest
-
-            if isinstance(write_req, WriteRequest):
-                content = str(result.get("write_content") or "").strip()
-                if content:
-                    write_req.content = content
-                mode = str(result.get("write_mode") or "")
-                if mode:
-                    write_req.meta["write_mode"] = mode
-                diary_dir = str(result.get("diary_dir") or "").strip()
-                if diary_dir:
-                    write_req.path = diary_dir
-                    write_req.meta["diary_bootstrap"] = True
-        except Exception:
-            pass
-        self.pending_assist_confirmation = write_req
-        self.pending_assist_confirmation_at = datetime.now()
-        self.pending_assist_heartbeats = 0
-        self._clear_assist_target()
+        self.session.arm_write_pending(write_req, result)
 
     async def _execute_write_on_request(
         self,
@@ -1641,478 +1594,17 @@ class Brain:
 
             await _brain_persist.persist_user_turn(self, text, now)
 
-            # assist-3 / open：跨轮确认（控制消息；确认不进 pending_queue）
-            if self.pending_assist_confirmation is not None:
-                if self._is_reject_cue(text):
-                    self._clear_pending_assist()
-                    self._clear_assist_target()
-                    now = datetime.now()
-                    await self._deliver_qi_message("好。", now, proactive=False)
-                    return "好。"
-                sel = self._pending_selected_index(text)
-                if self._is_confirm_cue(text) or sel is not None:
-                    confirmed_req = self.pending_assist_confirmation
-                    self._clear_pending_assist()
-                    try:
-                        if self._is_open_pending(confirmed_req):
-                            self._clear_assist_target()
-                            # allow 要约尚未填候选：先找路径再二次确认，勿直接写白名单
-                            conf = True
-                            try:
-                                from qi.action.open import OpenRequest
+            from qi.core.responsive_routes import FALLTHROUGH, execute_responsive_plan
+            from qi.core.turn_understanding import assess_and_prepare_turn
 
-                                if (
-                                    isinstance(confirmed_req, OpenRequest)
-                                    and confirmed_req.intent
-                                    in ("allow", "teach")
-                                    and not confirmed_req.candidates
-                                ):
-                                    conf = False
-                            except Exception:
-                                pass
-                            result = await self._execute_open_on_request(
-                                confirmed_req,
-                                confirmed=conf,
-                                selected_index=sel,
-                            )
-                            if result is not None and (
-                                result.get("needs_confirmation")
-                                or result.get("outcome") == "confirm_required"
-                            ):
-                                self.pending_assist_confirmation = confirmed_req
-                                self.pending_assist_confirmation_at = (
-                                    datetime.now()
-                                )
-                                self.pending_assist_heartbeats = 0
-                            elif result is not None:
-                                from qi.action.judgment import OUTCOME_RECAP
-                                from qi.action.open import OpenRequest
+            self._current_turn = await assess_and_prepare_turn(self, text, now)
+            self._primed_turn_message = text
 
-                                if (
-                                    result.get("outcome") == OUTCOME_RECAP
-                                    or result.get("type") == "open_recap"
-                                ):
-                                    alias = str(
-                                        result.get("allow_alias")
-                                        or getattr(confirmed_req, "target", "")
-                                    )
-                                    cands = result.get("candidates") or getattr(
-                                        confirmed_req, "candidates", None
-                                    ) or []
-                                    self.pending_assist_confirmation = OpenRequest(
-                                        intent="allow",
-                                        target_type="app",
-                                        target=alias,
-                                        candidates=cands,
-                                    )
-                                    self.pending_assist_confirmation_at = (
-                                        datetime.now()
-                                    )
-                                    self.pending_assist_heartbeats = 0
-                                else:
-                                    self._arm_open_after_allow(result)
-                        elif self._is_disk_pending(confirmed_req):
-                            self._clear_assist_target()
-                            disk_payload = confirmed_req
-                            try:
-                                from qi.action.disk import DiskRequest, allowed_root
-
-                                if (
-                                    isinstance(confirmed_req, DiskRequest)
-                                    and confirmed_req.intent == "offer_list"
-                                ):
-                                    disk_payload = DiskRequest(
-                                        intent="list_dir",
-                                        path=confirmed_req.path
-                                        or str(allowed_root()),
-                                    )
-                            except Exception:
-                                pass
-                            result = await self._execute_disk_on_request(
-                                disk_payload, confirmed=True
-                            )
-                            self._remember_disk_listing(result)
-                        elif self._is_write_pending(confirmed_req):
-                            self._clear_assist_target()
-                            result = await self._execute_write_on_request(
-                                confirmed_req, confirmed=True
-                            )
-                            if result and result.get("outcome") == "success":
-                                self.write_desire = None
-                        elif self._is_together_pending(confirmed_req):
-                            self._clear_assist_target()
-                            result = await self._execute_together_on_request(
-                                confirmed_req, confirmed=True
-                            )
-                            self._ingest_together_pool(result)
-                        else:
-                            # assist-5：确认成功后保留 last_assist_target（粘性补执行）
-                            result = await self._execute_confirmed_assist(
-                                confirmed_req
-                            )
-                        if result is not None:
-                            await self._deliver_action_result(
-                                result, datetime.now()
-                            )
-                            return (result.get("qi_line") or "").strip() or None
-                    except Exception:
-                        logger.exception("confirmed execute 失败")
-                    return None
-                # 换话题 / 新请求：清旧 pending + 粘性 target，落入正常对话
-                self._clear_pending_assist()
-                self._clear_assist_target()
-
-            # assist-5：pending 已消费但用户仍短语确认——粘性目标补执行
-            if self.last_assist_target is not None and self._is_confirm_reexec_cue(
-                text
-            ):
-                now = datetime.now()
-                if self._assist_target_fresh(now):
-                    from qi.action.volition import AssistRequest
-
-                    target = self.last_assist_target
-                    self._clear_assist_target()
-                    result = await self._execute_assist_on_request(
-                        AssistRequest(op="read_file", target_path=target),
-                        confirmed_override=True,
-                    )
-                    if result is not None:
-                        await self._deliver_action_result(
-                            result, datetime.now()
-                        )
-                        return (result.get("qi_line") or "").strip() or None
-                await self._deliver_qi_message(
-                    "嗯？你想让我看什么？", datetime.now(), proactive=False
-                )
-                return "嗯？你想让我看什么？"
-
-            # look：叫停 / 解除 / 邀看（先于 assist；邀看不弹确认卡）
-            try:
-                from qi.action.look import (
-                    detect_look_invite,
-                    looks_like_look_pause,
-                    looks_like_look_resume,
-                )
-            except Exception:
-                detect_look_invite = None  # type: ignore[assignment]
-                looks_like_look_pause = None  # type: ignore[assignment]
-                looks_like_look_resume = None  # type: ignore[assignment]
-
-            if (
-                looks_like_look_pause is not None
-                and looks_like_look_pause(text)
-                and self.action is not None
-            ):
-                try:
-                    await self.action.look.set_pause(datetime.now())
-                    await self._deliver_qi_message(
-                        "好，我先不看了。", datetime.now(), proactive=False
-                    )
-                    return "好，我先不看了。"
-                except Exception:
-                    logger.exception("look pause 失败")
-
-            if (
-                looks_like_look_resume is not None
-                and looks_like_look_resume(text)
-                and self.action is not None
-            ):
-                try:
-                    await self.action.look.clear_pause()
-                except Exception:
-                    logger.debug("look resume 失败", exc_info=True)
-
-            # 不可逆对外动作：诚实说明尚未实现
-            try:
-                from qi.action.irreversible import try_irreversible_message
-
-                ir_line = await try_irreversible_message(self, text, datetime.now())
-                if ir_line is not None:
-                    return ir_line
-            except Exception:
-                logger.exception("irreversible 对话拍失败")
-
-            # 委托式联网检索（先于 together/open，与自主 explore 分轨）
-            try:
-                from qi.core import brain_judgment as bj
-
-                ds_reply = await bj.try_delegate_search_message(
-                    self, text, datetime.now()
-                )
-                if ds_reply is not None:
-                    return ds_reply
-            except Exception:
-                logger.exception("delegate_search 对话拍失败")
-
-            # together：同看（先于 open，避免「一起看 url」被纯打开抢走）
-            tog_req = None
-            if self.action is not None:
-                try:
-                    from qi.action.together import detect_together_intent
-
-                    tog_req = await detect_together_intent(
-                        text, pool=self.together_pool, llm=self.llm
-                    )
-                except Exception:
-                    logger.debug("together intent 判别失败", exc_info=True)
-                    tog_req = None
-            if tog_req is not None:
-                try:
-                    now = datetime.now()
-                    blocked = await self._gate_responsive(
-                        "together",
-                        text,
-                        {"request_obj": tog_req},
-                        now=now,
-                    )
-                    if blocked is not None:
-                        return blocked
-                    result = await self._execute_together_on_request(
-                        tog_req, confirmed=True
-                    )
-                    if result is not None:
-                        await self._deliver_action_result(result, now)
-                        return (result.get("qi_line") or "").strip() or None
-                except Exception:
-                    logger.exception("together 对话拍 execute 失败")
-                return None
-
-            # write（D: 约定路径写下）：先于 disk
-            write_req = None
-            if self.action is not None:
-                try:
-                    from qi.action.write import (
-                        WriteRequest,
-                        detect_write_intent,
-                        extract_win_path,
-                    )
-
-                    write_req = await detect_write_intent(text, llm=self.llm)
-                    # 无路径欲望粘性：用户补路径 → 接上 diary/write/allow
-                    if write_req is None and self._write_desire_fresh():
-                        path = extract_win_path(text)
-                        if path:
-                            desire = self.write_desire or {}
-                            intent = str(desire.get("intent") or "write")
-                            topic = str(desire.get("topic") or text)
-                            if intent == "diary":
-                                write_req = WriteRequest(
-                                    intent="diary",
-                                    path=path,
-                                    topic=topic,
-                                )
-                            else:
-                                write_req = WriteRequest(
-                                    intent="write",
-                                    path=path,
-                                    topic=topic,
-                                    create_new=True,
-                                )
-                    elif (
-                        write_req is not None
-                        and write_req.intent in ("ask_where",)
-                        and self._write_desire_fresh()
-                    ):
-                        pass
-                except Exception:
-                    logger.debug("write intent 判别失败", exc_info=True)
-                    write_req = None
-            if write_req is not None:
-                try:
-                    now = datetime.now()
-                    blocked = await self._gate_responsive(
-                        "write",
-                        text,
-                        {"request_obj": write_req},
-                        now=now,
-                    )
-                    if blocked is not None:
-                        return blocked
-                    result = await self._execute_write_on_request(
-                        write_req, confirmed=True
-                    )
-                    if result is not None:
-                        self._remember_write_desire(result)
-                        await self._deliver_action_result(result, now)
-                        return (result.get("qi_line") or "").strip() or None
-                except Exception:
-                    logger.exception("write 对话拍 execute 失败")
-                return None
-
-            # disk（D: 列目录 / 开本地文件）：先于 open，避免「打开 D:\a.txt」误进应用 open
-            disk_req = None
-            if self.action is not None:
-                try:
-                    from qi.action.disk import (
-                        detect_disk_intent,
-                        resolve_listing_followup,
-                    )
-
-                    if self._disk_listing_fresh():
-                        disk_req = resolve_listing_followup(
-                            text, self.last_disk_listing
-                        )
-                    if disk_req is None:
-                        disk_req = await detect_disk_intent(text, llm=self.llm)
-                except Exception:
-                    logger.debug("disk intent 判别失败", exc_info=True)
-                    disk_req = None
-            if disk_req is not None:
-                try:
-                    now = datetime.now()
-                    blocked = await self._gate_responsive(
-                        "disk",
-                        text,
-                        {"request_obj": disk_req},
-                        now=now,
-                    )
-                    if blocked is not None:
-                        return blocked
-                    result = await self._execute_disk_on_request(
-                        disk_req, confirmed=True
-                    )
-                    if result is not None:
-                        self._remember_disk_listing(result)
-                        await self._deliver_action_result(result, now)
-                        return (result.get("qi_line") or "").strip() or None
-                except Exception:
-                    logger.exception("disk 对话拍 execute 失败")
-                return None
-
-            # open：先于 look 邀看（「看看这个链接」走 open_and_look，不误成纯 look）
-            open_req = None
-            if self.action is not None:
-                try:
-                    from qi.action.open import detect_open_intent
-
-                    open_req = await detect_open_intent(text, llm=self.llm)
-                except Exception:
-                    logger.debug("open intent 判别失败", exc_info=True)
-                    open_req = None
-            if open_req is not None:
-                try:
-                    from qi.action.judgment import OUTCOME_RECAP
-                    from qi.action.open import OpenRequest
-
-                    now = datetime.now()
-                    kind = "allow" if open_req.intent in ("allow", "teach") else "open"
-                    blocked = await self._gate_responsive(
-                        kind,
-                        text,
-                        {"request_obj": open_req},
-                        now=now,
-                    )
-                    if blocked is not None:
-                        return blocked
-                    result = await self._execute_open_on_request(
-                        open_req,
-                        confirmed=open_req.intent not in ("allow", "teach"),
-                    )
-                    if result is not None:
-                        if result.get("outcome") == OUTCOME_RECAP or (
-                            result.get("type") == "open_recap"
-                        ):
-                            alias = str(
-                                result.get("allow_alias")
-                                or getattr(open_req, "target", "")
-                            )
-                            cands = result.get("candidates") or []
-                            self.pending_assist_confirmation = OpenRequest(
-                                intent="allow",
-                                target_type="app",
-                                target=alias,
-                                candidates=cands,
-                            )
-                            self.pending_assist_confirmation_at = now
-                            self.pending_assist_heartbeats = 0
-                            self._clear_assist_target()
-                        else:
-                            self._arm_open_after_allow(result)
-                        await self._deliver_action_result(result, now)
-                        return (result.get("qi_line") or "").strip() or None
-                except Exception:
-                    logger.exception("open 对话拍 execute 失败")
-                return None
-
-            look_invited = False
-            if detect_look_invite is not None and self.action is not None:
-                try:
-                    look_invited = await detect_look_invite(text, llm=self.llm)
-                except Exception:
-                    logger.debug("look invite 判别失败", exc_info=True)
-                    look_invited = False
-            if look_invited:
-                try:
-                    now = datetime.now()
-                    scars = (
-                        await self._db.list_scars()
-                        if self._db is not None
-                        else None
-                    )
-                    trust = 0.5
-                    if self.relationship is not None:
-                        trust = float(
-                            getattr(self.relationship.state, "trust", 0.5) or 0.5
-                        )
-                    result = await self.action.execute_kind(
-                        "look",
-                        self.emotion,
-                        self.relationship_stage,
-                        self._current_season(),
-                        now,
-                        mode=self.emotion.mode.value,
-                        user_online=self.user_online,
-                        scars=scars,
-                        trust=trust,
-                        op="invite",
-                        target_path=text,
-                        confirmed=True,
-                    )
-                    if result is not None:
-                        await self._deliver_action_result(result, now)
-                        return (result.get("qi_line") or "").strip() or None
-                except Exception:
-                    logger.exception("look 邀看 execute 失败")
-                return None
-
-            # assist-4：对话拍有 assist 请求时，assist 开口 = respond（不走 conversation LLM）
-            assist_req = None
-            try:
-                from qi.action.volition import parse_assist_request
-
-                assist_req = parse_assist_request(text)
-            except Exception:
-                logger.debug("assist_request 解析失败", exc_info=True)
-                assist_req = None
-            self.last_assist_request = assist_req
-            if assist_req is not None:
-                self.last_assist_target = getattr(
-                    assist_req, "target_path", None
-                )
-                self.last_assist_target_at = datetime.now()
-
-            if assist_req is not None:
-                try:
-                    now = datetime.now()
-                    blocked = await self._gate_responsive(
-                        "assist",
-                        text,
-                        {
-                            "op": assist_req.op,
-                            "target_path": assist_req.target_path,
-                        },
-                        now=now,
-                    )
-                    if blocked is not None:
-                        return blocked
-                    result = await self._execute_assist_on_request(assist_req)
-                    if result is not None:
-                        self.last_assist_request = None
-                        await self._deliver_action_result(result, now)
-                        return (result.get("qi_line") or "").strip() or None
-                except Exception:
-                    logger.exception("assist 对话拍 execute 失败")
-                return None
+            routed = await execute_responsive_plan(self, text)
+            if routed is not FALLTHROUGH:
+                self._primed_turn_message = None
+                self._current_turn = None
+                return routed
 
             # 正常对话路径（无 assist 请求）
             if len(self._pending_queue) >= PENDING_QUEUE_MAX:
@@ -2123,6 +1615,7 @@ class Brain:
                 )
             self._pending_queue.append(text)
             await self._heartbeat()
+            self._current_turn = None
             speech = self._take_pending_speech()
         if self.in_stasis and speech is None:
             return await self._reply_stasis_notice()

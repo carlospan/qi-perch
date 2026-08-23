@@ -198,6 +198,17 @@ async def gather_prompt_context(
         extras["drift_hint"] = "；".join(brain._drift_signals)
         brain._drift_signals = []
 
+    if pending:
+        from qi.core.turn_understanding import (
+            prepare_dialogue_turn,
+            turn_understanding_to_extras,
+        )
+
+        tu = getattr(brain, "_current_turn", None)
+        if tu is None or tu.user_message != pending:
+            tu = await prepare_dialogue_turn(brain, pending, now)
+        extras.update(turn_understanding_to_extras(tu))
+
     return PromptContext(
         recent_messages=recent,
         retrieved_memories=memories,

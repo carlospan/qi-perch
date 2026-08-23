@@ -271,6 +271,15 @@ class Expression:
             sys0["content"] = str(sys0.get("content") or "") + f"\n\n【施教关系锚定】{teach_hint}"
             messages[0] = sys0
 
+        from qi.core.turn_understanding import turn_situation_expression_hint
+
+        sit_hint = turn_situation_expression_hint(inner_extras or {})
+        if sit_hint and messages:
+            messages = list(messages)
+            sys0 = dict(messages[0])
+            sys0["content"] = str(sys0.get("content") or "") + f"\n\n【处境】{sit_hint}"
+            messages[0] = sys0
+
         hist = recent_qi_replies_from_messages(recent_messages, limit=REPLY_DEDUP_WINDOW)
         chase = looks_like_answer_chase(user_message) or looks_like_answer_chase(
             intention.topic
