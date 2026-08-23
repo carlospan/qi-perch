@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
-"""清理验收污染与误触 together 软邀消息（带备份）。"""
+"""清理验收 / 相处批跑 / 工程试聊污染（带备份）。
+
+默认删：
+- 含 `[验收` 标记的 messages / actions / raw_events / narrative
+- 2026-08-22 22:18 起至 2026-08-24 前的试聊 messages（验收批 + coexist + 改码试跑）
+- 同时段内 L7 试跑 actions（list_dir / delegate_search / open example / together 等）
+- data/_acceptance_*、data/_coexist_* 报告与临时运行时配置
+"""
 from __future__ import annotations
 
 import shutil
@@ -9,8 +16,33 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DB = ROOT / "data" / "qi.db"
-MARK = "[验收2026-08-22]"
+
+ACCEPTANCE_MARK = "[验收"
 TOGETHER_LINE = "要不要一起看看？"
+
+# 验收批 + 08-23 改码 coexist / 试聊时间窗（不含更早真实相处）
+POLLUTION_START = "2026-08-22T21:45:00"
+POLLUTION_END = "2026-08-24T00:00:00"
+
+# 试跑产生的 action kinds（窗口内整类删；budget_tune / look 多为心跳附带，一并清）
+POLLUTION_ACTION_KINDS = (
+    "list_dir",
+    "delegate_search",
+    "open",
+    "together",
+    "irreversible",
+    "write",
+    "archive",
+)
+
+REPORT_GLOBS = (
+    "data/_acceptance_*",
+    "data/_coexist_*",
+    "data/_peek_*",
+    "data/_msgs.json",
+    "data/_acceptance_runtime_settings.yaml",
+    "data/_coexist_runtime_settings.yaml",
+)
 
 
 def main() -> None:
@@ -37,118 +69,124 @@ def main() -> None:
         "narrative": count("SELECT COUNT(*) FROM narrative_memories"),
     }
 
-    # 1) 带验收标记的消息（用户句 + 极少数嵌标记的 action 摘要复述）
     n_msg_mark = count(
         "SELECT COUNT(*) FROM messages WHERE content LIKE ?",
-        (f"%{MARK}%",),
+        (f"%{ACCEPTANCE_MARK}%",),
     )
-
-    # 2) 误触 together 软邀（仅栖、整句匹配）
+    n_msg_window = count(
+        """
+        SELECT COUNT(*) FROM messages
+        WHERE timestamp >= ? AND timestamp < ?
+        """,
+        (POLLUTION_START, POLLUTION_END),
+    )
     n_msg_together = count(
         "SELECT COUNT(*) FROM messages WHERE role='qi' AND content = ?",
         (TOGETHER_LINE,),
     )
 
-    # 3) 验收相关 actions
+    kinds_sql = ",".join(f"'{k}'" for k in POLLUTION_ACTION_KINDS)
     n_act_mark = count(
         "SELECT COUNT(*) FROM actions WHERE summary LIKE ? OR detail_json LIKE ?",
-        (f"%{MARK}%", f"%{MARK}%"),
+        (f"%{ACCEPTANCE_MARK}%", f"%{ACCEPTANCE_MARK}%"),
     )
-    # example.com 仅验收场景用过；open 成功且 target 为 example
+    n_act_window = count(
+        f"""
+        SELECT COUNT(*) FROM actions
+        WHERE timestamp >= ? AND timestamp < ?
+          AND kind IN ({kinds_sql})
+        """,
+        (POLLUTION_START, POLLUTION_END),
+    )
     n_act_example = count(
         "SELECT COUNT(*) FROM actions WHERE kind='open' AND summary = 'url:https://example.com'"
     )
-    # 验收批次的 delegate_search / list_dir / write 日记污染（时间窗 + 特征）
-    n_act_batch = count(
+    n_act_budget_window = count(
         """
-        SELECT COUNT(*) FROM actions WHERE
-          timestamp >= '2026-08-22T22:18:00' AND timestamp <= '2026-08-22T23:36:00'
-          AND (
-            kind IN ('delegate_search', 'list_dir', 'irreversible')
-            OR (kind = 'write' AND summary LIKE 'create:D:\\日记-2026-08-22%')
-            OR (kind = 'open' AND summary = 'url:https://example.com')
-          )
-        """
+        SELECT COUNT(*) FROM actions
+        WHERE timestamp >= ? AND timestamp < ?
+          AND kind IN ('budget_tune', 'look')
+        """,
+        (POLLUTION_START, POLLUTION_END),
     )
 
-    n_raw = count(
+    n_raw_mark = count(
         "SELECT COUNT(*) FROM raw_events WHERE content LIKE ?",
-        (f"%{MARK}%",),
+        (f"%{ACCEPTANCE_MARK}%",),
     )
-    n_narr = count(
+    n_raw_window = count(
+        """
+        SELECT COUNT(*) FROM raw_events
+        WHERE timestamp >= ? AND timestamp < ?
+        """,
+        (POLLUTION_START, POLLUTION_END),
+    )
+    n_narr_mark = count(
         "SELECT COUNT(*) FROM narrative_memories WHERE content LIKE ?",
-        (f"%{MARK}%",),
+        (f"%{ACCEPTANCE_MARK}%",),
     )
 
     print("plan delete:")
-    print(f"  messages mark: {n_msg_mark}")
+    print(f"  messages acceptance mark: {n_msg_mark}")
+    print(f"  messages in window {POLLUTION_START}..{POLLUTION_END}: {n_msg_window}")
     print(f"  messages together invite: {n_msg_together}")
-    print(f"  actions mark: {n_act_mark}")
-    print(f"  actions example open: {n_act_example}")
-    print(f"  actions acceptance batch window: {n_act_batch}")
-    print(f"  raw_events: {n_raw}")
-    print(f"  narrative: {n_narr}")
+    print(f"  actions acceptance mark: {n_act_mark}")
+    print(f"  actions L7/window kinds: {n_act_window}")
+    print(f"  actions example open (any time): {n_act_example}")
+    print(f"  actions budget_tune/look in window: {n_act_budget_window}")
+    print(f"  raw_events mark: {n_raw_mark}")
+    print(f"  raw_events in window: {n_raw_window}")
+    print(f"  narrative mark: {n_narr_mark}")
 
-    conn.execute("DELETE FROM messages WHERE content LIKE ?", (f"%{MARK}%",))
+    conn.execute("DELETE FROM messages WHERE content LIKE ?", (f"%{ACCEPTANCE_MARK}%",))
     conn.execute(
         "DELETE FROM messages WHERE role='qi' AND content = ?",
         (TOGETHER_LINE,),
     )
     conn.execute(
+        """
+        DELETE FROM messages
+        WHERE timestamp >= ? AND timestamp < ?
+        """,
+        (POLLUTION_START, POLLUTION_END),
+    )
+
+    conn.execute(
         "DELETE FROM actions WHERE summary LIKE ? OR detail_json LIKE ?",
-        (f"%{MARK}%", f"%{MARK}%"),
+        (f"%{ACCEPTANCE_MARK}%", f"%{ACCEPTANCE_MARK}%"),
     )
     conn.execute(
         "DELETE FROM actions WHERE kind='open' AND summary = 'url:https://example.com'"
     )
     conn.execute(
-        """
-        DELETE FROM actions WHERE
-          timestamp >= '2026-08-22T22:18:00' AND timestamp <= '2026-08-22T23:36:00'
-          AND (
-            kind IN ('delegate_search', 'list_dir', 'irreversible')
-            OR (kind = 'write' AND summary LIKE 'create:D:\\日记-2026-08-22%')
-          )
-        """
+        f"""
+        DELETE FROM actions
+        WHERE timestamp >= ? AND timestamp < ?
+          AND kind IN ({kinds_sql})
+        """,
+        (POLLUTION_START, POLLUTION_END),
     )
-    conn.execute("DELETE FROM raw_events WHERE content LIKE ?", (f"%{MARK}%",))
     conn.execute(
-        "DELETE FROM narrative_memories WHERE content LIKE ?",
-        (f"%{MARK}%",),
+        """
+        DELETE FROM actions
+        WHERE timestamp >= ? AND timestamp < ?
+          AND kind IN ('budget_tune', 'look')
+        """,
+        (POLLUTION_START, POLLUTION_END),
     )
 
-    # 验收跑批产生的 qi 回复（无标记）：落在验收用户句时间窗内的短批回复
-    # 取带标记用户句的时间戳集合，删同秒内及之后 90s 内 role=qi 且不含标记的消息（保守）
-    user_ts = [
-        r[0]
-        for r in conn.execute(
-            "SELECT timestamp FROM messages WHERE content LIKE ? AND role='user'",
-            (f"%{MARK}%",),
-        ).fetchall()
-    ]
-    # 已删带标记消息，用备份库取时间戳
-    backup = sqlite3.connect(backup_dir / "qi.db")
-    user_ts = [
-        r[0]
-        for r in backup.execute(
-            "SELECT timestamp FROM messages WHERE content LIKE ? AND role='user'",
-            (f"%{MARK}%",),
-        ).fetchall()
-    ]
-    backup.close()
-    extra_qi = 0
-    for ts in user_ts:
-        cur = conn.execute(
-            """
-            DELETE FROM messages WHERE role='qi'
-              AND content NOT LIKE ?
-              AND timestamp >= ?
-              AND timestamp <= datetime(?, '+90 seconds')
-            """,
-            (f"%{MARK}%", ts, ts),
-        )
-        extra_qi += cur.rowcount
-    print(f"  extra qi replies in acceptance windows: {extra_qi}")
+    conn.execute("DELETE FROM raw_events WHERE content LIKE ?", (f"%{ACCEPTANCE_MARK}%",))
+    conn.execute(
+        """
+        DELETE FROM raw_events
+        WHERE timestamp >= ? AND timestamp < ?
+        """,
+        (POLLUTION_START, POLLUTION_END),
+    )
+    conn.execute(
+        "DELETE FROM narrative_memories WHERE content LIKE ?",
+        (f"%{ACCEPTANCE_MARK}%",),
+    )
 
     conn.commit()
 
@@ -162,13 +200,17 @@ def main() -> None:
     print("after:", after)
     print("removed messages:", before["messages"] - after["messages"])
     print("removed actions:", before["actions"] - after["actions"])
+    print("removed raw_events:", before["raw_events"] - after["raw_events"])
+    print("removed narrative:", before["narrative"] - after["narrative"])
 
-    # 验收报告文件
     removed_reports = 0
-    for p in ROOT.glob("data/_acceptance_*"):
-        p.unlink()
-        removed_reports += 1
-    print(f"removed report files: {removed_reports}")
+    for pattern in REPORT_GLOBS:
+        for p in ROOT.glob(pattern):
+            if p.is_file():
+                p.unlink()
+                removed_reports += 1
+                print(f"removed file: {p}")
+    print(f"removed report/temp files: {removed_reports}")
 
     conn.close()
 

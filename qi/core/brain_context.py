@@ -199,7 +199,9 @@ async def gather_prompt_context(
         brain._drift_signals = []
 
     if pending:
+        from qi.core.intention import short_emotion_label
         from qi.core.turn_understanding import (
+            apply_turn_emotion_modulation,
             prepare_dialogue_turn,
             turn_understanding_to_extras,
         )
@@ -207,6 +209,14 @@ async def gather_prompt_context(
         tu = getattr(brain, "_current_turn", None)
         if tu is None or tu.user_message != pending:
             tu = await prepare_dialogue_turn(brain, pending, now)
+        vb = getattr(brain, "_turn_valence_before", None)
+        if vb is not None:
+            apply_turn_emotion_modulation(
+                tu,
+                valence_before=float(vb),
+                valence_after=float(brain.emotion.valence),
+            )
+        extras["present_emotion"] = short_emotion_label(brain.emotion)
         extras.update(turn_understanding_to_extras(tu))
 
     return PromptContext(

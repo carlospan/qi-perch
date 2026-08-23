@@ -14,6 +14,7 @@ from qi.core.intention import (
     is_hard_violation,
     looks_like_answer_chase,
 )
+from qi.core.turn_understanding import looks_like_substantive_question
 from qi.inner_life.consciousness import char_jaccard
 from qi.llm.prompt_builder import PromptBuilder
 
@@ -55,6 +56,17 @@ _ANSWER_CHASE_CONSTRAINT = (
     "先直接回应或诚实说明卡在哪；"
     "禁止只回「……嗯。」这类敷衍；禁止编造卡外事实。"
 )
+_SUBSTANTIVE_RETRY_CONSTRAINT = (
+    "用户在问需要认真回应的实质问题。请直接作答；"
+    "可引用卡内 state 描述此刻感受；"
+    "禁止说「想了很久/选了又选/那天你说」等无出处的过程或共同史；"
+    "禁止只回「没接好请再说」类系统句。"
+)
+_NO_PROCESS_FABRICATION_CONSTRAINT = (
+    "卡内无 memory/fact 时：勿声称想了很久、选了又选、沉默很久等思考过程；"
+    "可说「我不确定怎么定义，但此刻我……」并引用 state。"
+)
+_SUBSTANTIVE_EMPTY_SAFE = "……这个问题很重。让我诚实说几句——"
 _ELLIPSIS_DODGE = frozenset({"……嗯。", "……嗯", "嗯。", "……", "…", "嗯"})
 
 _TEACH_VIOLATION_TAGS = ("施教关系反转", "空卡编造共同回忆")
@@ -147,9 +159,20 @@ def is_duplicate_reply(
     return False
 
 
-def _empty_primary_fallback(*, chase: bool) -> str:
+def _empty_primary_fallback(
+    *,
+    chase: bool,
+    substantive: bool = False,
+    card: IntentionCard | None = None,
+) -> str:
     if chase:
         return _ANSWER_CHASE_SAFE
+    if substantive:
+        primary = (card.primary_text() if card else "") or ""
+        state = primary if primary else ""
+        if state:
+            return f"{_SUBSTANTIVE_EMPTY_SAFE}{state}。"
+        return _SUBSTANTIVE_EMPTY_SAFE
     return _EMPTY_CARD_SAFE
 
 
@@ -163,16 +186,30 @@ def render_template(card: IntentionCard, *, user_message: str = "") -> str:
     chase = looks_like_answer_chase(user_message) or looks_like_answer_chase(
         card.topic
     )
+    substantive = looks_like_substantive_question(user_message) or looks_like_substantive_question(
+        card.topic
+    )
 
     if act == "answer":
         if primary:
             text = f"{primary}……嗯。"
         else:
-            text = _empty_primary_fallback(chase=chase)
+            text = _empty_primary_fallback(
+                chase=chase, substantive=substantive, card=card
+            )
     elif act == "acknowledge":
-        text = f"……我听见了。{primary}" if primary else "……我听见了。"
+        if primary:
+            text = f"……我听见了。{primary}"
+        elif substantive:
+            text = _empty_primary_fallback(
+                chase=chase, substantive=True, card=card
+            )
+        else:
+            text = "……我听见了。"
     elif act == "share_state":
-        text = f"……{primary}。" if primary else _empty_primary_fallback(chase=chase)
+        text = f"……{primary}。" if primary else _empty_primary_fallback(
+            chase=chase, substantive=substantive, card=card
+        )
     elif act == "recall":
         text = f"记得。{primary}。" if primary else "……我不确定自己还记不记得。"
     elif act == "comfort_back":
@@ -193,6 +230,10 @@ def render_template(card: IntentionCard, *, user_message: str = "") -> str:
             text = _EMPTY_CARD_SAFE
         elif chase and not primary:
             text = _ANSWER_CHASE_SAFE
+        elif substantive and not primary:
+            text = _empty_primary_fallback(
+                chase=False, substantive=True, card=card
+            )
         else:
             text = f"……嗯。{primary}" if primary else _EMPTY_CARD_SAFE
     elif act == "silence":
@@ -205,7 +246,11 @@ def render_template(card: IntentionCard, *, user_message: str = "") -> str:
 
     text = text.strip()
     # 催答 / 空卡安全句勿被 short 截断成半句（否则又像敷衍）
-    if short and len(text) > 40 and text not in (_ANSWER_CHASE_SAFE, _EMPTY_CARD_SAFE):
+    if short and len(text) > 40 and text not in (
+        _ANSWER_CHASE_SAFE,
+        _EMPTY_CARD_SAFE,
+        _SUBSTANTIVE_EMPTY_SAFE,
+    ):
         text = text[:40].rstrip("。…") + "…"
     return text
 
@@ -280,10 +325,24 @@ class Expression:
             sys0["content"] = str(sys0.get("content") or "") + f"\n\n【处境】{sit_hint}"
             messages[0] = sys0
 
+        from qi.core.intention import _card_has_real_material
+
+        if not _card_has_real_material(intention) and messages:
+            messages = list(messages)
+            sys0 = dict(messages[0])
+            sys0["content"] = (
+                str(sys0.get("content") or "")
+                + f"\n\n【诚实】{_NO_PROCESS_FABRICATION_CONSTRAINT}"
+            )
+            messages[0] = sys0
+
         hist = recent_qi_replies_from_messages(recent_messages, limit=REPLY_DEDUP_WINDOW)
         chase = looks_like_answer_chase(user_message) or looks_like_answer_chase(
             intention.topic
         )
+        substantive = looks_like_substantive_question(
+            user_message
+        ) or looks_like_substantive_question(intention.topic)
 
         text = ""
         # 每拍对话最多 2 次 LLM：主调用 +（HARD 修复 XOR 催答空重试 XOR 去重重生）
@@ -311,6 +370,35 @@ class Expression:
                 )
             except Exception:
                 logger.debug("催答重试异常，走模板", exc_info=True)
+                again = ""
+            used_retry = True
+            again = str(again or "").strip()
+            if again and not _is_ellipsis_dodge(again):
+                text = again
+            else:
+                text = ""
+
+        # 实质问：空返回或省略号敷衍 → 约束重试一次
+        if (
+            substantive
+            and not chase
+            and (not text or _is_ellipsis_dodge(text))
+            and not used_retry
+        ):
+            sub_messages = list(messages)
+            if sub_messages:
+                sys0 = dict(sub_messages[0])
+                sys0["content"] = (
+                    str(sys0.get("content") or "")
+                    + f"\n\n【实质问】{_SUBSTANTIVE_RETRY_CONSTRAINT}"
+                )
+                sub_messages[0] = sys0
+            try:
+                again = await self.llm.call(
+                    purpose="conversation", messages=sub_messages
+                )
+            except Exception:
+                logger.debug("实质问重试异常，走模板", exc_info=True)
                 again = ""
             used_retry = True
             again = str(again or "").strip()

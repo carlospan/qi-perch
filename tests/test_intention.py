@@ -315,7 +315,9 @@ async def test_last_intention_written_with_outcome():
         assert card is not None
         assert card.get("outcome") == "template"
         assert brain._pending_speech is not None
-        assert brain._pending_speech.text == _EMPTY_CARD_SAFE
+        # 实质问 + 空 LLM：走诚实模板，不再用「没接好请再说」
+        assert "没接好" not in brain._pending_speech.text
+        assert brain._pending_speech.text != _EMPTY_CARD_SAFE
         brain.memory.vector_store.close()
         await db.close()
 

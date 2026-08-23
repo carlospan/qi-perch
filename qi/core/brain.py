@@ -584,6 +584,8 @@ class Brain:
         if pending is not None:
             # 包 12：有效交互收入（R3：非满意度）；防刷在 ledger 内
             self._ledger_safe_credit_interaction(now)
+            valence_before = float(self.emotion.valence)
+            self._turn_valence_before = valence_before
             # 感知先于关系：同一拍 intent 供 trust/伤疤复用（阶段零·包 A）
             recent_for_impact: list[dict] = []
             if self.memory is not None:
@@ -653,6 +655,15 @@ class Brain:
             impact = impact * impact_mult
             self.emotion = apply_event_impact(self.emotion, impact)
             self.emotion = self.perception.apply_security_hint(self.emotion, impact)
+            if self._current_turn is not None:
+                from qi.core.turn_understanding import note_emotional_residue
+
+                await note_emotional_residue(
+                    self,
+                    self._current_turn,
+                    valence_before=valence_before,
+                    valence_after=float(self.emotion.valence),
+                )
             self.last_interaction = now
             # 本会话首条：deliver 后再 prefer_close（见 start / receive_user_message）
             if not self._interacted_this_session:
@@ -1617,6 +1628,7 @@ class Brain:
             await self._heartbeat()
             self._current_turn = None
             speech = self._take_pending_speech()
+        self._turn_valence_before = None
         if self.in_stasis and speech is None:
             return await self._reply_stasis_notice()
         if speech is None:

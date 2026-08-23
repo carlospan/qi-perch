@@ -429,6 +429,11 @@ def _short_emotion(emotion: EmotionState) -> str:
     return desc or "平静"
 
 
+def short_emotion_label(emotion: EmotionState) -> str:
+    """供回合理解 / open loop 引用的情绪短标签。"""
+    return _short_emotion(emotion)
+
+
 def _stance_for(
     emotion: EmotionState,
     stage: str,
@@ -760,6 +765,11 @@ _DECLARATIVE_MEMORY_RE = re.compile(
     r"|我说了|我说过|会问你|记得你那次|记得你曾经|上次你|记得那个凌晨"
 )
 
+# 空卡过程编造：无 memory/fact 时声称思考时长/抉择过程
+_PROCESS_FABRICATION_RE = re.compile(
+    r"想了很[久长]|想了半天|选了又选|挑了又挑|沉默了很久|等他很久|等候很久"
+)
+
 # 「你（那天）说的 X」——把 X 归因给用户；须在素材里有「你说…X」支撑（#1505 硬币）
 _USER_ATTR_CLAIM_RE = re.compile(
     r"你(?:那天|那晚|之前|曾经)?(?:说|问)(?:过)?的"
@@ -780,6 +790,7 @@ _HARD_VIOLATION_PREFIXES = (
     "空卡编造共同回忆",
     "虚构实体:",
     "共同回忆",
+    "空卡过程编造",
 )
 
 _ENTITY_WHITELIST: frozenset[str] = frozenset(
@@ -1084,4 +1095,6 @@ def assert_reply_respects_card(
         # 素材未包含同类自我认知词 → 无支撑
         if not _SELF_VIEW_RE.search(blob):
             violations.append("无支撑自我认知结论")
+    if not _card_has_real_material(card) and _PROCESS_FABRICATION_RE.search(text):
+        violations.append("空卡过程编造")
     return violations

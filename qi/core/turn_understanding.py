@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -14,6 +15,22 @@ from qi.core.perception import looks_like_typo_correction
 
 if TYPE_CHECKING:
     from qi.core.brain import Brain
+    from qi.core.emotion import EmotionState
+
+# 实质问句：语言学形态，非场景关键词（懂意思铁律）
+_SUBSTANTIVE_QUESTION_RE = re.compile(
+    r"[?？]$|"
+    r"(吗|么|呢)[。！]?$|"
+    r"(你觉得|你认为|会不会|有没有|是不是|能否|可以吗|怎么看|意味着什么)"
+)
+
+
+def looks_like_substantive_question(text: str) -> bool:
+    """用户在问需要认真回应的实质问题（形态启发，非话题表）。"""
+    t = (text or "").strip()
+    if len(t) < 4:
+        return False
+    return bool(_SUBSTANTIVE_QUESTION_RE.search(t))
 
 
 @dataclass
@@ -26,6 +43,8 @@ class SituationHints:
     user_request: bool = False
     user_comfort: bool = False
     user_typo_correction: bool = False
+    user_substantive_question: bool = False
+    emotional_aftershock: bool = False
 
 
 @dataclass
@@ -62,7 +81,23 @@ def infer_situation_hints(
         user_request=intent == "request",
         user_comfort=intent == "comfort",
         user_typo_correction=looks_like_typo_correction(text),
+        user_substantive_question=looks_like_substantive_question(text),
     )
+
+
+def apply_turn_emotion_modulation(
+    tu: TurnUnderstanding,
+    *,
+    valence_before: float,
+    valence_after: float,
+) -> None:
+    """情绪余波：bonded 下显著负冲击或效价下挫 → 标记 aftershock（非场景表）。"""
+    if not tu.relationship.bonded:
+        return
+    assessment = tu.perception_assessment
+    impact = float(getattr(assessment, "impact", 0.0) or 0.0)
+    if impact < -0.08 or valence_after < valence_before - 0.1:
+        tu.situation.emotional_aftershock = True
 
 
 def infer_relationship_modulation(stage: str) -> RelationshipModulation:
@@ -131,6 +166,10 @@ def turn_understanding_to_extras(tu: TurnUnderstanding) -> dict[str, str]:
         tags.append("bonded")
     if tu.situation.user_typo_correction:
         tags.append("user_typo_correction")
+    if tu.situation.user_substantive_question:
+        tags.append("user_substantive_question")
+    if tu.situation.emotional_aftershock:
+        tags.append("emotional_aftershock")
     extras: dict[str, str] = {}
     if tags:
         extras["turn_situation"] = ",".join(tags)
@@ -164,11 +203,22 @@ def turn_situation_expression_hint(extras: dict[str, str]) -> str:
         parts.append(
             "用户在纠正笔误或澄清本意；轻声确认即可，勿调侃「被抓到」「说中了」。"
         )
+    if "user_substantive_question" in tags:
+        parts.append(
+            "用户在问实质问题；诚实作答，可引用卡内 state 描述此刻感受，"
+            "勿说「想了很久/那天你说」等无出处的过程或共同史。"
+        )
+    if "emotional_aftershock" in tags:
+        parts.append(
+            "上一拍情绪余波仍在；语气可略短、略静，勿立刻跳回轻巧闲聊。"
+        )
     return " ".join(parts)
 
 
 def apply_dialogue_modulation(card, extras: dict[str, str]) -> None:
     """根据回合处境弱信号调制意向卡（非场景 regex 包）。"""
+    from qi.core.intention import Material
+
     tags = _parse_turn_situation_tags(extras)
     if not tags:
         return
@@ -191,3 +241,53 @@ def apply_dialogue_modulation(card, extras: dict[str, str]) -> None:
         )
         if line not in card.must:
             card.must.append(line)
+    if "user_substantive_question" in tags:
+        present = (extras.get("present_emotion") or "").strip()
+        has_state = any(
+            m.tag == "state" and (m.text or "").strip() for m in card.materials
+        )
+        has_fact_mem = any(
+            m.tag in ("memory", "fact") and (m.text or "").strip()
+            for m in card.materials
+        )
+        if present and not has_state:
+            card.materials.append(Material(tag="state", text=present[:80]))
+        if not has_fact_mem and card.act == "free_talk":
+            card.act = "acknowledge"
+        line = (
+            "实质问句：诚实作答；可引用卡内 state 说此刻感受，"
+            "勿编造思考时长或共同回忆。"
+        )
+        if line not in card.must:
+            card.must.append(line)
+    if "emotional_aftershock" in tags:
+        if card.length == "normal":
+            card.length = "short"
+        line = "情绪余波仍在；略短略静，勿立刻装作无事。"
+        if line not in card.must:
+            card.must.append(line)
+
+
+async def note_emotional_residue(
+    brain: Brain,
+    tu: TurnUnderstanding,
+    *,
+    valence_before: float,
+    valence_after: float,
+) -> None:
+    """显著情绪冲击后写入 open loop（心事余波，供后续内在生命）。"""
+    apply_turn_emotion_modulation(
+        tu, valence_before=valence_before, valence_after=valence_after
+    )
+    if not tu.situation.emotional_aftershock or brain._db is None:
+        return
+    try:
+        from qi.core.intention import short_emotion_label
+        from qi.memory.open_loops import OpenLoopQueue
+
+        q = OpenLoopQueue(brain._db)
+        await q.load()
+        seed = short_emotion_label(brain.emotion)
+        await q.enqueue("emotion_surge", seed=seed or "动")
+    except Exception:
+        pass
