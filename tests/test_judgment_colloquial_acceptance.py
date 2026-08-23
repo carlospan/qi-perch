@@ -97,6 +97,49 @@ async def test_colloquial_delegate_search_no_confirm_card(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_colloquial_hot_news_without_search_cue(tmp_path):
+    """「今天热点新闻有什么」→ 问句形态 + LLM 判别 search，非话题词表。"""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        brain = _brain(tmp)
+        await brain._db.initialize()
+        from qi.action.explore_web import SearchHit
+
+        web = MagicMock()
+        web.search = AsyncMock(
+            return_value=[
+                SearchHit(
+                    title="今日要闻",
+                    snippet="摘要",
+                    url="https://example.com/n",
+                )
+            ]
+        )
+        brain.action._build_explore_web = lambda: web  # type: ignore[method-assign]
+
+        class _IntentLLM:
+            async def call(self, purpose, messages, temperature=None):
+                user = str(messages[-1].get("content") or "")
+                if "search" in user and "neither" in user:
+                    return '{"intent":"search","query":"今天热点新闻"}'
+                return "嗯。"
+
+        brain.llm = _IntentLLM()  # type: ignore[assignment]
+
+        delivered: list[dict] = []
+
+        async def capture(result, now):
+            delivered.append(result)
+
+        with patch.object(brain, "_deliver_action_result", side_effect=capture):
+            line = await brain.receive_user_message("今天热点新闻有什么")
+
+        assert line is not None
+        assert delivered, "应有 delegate 行动结果"
+        assert delivered[-1].get("found", {}).get("source") == "web_delegate"
+        await brain._db.close()
+
+
+@pytest.mark.asyncio
 async def test_colloquial_disk_capability_lists_without_confirm(tmp_path, monkeypatch):
     """「栖你能看到 d 盘下的文件吗？」→ 直接列目录；不要求确认卡。"""
     monkeypatch.setattr("qi.action.disk.DEFAULT_ALLOWED_ROOT", tmp_path)

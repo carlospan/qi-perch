@@ -191,13 +191,55 @@ async def try_fulfill_delegate_queue(brain: Brain, now: datetime) -> None:
         logger.exception("delegate 履约失败 kind=%s", kind)
 
 
+async def _perception_intent_for_route(brain: Brain, text: str) -> str | None:
+    """弱路径需 request 时补感知；问句形态已够则不重复 assess。"""
+    from qi.action.delegate_search import _question_shape_delegate_candidate
+
+    if _question_shape_delegate_candidate(text):
+        return None
+    recent: list[dict] = []
+    if brain.memory is not None:
+        recent = brain.memory.working.get_context()
+    elif brain._db is not None:
+        try:
+            recent = await brain._db.load_recent_messages(limit=5)
+        except Exception:
+            recent = []
+    try:
+        await brain.perception.assess_impact_async(
+            text,
+            brain.emotion,
+            brain.relationship_stage,
+            recent_messages=recent,
+        )
+    except Exception:
+        logger.debug("delegate 路由感知失败", exc_info=True)
+        return None
+    a = brain.perception.last_assessment
+    if a is None or not a.intent:
+        return None
+    return str(a.intent)
+
+
 async def try_delegate_search_message(brain: Brain, text: str, now: datetime) -> str | None:
     from qi.action.delegate_search import (
-        extract_search_query,
+        _question_shape_delegate_candidate,
+        detect_delegate_search_intent,
         looks_like_delegate_search,
     )
 
-    if not looks_like_delegate_search(text):
+    perception_intent: str | None = None
+    if not looks_like_delegate_search(text) and not _question_shape_delegate_candidate(
+        text
+    ):
+        perception_intent = await _perception_intent_for_route(brain, text)
+
+    query = await detect_delegate_search_intent(
+        text,
+        llm=brain.llm,
+        perception_intent=perception_intent,
+    )
+    if not query:
         return None
     judgment = await judge_for_kind(brain, "delegate_search")
     if judgment.decision == OUTCOME_DECLINED:
@@ -210,24 +252,17 @@ async def try_delegate_search_message(brain: Brain, text: str, now: datetime) ->
             now=now,
         )
     if judgment.decision == OUTCOME_DEFERRED:
-        query = await extract_search_query(text, brain.llm)
         return await handle_decline_or_defer(
             brain,
             judgment,
             kind="delegate_search",
             user_text=text,
             payload={
-                "query": query or text[:120],
+                "query": query,
                 "motive": judgment_result_dict(judgment),
             },
             now=now,
         )
-    query = await extract_search_query(text, brain.llm)
-    if not query:
-        await brain._deliver_qi_message(
-            "你想让我查什么？", now, proactive=False
-        )
-        return "你想让我查什么？"
     from qi.action.delegate_search import DelegateSearchAction
 
     ds = DelegateSearchAction(

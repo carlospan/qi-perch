@@ -51,7 +51,7 @@
   --main-pad-x: 28px;
   --main-pad-y: 18px;
   --presence-vrm-w: 42%;
-  --desk-aside-w: 280px;
+  --desk-aside-w: 380px;
   --page-pad-x: 28px;
   --page-pad-y: 22px;
 
@@ -229,6 +229,6 @@ html.qi-resizing .composer-dock {
 
 /* 最大化时略放宽氛围栏，默认窗宽留给内容多列 */
 html.qi-maximized {
-  --desk-aside-w: min(30vw, 360px);
+  --desk-aside-w: min(38vw, 480px);
   --page-pad-x: 32px;
 }

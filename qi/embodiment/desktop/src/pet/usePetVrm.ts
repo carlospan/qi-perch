@@ -112,18 +112,92 @@ export function createPetVrm(
   scene.add(new THREE.AmbientLight(0xffffff, 0.55));
 
   let resizeTimer = 0;
+  let lastCanvasW = 0;
+  let lastCanvasH = 0;
+  const presenceFraming = {
+    ready: false,
+    offsetX: 0,
+    cameraY: 0,
+    lookY: 0,
+    centerZ: 0,
+    dist: 0,
+    near: 0.05,
+    far: 40,
+    canvasH: 0,
+  };
 
   const resolvePixelRatio = () => {
     const dpr = window.devicePixelRatio || 1;
-    // 相处页人物是视觉焦点，略提高上限减少「人小发糊」
     const cap = framing === "presence" ? 2.5 : 2;
     return Math.min(dpr, cap);
+  };
+
+  const applyPresenceFraming = (w: number, h: number, force = false) => {
+    if (!renderer || !vrm) return;
+    const dimChanged =
+      Math.abs(w - lastCanvasW) > 2 || Math.abs(h - lastCanvasH) > 2;
+
+    if (presenceFraming.ready && !force && !dimChanged) {
+      renderer.setPixelRatio(resolvePixelRatio());
+      renderer.setSize(w, h, true);
+      camera.aspect = w / h;
+      vrm.scene.position.x = presenceFraming.offsetX;
+      camera.position.set(
+        0,
+        presenceFraming.cameraY,
+        presenceFraming.centerZ + presenceFraming.dist
+      );
+      camera.near = presenceFraming.near;
+      camera.far = presenceFraming.far;
+      camera.lookAt(0, presenceFraming.lookY, presenceFraming.centerZ);
+      camera.updateProjectionMatrix();
+      return;
+    }
+
+    if (!dimChanged && !force) return;
+
+    lastCanvasW = w;
+    lastCanvasH = h;
+    renderer.setPixelRatio(resolvePixelRatio());
+    renderer.setSize(w, h, true);
+    camera.aspect = w / h;
+
+    if (presenceFraming.ready && !force) {
+      const hRatio = h / (presenceFraming.canvasH || h);
+      if (hRatio >= 0.9 && hRatio <= 1.1) {
+        vrm.scene.position.x = presenceFraming.offsetX;
+        camera.position.set(
+          0,
+          presenceFraming.cameraY,
+          presenceFraming.centerZ + presenceFraming.dist
+        );
+        camera.near = presenceFraming.near;
+        camera.far = presenceFraming.far;
+        camera.lookAt(0, presenceFraming.lookY, presenceFraming.centerZ);
+        camera.updateProjectionMatrix();
+        return;
+      }
+      presenceFraming.ready = false;
+    }
+
+    frameCamera(camera, vrm, framing, presenceFraming);
+    presenceFraming.canvasH = h;
+    presenceFraming.ready = true;
   };
 
   const applyResize = () => {
     if (!renderer || destroyed) return;
     const w = container.clientWidth || 1;
     const h = container.clientHeight || 1;
+    if (framing === "presence") {
+      applyPresenceFraming(w, h);
+      return;
+    }
+    const dimChanged =
+      Math.abs(w - lastCanvasW) > 2 || Math.abs(h - lastCanvasH) > 2;
+    if (!dimChanged) return;
+    lastCanvasW = w;
+    lastCanvasH = h;
     renderer.setPixelRatio(resolvePixelRatio());
     renderer.setSize(w, h, true);
     camera.aspect = w / h;
@@ -158,8 +232,10 @@ export function createPetVrm(
       return;
     }
     clock.getDelta();
-    applyResize();
-    scheduleTick();
+    requestAnimationFrame(() => {
+      applyResize();
+      scheduleTick();
+    });
   };
 
   const tick = () => {
@@ -331,7 +407,15 @@ export function createPetVrm(
     }
 
     loaded.update(0);
-    onResize();
+    if (framing === "presence") {
+      applyPresenceFraming(
+        container.clientWidth || 1,
+        container.clientHeight || 1,
+        true
+      );
+    } else {
+      onResize();
+    }
     scheduleTick();
   })();
 
@@ -448,7 +532,16 @@ function applyNoticeReaction(
 function frameCamera(
   camera: THREE.PerspectiveCamera,
   model: VRM,
-  framing: PetVrmFraming = "pet"
+  framing: PetVrmFraming = "pet",
+  presenceCache?: {
+    offsetX: number;
+    cameraY: number;
+    lookY: number;
+    centerZ: number;
+    dist: number;
+    near: number;
+    far: number;
+  }
 ) {
   model.scene.position.set(0, 0, 0);
   model.scene.updateMatrixWorld(true);
@@ -508,4 +601,14 @@ function frameCamera(
   camera.far = Math.max(40, dist * 12);
   camera.lookAt(focusX, lookY, center.z);
   camera.updateProjectionMatrix();
+
+  if (framing === "presence" && presenceCache) {
+    presenceCache.offsetX = model.scene.position.x;
+    presenceCache.cameraY = cameraY;
+    presenceCache.lookY = lookY;
+    presenceCache.centerZ = center.z;
+    presenceCache.dist = dist;
+    presenceCache.near = camera.near;
+    presenceCache.far = camera.far;
+  }
 }
