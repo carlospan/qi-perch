@@ -1,5 +1,5 @@
 # LLM 配置（OpenAI 兼容协议）
-# 现行示例：ark（deepseek-v4-flash-ga-260731）；modelscope / tokenrhythm / sensenova 备用
+# 现行示例：ark（doubao-seed-2-1-pro-260628）；modelscope / tokenrhythm / sensenova 备用
 # 密钥放仓库根 .env：ARK_API_KEY=...（备用 MODELSCOPE_API_KEY / TOKENRHYTHM_API_KEY / SENSENOVA_API_KEY）
 llm:
   default_provider: "ark"
@@ -14,8 +14,8 @@ llm:
       base_url: "https://ark.cn-beijing.volces.com/api/v3"
       api_key: "${ARK_API_KEY}"
       models:
-        fast: "deepseek-v4-flash-ga-260731"
-        strong: "deepseek-v4-flash-ga-260731"
+        fast: "doubao-seed-2-1-pro-260628"
+        strong: "doubao-seed-2-1-pro-260628"
     tokenrhythm:
       base_url: "https://tokenrhythm.studio/v1"
       api_key: "${TOKENRHYTHM_API_KEY}"

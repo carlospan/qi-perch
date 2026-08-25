@@ -20,9 +20,9 @@ DB = ROOT / "data" / "qi.db"
 ACCEPTANCE_MARK = "[验收"
 TOGETHER_LINE = "要不要一起看看？"
 
-# 验收批 + 08-23 改码 coexist / 试聊时间窗（不含更早真实相处）
-POLLUTION_START = "2026-08-22T21:45:00"
-POLLUTION_END = "2026-08-24T00:00:00"
+# 仅清验收批时间窗；勿含 08-23 22:08–22:26 真实相处（喜欢人类等）
+POLLUTION_START = "2026-08-23T23:30:00"
+POLLUTION_END = "2026-08-26T00:00:00"
 
 # 试跑产生的 action kinds（窗口内整类删；budget_tune / look 多为心跳附带，一并清）
 POLLUTION_ACTION_KINDS = (
