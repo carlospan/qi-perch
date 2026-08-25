@@ -68,6 +68,7 @@ onUnmounted(() => disconnect());
             :season="season"
             :connected="connected"
             :mood="moodText"
+            :replying="typing"
           />
           <WindowControls />
         </div>
@@ -117,7 +118,12 @@ onUnmounted(() => disconnect());
                   >
                     唤醒
                   </button>
-                  <InputBox v-else :disabled="!connected" @send="send" />
+                  <InputBox
+                    v-else
+                    :disabled="!connected"
+                    :busy="typing"
+                    @send="send"
+                  />
                 </footer>
               </div>
             </div>
@@ -151,7 +157,12 @@ onUnmounted(() => disconnect());
               >
                 唤醒
               </button>
-              <InputBox v-else :disabled="!connected" @send="send" />
+              <InputBox
+                v-else
+                :disabled="!connected"
+                :busy="typing"
+                @send="send"
+              />
             </div>
           </footer>
         </main>

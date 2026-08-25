@@ -127,7 +127,7 @@ def judge_responsive_action(
         "disk": "嗯，我瞧一眼。",
         "write": "好，我写。",
         "together": "好，一起看。",
-        "delegate_search": "好，我帮你看看。",
+        "delegate_search": "这个我不太清楚，我去查一下。",
         "allow": "嗯，我记一下。",
     }
     return JudgmentResult(

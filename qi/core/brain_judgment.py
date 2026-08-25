@@ -221,23 +221,62 @@ async def _perception_intent_for_route(brain: Brain, text: str) -> str | None:
     return str(a.intent)
 
 
+async def _recent_delegate_query(brain: Brain) -> str | None:
+    """最近一次委托检索的 query，供追问再搜对照。"""
+    if brain._db is None:
+        return None
+    try:
+        rows = await brain._db.list_recent_actions(limit=12)
+    except Exception:
+        return None
+    if not isinstance(rows, list):
+        return None
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("kind") or "") != "delegate_search":
+            continue
+        detail = row.get("detail_json") or {}
+        if isinstance(detail, str):
+            try:
+                detail = json.loads(detail)
+            except Exception:
+                detail = {}
+        if not isinstance(detail, dict):
+            continue
+        q = str(detail.get("query") or "").strip()
+        if q:
+            return q[:120]
+        found = detail.get("found")
+        if isinstance(found, dict):
+            q2 = str(found.get("query") or "").strip()
+            if q2:
+                return q2[:120]
+    return None
+
+
 async def try_delegate_search_message(brain: Brain, text: str, now: datetime) -> str | None:
     from qi.action.delegate_search import (
         _question_shape_delegate_candidate,
         detect_delegate_search_intent,
         looks_like_delegate_search,
+        looks_like_followup_search,
     )
 
     perception_intent: str | None = None
-    if not looks_like_delegate_search(text) and not _question_shape_delegate_candidate(
-        text
+    if (
+        not looks_like_delegate_search(text)
+        and not _question_shape_delegate_candidate(text)
+        and not looks_like_followup_search(text)
     ):
         perception_intent = await _perception_intent_for_route(brain, text)
 
+    recent_query = await _recent_delegate_query(brain)
     query = await detect_delegate_search_intent(
         text,
         llm=brain.llm,
         perception_intent=perception_intent,
+        recent_query=recent_query,
     )
     if not query:
         return None
@@ -272,6 +311,16 @@ async def try_delegate_search_message(brain: Brain, text: str, now: datetime) ->
         narrative=brain.action.assist.narrative if brain.action else None,
     )
     motive = judgment_result_dict(judgment)
+    # A：分两拍——先诚实说去查，再执行；查完摘要不再叠接受句
+    accept_line = (judgment.qi_line or "").strip()
+    if accept_line:
+        await brain._deliver_qi_message(accept_line, now, proactive=False)
+        emb = getattr(brain, "embodiment", None)
+        if emb is not None and hasattr(emb, "send_typing"):
+            try:
+                await emb.send_typing()
+            except Exception:
+                pass
     result = await ds.execute(
         query,
         season=brain._current_season(),
@@ -280,9 +329,9 @@ async def try_delegate_search_message(brain: Brain, text: str, now: datetime) ->
         motive=motive.get("motive"),
     )
     if result is not None:
-        ql = judgment.qi_line
+        # 第二拍：只开口摘要，禁止 f"{accept}{digest}"
         if result.get("qi_line"):
-            result = {**result, "qi_line": f"{ql}{result['qi_line']}", "speak": True}
+            result = {**result, "speak": True}
         await brain._deliver_action_result(result, now)
-        return (result.get("qi_line") or "").strip() or None
-    return None
+        return (result.get("qi_line") or "").strip() or accept_line or None
+    return accept_line or None

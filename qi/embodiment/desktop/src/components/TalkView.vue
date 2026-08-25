@@ -5,7 +5,8 @@ import ActionCard from "./ActionCard.vue";
 import AssistConfirmCard from "./AssistConfirmCard.vue";
 import ExploreCard from "./ExploreCard.vue";
 
-const WAITING_LINES = ["……", "嗯……", "我在想。", "稍等……"] as const;
+/** 固定过程态文案：勿用「嗯……」等像成句回话的占位 */
+const WAITING_LINE = "在想怎么回你";
 
 const props = withDefaults(
   defineProps<{
@@ -22,7 +23,6 @@ const emit = defineEmits<{
 }>();
 
 const body = ref<HTMLElement | null>(null);
-const waitLine = ref<string>(WAITING_LINES[0]);
 
 function timeLabel(at: number) {
   const d = new Date(at);
@@ -56,11 +56,7 @@ watch(
 watch(
   () => props.typing,
   (on) => {
-    if (on) {
-      waitLine.value =
-        WAITING_LINES[Math.floor(Math.random() * WAITING_LINES.length)];
-      void scrollBottom();
-    }
+    if (on) void scrollBottom();
   }
 );
 </script>
@@ -121,7 +117,12 @@ watch(
 
       <div v-if="typing" class="msg qi pending" aria-live="polite">
         <div class="who">栖</div>
-        <div class="txt wait">{{ waitLine }}</div>
+        <div class="txt wait">
+          <span class="wait-words">{{ WAITING_LINE }}</span>
+          <span class="wait-dots" aria-hidden="true">
+            <i /><i /><i />
+          </span>
+        </div>
       </div>
     </div>
   </div>
@@ -325,19 +326,66 @@ watch(
 }
 
 .msg.pending .txt.wait {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   color: var(--ink-dim);
   font-weight: 300;
   letter-spacing: 0.6px;
-  animation: wait-breathe 3.6s ease-in-out infinite;
+  border-color: color-mix(in srgb, var(--ember) 28%, var(--talk-qi-bd));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ember) 12%, transparent);
+  animation: wait-breathe 2.4s ease-in-out infinite;
+}
+
+.wait-words {
+  flex-shrink: 0;
+}
+
+.wait-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 1em;
+}
+
+.wait-dots i {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ember) 75%, var(--ink-dim));
+  opacity: 0.35;
+  animation: wait-dot 1.2s ease-in-out infinite;
+}
+
+.wait-dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.wait-dots i:nth-child(3) {
+  animation-delay: 0.4s;
 }
 
 @keyframes wait-breathe {
   0%,
   100% {
-    opacity: 0.55;
+    opacity: 0.72;
   }
   50% {
-    opacity: 0.95;
+    opacity: 1;
+  }
+}
+
+@keyframes wait-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
   }
 }
 </style>

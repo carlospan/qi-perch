@@ -12,7 +12,7 @@
 |----|--------|------|
 | `llm.default_provider` | 见 yaml（现行 `ark`） | 默认供应商（OpenAI 兼容；现行走 custom_providers） |
 | `llm.providers.*.base_url` / `api_key` | — | 端点与密钥（密钥走 `.env`）；备用见 `custom_providers` |
-| `llm.providers.*.models.fast` / `strong` | 见 yaml | 快/强模型名（现行 `doubao-seed-2-1-pro-260628`） |
+| `llm.providers.*.models.fast` / `strong` | 见 yaml | 快/强模型名（现行 `doubao-seed-evolving`） |
 | `llm.custom_providers` | 见 yaml（`ark` / `modelscope` / `tokenrhythm` / `sensenova`） | 自定义 OpenAI 兼容端点；非空对象 |
 | `llm.model_routing.*` | 见 yaml（现行多为 `ark:fast`） | 各意图路由到 provider:model；密钥用 `ARK_API_KEY` |
 

@@ -5,6 +5,8 @@ defineProps<{
   connected: boolean;
   /** 自然语言情绪描述，如「有点安静，感到安稳」 */
   mood?: string;
+  /** 栖正在生成回复 */
+  replying?: boolean;
 }>();
 
 const seasonLabel: Record<string, string> = {
@@ -25,10 +27,15 @@ const modeLabel: Record<string, string> = {
 </script>
 
 <template>
-  <div class="status">
+  <div class="status" :class="{ replying }">
     <div class="row">
-      <span class="dot" :class="{ on: connected }" />
+      <span class="dot" :class="{ on: connected, pulse: connected && replying }" />
       <span v-if="!connected" class="offline">未连上</span>
+      <template v-else-if="replying">
+        <span class="replying-label" aria-live="polite">在回你</span>
+        <span class="sep">·</span>
+        <span>{{ seasonLabel[season] || season || "春" }}</span>
+      </template>
       <template v-else>
         <span>{{ modeLabel[mode] || mode || "……" }}</span>
         <span class="sep">·</span>
@@ -36,11 +43,14 @@ const modeLabel: Record<string, string> = {
       </template>
     </div>
     <p
-      v-if="connected && mood"
+      v-if="connected && mood && !replying"
       class="mood"
       :title="mood"
     >
       {{ mood }}
+    </p>
+    <p v-else-if="connected && replying" class="mood hint" aria-live="polite">
+      栖还在想这句话
     </p>
   </div>
 </template>
@@ -78,29 +88,62 @@ const modeLabel: Record<string, string> = {
   box-shadow: 0 0 6px color-mix(in srgb, var(--ember) 55%, transparent);
 }
 
+.dot.pulse {
+  animation: reply-dot 1.4s ease-in-out infinite;
+}
+
+@keyframes reply-dot {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+    box-shadow: 0 0 4px color-mix(in srgb, var(--ember) 40%, transparent);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--ember) 70%, transparent);
+  }
+}
+
+.replying-label {
+  color: var(--ember);
+  letter-spacing: 0.12em;
+  font-weight: 500;
+}
+
 .sep {
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
 .offline {
-  color: color-mix(in srgb, var(--ink-dim) 80%, #c45c5c);
-  letter-spacing: 0.06em;
+  color: var(--ink-faint);
 }
 
 .mood {
   margin: 0;
   max-width: 100%;
-  font-family: var(--serif);
-  font-size: 0.68rem;
-  font-weight: 300;
-  line-height: 1.35;
-  letter-spacing: 0.02em;
-  color: var(--ink-dim);
-  text-align: right;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
   overflow: hidden;
-  opacity: 0.92;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+  letter-spacing: 0.02em;
+  text-align: right;
+}
+
+.mood.hint {
+  color: color-mix(in srgb, var(--ember) 70%, var(--ink-dim));
+  animation: hint-fade 2.4s ease-in-out infinite;
+}
+
+@keyframes hint-fade {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 </style>

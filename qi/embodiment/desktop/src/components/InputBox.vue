@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 
 const props = defineProps<{
   disabled?: boolean;
+  /** 栖正在回复：可改草稿，暂缓连发 */
+  busy?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -16,6 +18,14 @@ const field = ref<HTMLTextAreaElement | null>(null);
 const MIN_HEIGHT_PX = 44;
 const MAX_HEIGHT_PX = 168;
 
+const blocked = computed(() => Boolean(props.disabled || props.busy));
+
+const placeholder = computed(() => {
+  if (props.disabled) return "通道还没连上……";
+  if (props.busy) return "栖还在想……想好了再说一句";
+  return "说点什么……（Enter 发送，Shift+Enter 换行）";
+});
+
 function resize() {
   const el = field.value;
   if (!el) return;
@@ -26,7 +36,7 @@ function resize() {
 }
 
 async function submit() {
-  if (props.disabled) return;
+  if (blocked.value) return;
   const value = text.value.trim();
   if (!value) return;
   emit("send", value);
@@ -50,24 +60,29 @@ watch(text, () => {
 </script>
 
 <template>
-  <form class="composer" :class="{ offline: disabled }" @submit.prevent="submit">
+  <form
+    class="composer"
+    :class="{ offline: disabled, busy }"
+    @submit.prevent="submit"
+  >
     <textarea
       ref="field"
       v-model="text"
       rows="1"
       maxlength="500"
-      :placeholder="disabled ? '通道还没连上……' : '说点什么……（Enter 发送，Shift+Enter 换行）'"
+      :placeholder="placeholder"
       :disabled="disabled"
+      :aria-busy="busy ? 'true' : undefined"
       autocomplete="off"
       @keydown="onKeydown"
       @input="resize"
     />
     <button
       type="submit"
-      aria-label="发送"
-      :disabled="disabled || !text.trim()"
+      :aria-label="busy ? '栖还在想，稍后再发' : '发送'"
+      :disabled="blocked || !text.trim()"
     >
-      发送
+      {{ busy ? "想着" : "发送" }}
     </button>
   </form>
 </template>
@@ -112,6 +127,15 @@ textarea:focus {
   background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
+.composer.busy textarea {
+  border-color: color-mix(in srgb, var(--ember) 32%, transparent);
+  background: color-mix(in srgb, var(--ember) 6%, transparent);
+}
+
+.composer.busy textarea::placeholder {
+  color: color-mix(in srgb, var(--ember) 55%, var(--ink-faint));
+}
+
 button {
   flex-shrink: 0;
   min-width: 64px;
@@ -144,6 +168,11 @@ button:disabled {
   opacity: 0.4;
   cursor: default;
   box-shadow: none;
+}
+
+.composer.busy button:disabled {
+  opacity: 0.55;
+  letter-spacing: 1px;
 }
 
 .composer.offline textarea {

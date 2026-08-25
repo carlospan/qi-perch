@@ -1,5 +1,5 @@
 # LLM 配置（OpenAI 兼容协议）
-# 现行示例：ark（doubao-seed-2-1-pro-260628）；modelscope / tokenrhythm / sensenova 备用
+# 现行示例：ark（doubao-seed-evolving）；modelscope / tokenrhythm / sensenova 备用
 # 密钥放仓库根 .env：ARK_API_KEY=...（备用 MODELSCOPE_API_KEY / TOKENRHYTHM_API_KEY / SENSENOVA_API_KEY）
 llm:
   default_provider: "ark"
@@ -14,8 +14,8 @@ llm:
       base_url: "https://ark.cn-beijing.volces.com/api/v3"
       api_key: "${ARK_API_KEY}"
       models:
-        fast: "doubao-seed-2-1-pro-260628"
-        strong: "doubao-seed-2-1-pro-260628"
+        fast: "doubao-seed-evolving"
+        strong: "doubao-seed-evolving"
     tokenrhythm:
       base_url: "https://tokenrhythm.studio/v1"
       api_key: "${TOKENRHYTHM_API_KEY}"
@@ -110,6 +110,12 @@ action:
     probability: 0.05
     # 可选域名过滤（默认空=不改变 Tavily 现状；嫌噪声可加如 music.apple.com / mojim.com）
     exclude_domains: []
+    # 委托检索 P0/P2：多轮/时效/深读（自主 explore 仍用默认 basic×3）
+    delegate_top_k: 5
+    delegate_search_depth: basic
+    delegate_time_range: month
+    delegate_deep_read: true
+    delegate_deep_read_max: 2
   # look 窗口瞥视（感知从宽；非定时）
   look:
     pause_hours: 1              # 「别看」暂停时长
