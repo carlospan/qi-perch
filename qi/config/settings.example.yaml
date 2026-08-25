@@ -1,33 +1,15 @@
 # LLM 配置（OpenAI 兼容协议）
-# 现行示例：ark（doubao-seed-evolving）；modelscope / tokenrhythm / sensenova 备用
-# 密钥放仓库根 .env：ARK_API_KEY=...（备用 MODELSCOPE_API_KEY / TOKENRHYTHM_API_KEY / SENSENOVA_API_KEY）
+# 现行示例：仅 ark + doubao-seed-2-0-mini-260428
+# 密钥放仓库根 .env：ARK_API_KEY=...
 llm:
   default_provider: "ark"
   custom_providers:
-    modelscope:
-      base_url: "https://api-inference.modelscope.cn/v1"
-      api_key: "${MODELSCOPE_API_KEY}"
-      models:
-        fast: "Qwen/Qwen3.8-27B"
-        strong: "Qwen/Qwen3.8-27B"
     ark:
       base_url: "https://ark.cn-beijing.volces.com/api/v3"
       api_key: "${ARK_API_KEY}"
       models:
-        fast: "doubao-seed-evolving"
-        strong: "doubao-seed-evolving"
-    tokenrhythm:
-      base_url: "https://tokenrhythm.studio/v1"
-      api_key: "${TOKENRHYTHM_API_KEY}"
-      models:
-        fast: "kimi-k2.7-code"
-        strong: "kimi-k2.7-code"
-    sensenova:
-      base_url: "https://token.sensenova.cn/v1"
-      api_key: "${SENSENOVA_API_KEY}"
-      models:
-        fast: "sensenova-6.8-flash-lite"
-        strong: "sensenova-6.8-flash-lite"
+        fast: "doubao-seed-2-0-mini-260428"
+        strong: "doubao-seed-2-0-mini-260428"
   model_routing:
     conversation: "ark:fast"
     narrative: "ark:strong"
