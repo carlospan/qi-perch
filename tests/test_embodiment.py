@@ -54,8 +54,15 @@ def test_thinking_and_sparkles():
     e = EmotionState(curiosity=0.8, valence=0.1, arousal=0.4, energy=0.6)
     state = ctrl.map_state(e, "awake", "spring", datetime(2026, 7, 21, 14, 0))
     assert state.posture == Posture.THINKING
-    assert state.expression == Expression.CURIOUS
+    assert state.expression == Expression.SOFT_SMILE
     assert state.effect == Effect.THINKING_SPARKLES
+
+
+def test_curious_only_when_valence_negative():
+    ctrl = AvatarController()
+    e = EmotionState(valence=-0.15, curiosity=0.85, arousal=0.4, energy=0.6)
+    state = ctrl.map_state(e, "awake", "spring", datetime(2026, 8, 26, 0, 0))
+    assert state.expression == Expression.CURIOUS
 
 
 def test_dreaming_sleep_and_bubbles():
@@ -73,6 +80,18 @@ def test_happy_posture():
     state = ctrl.map_state(e, "awake", "spring", datetime(2026, 7, 21, 12, 0))
     assert state.posture == Posture.HAPPY
     assert state.expression == Expression.HAPPY
+
+
+def test_positive_valence_prefers_smile_over_curious():
+    """心情尚可时 curious 不应压过 soft_smile（相处页 VRM 观感）。"""
+    ctrl = AvatarController()
+    e = EmotionState(valence=0.45, curiosity=0.85, arousal=0.55, energy=0.6)
+    state = ctrl.map_state(e, "awake", "spring", datetime(2026, 8, 25, 14, 0))
+    assert state.expression == Expression.SOFT_SMILE
+
+    e2 = EmotionState(valence=0.1, curiosity=0.85, arousal=0.4, energy=0.6)
+    state2 = ctrl.map_state(e2, "awake", "spring", datetime(2026, 8, 26, 0, 0))
+    assert state2.expression == Expression.SOFT_SMILE
 
 
 def test_season_effects_when_idle():

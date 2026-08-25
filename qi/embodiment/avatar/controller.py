@@ -48,14 +48,19 @@ class AvatarController:
 
         if emotion.energy < 0.3:
             state.expression = Expression.SLEEPY
-        elif emotion.arousal > 0.7:
+        elif emotion.arousal > 0.75:
             state.expression = Expression.SURPRISED
-        elif emotion.curiosity > 0.7:
-            state.expression = Expression.CURIOUS
         elif emotion.valence > 0.5:
             state.expression = Expression.HAPPY
         elif emotion.valence > 0.2:
+            # 心情尚可时优先浅笑，别让 curious 把脸拧成「发愁」
             state.expression = Expression.SOFT_SMILE
+        elif emotion.curiosity > 0.7:
+            # 好奇但心境未负：仍浅笑（VRM curious 像皱眉）
+            if emotion.valence >= 0:
+                state.expression = Expression.SOFT_SMILE
+            else:
+                state.expression = Expression.CURIOUS
         elif emotion.valence < -0.2:
             state.expression = Expression.QUIET
         else:

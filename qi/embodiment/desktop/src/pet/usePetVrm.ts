@@ -38,15 +38,21 @@ const EMOTION_EXPR_NAMES = [
   "curious",
 ] as const;
 
-/** 目标权重：happy 故意压低，避免 VRoid Joy 眯眼 */
+/** 目标权重（边测边调 2026-08-25）：
+ * - soft_smile 勿混 relaxed（本模型会眯眼）
+ * - 浅笑靠 soft_smile 满量 + 极轻 happy 带嘴角
+ * - happy 勿过高（Joy 会闭眼笑）
+ * - curious 压低，避免皱眉像发愁
+ */
 const EXPR_TARGETS: Record<PetFaceExpression, Record<string, number>> = {
   neutral: {},
-  soft_smile: { soft_smile: 1 },
-  happy: { happy: 0.38 },
-  quiet: { quiet: 1 },
-  surprised: { surprised: 0.72 },
+  // 浅笑：以 custom 为主，极轻 happy 提嘴角（勿过高，Joy 会眯眼）
+  soft_smile: { soft_smile: 0.92, happy: 0.34 },
+  happy: { happy: 0.42, soft_smile: 0.58 },
+  quiet: { quiet: 0.85 },
+  surprised: { surprised: 0.55 },
   sleepy: { sleepy: 1 },
-  curious: { curious: 1 },
+  curious: { curious: 0.38 },
 };
 
 export type PetVrmFraming = "pet" | "presence";
@@ -66,7 +72,7 @@ export type PetVrmHandle = {
   setLocomotion: (mode: PetLocomotion, facing?: PetFacing) => void;
   /** 被点及时：看向你 + 身体微晃（不用 Joy 浅笑，会眯眼像眨眼） */
   notice: (durationMs?: number) => void;
-  /** 情绪脸：后端 avatar_state.expression → VRM preset/custom */
+  /** 情绪脸：后端 avatar_state.expression → VRM preset+custom */
   setExpression: (expression: string) => void;
 };
 
@@ -248,7 +254,13 @@ export function createPetVrm(
     if (noticing) {
       updateLookAtTarget();
       applyNoticeReaction(vrm, clock.elapsedTime, noticeStart, noticeUntil);
-      clearEyeBlink(vrm);
+      const noticeElapsed = clock.elapsedTime - noticeStart;
+      // 回复/点击前半秒盯紧，之后恢复轻眨眼，避免全程瞪眼像紧张
+      if (noticeElapsed > 0.35) {
+        applyBlink(vrm, clock.elapsedTime);
+      } else {
+        clearEyeBlink(vrm);
+      }
     } else {
       if (faceExpr === "sleepy") {
         clearEyeBlink(vrm);
@@ -259,10 +271,6 @@ export function createPetVrm(
     }
     applyFaceExpression(vrm, faceExpr, faceWeights, delta);
     vrm.update(delta);
-    if (noticing) {
-      clearEyeBlink(vrm);
-      vrm.expressionManager?.update();
-    }
     renderer.render(scene, camera);
     scheduleTick();
   };

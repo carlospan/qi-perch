@@ -27,6 +27,36 @@ function uid(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+const AVATAR_EXPR_PREVIEW = new Set([
+  "neutral",
+  "soft_smile",
+  "happy",
+  "quiet",
+  "surprised",
+  "sleepy",
+  "curious",
+]);
+
+/** 开发态：?avatar_expr=soft_smile 预览表情，不被 WS 覆盖 */
+function devAvatarExprOverride(): string | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(window.location.search).get("avatar_expr");
+  if (!raw || !AVATAR_EXPR_PREVIEW.has(raw)) return null;
+  return raw;
+}
+
+function applyAvatarState(
+  incoming: AvatarState,
+  avatar: { value: AvatarState }
+) {
+  const forced = devAvatarExprOverride();
+  if (forced) {
+    avatar.value = { ...incoming, expression: forced };
+    return;
+  }
+  avatar.value = incoming;
+}
+
 type AnyTalkCard = CreationCard | ExploreCard | AssistConfirmCard;
 
 function cardKey(card: AnyTalkCard): string {
@@ -81,7 +111,7 @@ function createQi() {
   const emotion = ref<EmotionSnapshot>({ mode: "awake", description: "" });
   const avatar = ref<AvatarState>({
     posture: "idle",
-    expression: "neutral",
+    expression: devAvatarExprOverride() || "neutral",
     effect: "none",
   });
 
@@ -365,7 +395,7 @@ function createQi() {
           mode?: string;
           stasis?: boolean;
         }) => {
-          avatar.value = payload.avatar_state;
+          applyAvatarState(payload.avatar_state, avatar);
           if (payload.season) season.value = payload.season;
           const stasis = Boolean(payload.stasis) || payload.mode === "stasis";
           if (payload.mode || stasis) {
