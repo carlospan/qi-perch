@@ -95,6 +95,10 @@
 | `action.explore_external.cooldown_hours` | 6 | 外部探索冷却 |
 | `action.explore_external.probability` | 0.05 | 满足 curiosity 门后的触发概率 |
 | `action.explore_external.exclude_domains` | `[]` | 可选域名过滤 |
+| `action.look.pause_hours` | 1 | 「别看」暂停时长 |
+| `action.look.min_interval_minutes` | **30** | 自主防连瞥硬门（邀看不受限） |
+| `action.look.chat_grace_minutes` | 5 | 刚聊完不久不自主瞥 |
+| `action.look.silence_boost_minutes` | 20 | 沉默多久提高自主 look 倾向 |
 
 ## relationship
 

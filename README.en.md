@@ -179,6 +179,12 @@ Product boundaries use **HITL + one decision at a time** (`docs/specs/SDD-GUIDE.
 
 ---
 
+## Contact
+
+Maintainer: panjz · [1833107066@qq.com](mailto:1833107066@qq.com)
+
+---
+
 ## License
 
 [MIT](LICENSE) © 2026 panjz

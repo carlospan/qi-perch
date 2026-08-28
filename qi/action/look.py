@@ -41,10 +41,10 @@ _SELF_TITLE_MARKERS = (
 )
 
 _LOOK_SYSTEM = (
-    "你是栖。你只是瞥了一眼对方屏幕上的画面。"
-    "用一两句中文、带一点犹豫或好奇，说出你看到的印象。"
-    "不要念窗口标题或进程名，不要提截图/模型/技术细节，不要编造没看见的东西。"
-    "不要解释自己的看屏规则或隐私政策，只谈画面印象。"
+    "你在帮栖记下刚才瞥到的画面（给她随后开口用的材料，不是台词）。"
+    "用一两句中文写清瞥到了什么轮廓（光暗、布局、在忙的事的样子），"
+    "可带直观感受用词，但不要编造没看见的，不要念窗口标题或进程名，"
+    "不要提截图/模型/技术细节，不要写成对用户说的完整台词。"
 )
 
 
@@ -58,7 +58,7 @@ def pause_hours(config: dict | None) -> float:
 
 
 def min_interval_minutes(config: dict | None) -> float:
-    return float(_look_cfg(config).get("min_interval_minutes", 15.0))
+    return float(_look_cfg(config).get("min_interval_minutes", 30.0))
 
 
 def chat_grace_minutes(config: dict | None) -> float:
@@ -325,6 +325,8 @@ class LookAction:
         self.llm = llm
         self._capture_fn = capture_fn or capture_foreground_image
         self._autonomous_lock = asyncio.Lock()
+        # Brain 可注入：成功瞥后走心（冲击+主观短说）；open_and_look 也依赖此
+        self.post_success: Callable[..., Any] | None = None
 
     async def is_paused(self, now: datetime) -> bool:
         raw = await self.db.get_body_memory(LOOK_PAUSE_UNTIL_KEY)
@@ -504,16 +506,16 @@ class LookAction:
             return result
 
         data_url = "data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii")
-        user_text = "用一两句话描述你瞥到的画面印象。"
+        user_text = "记下瞥到的画面印象（材料，不是台词）。"
         if reactive and user_question:
             user_text = (
-                f"对方问：「{user_question}」\n"
-                "请结合画面用栖的语气回答；先承认看了一眼，再谈你看到的。"
+                f"对方问过：「{user_question}」\n"
+                "先只记下画面印象材料（不是对用户的答复台词）。"
             )
 
         need_notice = await self.first_notice_pending()
 
-        qi_line = ""
+        impression = ""
         if self.llm is not None:
             try:
                 messages = [
@@ -529,21 +531,23 @@ class LookAction:
                         ],
                     },
                 ]
-                qi_line = (
+                impression = (
                     await self.llm.call("look", messages, temperature=0.5) or ""
                 ).strip()
             except Exception:
                 logger.debug("look LLM 失败", exc_info=True)
-                qi_line = ""
+                impression = ""
 
-        if not qi_line:
-            qi_line = FALLBACK_QI_LINE
+        if not impression:
+            impression = FALLBACK_QI_LINE
 
+        # 暂定台词 = 印象；Brain 交付前 look_heart 会改成主观短说
+        qi_line = impression
         if need_notice:
             qi_line = f"{FIRST_NOTICE_LINE}{qi_line}"
             await self.mark_first_notice()
 
-        summary = (qi_line[:80] if qi_line else "瞥了一眼屏幕").strip()
+        summary = (impression[:80] if impression else "瞥了一眼屏幕").strip()
         result = {
             "type": "look_glance",
             "kind": "look",
@@ -554,8 +558,16 @@ class LookAction:
             "season": season,
             "window_title": title[:80] if title else "",
             "reactive": reactive,
-            "found": {"impression": summary},
+            "user_question": (user_question or "")[:200] if reactive else "",
+            "first_notice": need_notice,
+            "found": {"impression": impression},
         }
+        if self.post_success is not None:
+            try:
+                await self.post_success(result, now)
+            except Exception:
+                logger.debug("look post_success 失败", exc_info=True)
+        summary = str(result.get("summary") or summary).strip() or summary
         await self.db.insert_action(
             "look",
             summary,

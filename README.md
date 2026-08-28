@@ -176,6 +176,12 @@ python tools/check_spec_traceability.py
 
 ---
 
+## 联系
+
+维护者：panjz · [1833107066@qq.com](mailto:1833107066@qq.com)
+
+---
+
 ## 许可
 
 [MIT](LICENSE) © 2026 panjz

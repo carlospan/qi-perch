@@ -1699,6 +1699,17 @@ class Brain:
         self, result: dict, now: datetime
     ) -> None:
         """行动结果：卡片推前端；share 的 qi_line 作为这一拍的开口（非主动言语通道）。"""
+        if (
+            isinstance(result, dict)
+            and result.get("type") == "look_glance"
+            and result.get("outcome") == "success"
+        ):
+            try:
+                from qi.core.look_heart import enrich_look_glance
+
+                await enrich_look_glance(self, result, now)
+            except Exception:
+                logger.debug("look 所见走心失败", exc_info=True)
         await _brain_delivery.deliver_action_result(self, result, now)
         try:
             self._ingest_together_pool(result)
@@ -1721,6 +1732,13 @@ class Brain:
             db, self.config, narrative=self.memory.narrative, llm=self.llm
         )
         await self.action.restore_budget()
+
+        async def _look_post_success(result: dict, when: datetime) -> None:
+            from qi.core.look_heart import enrich_look_glance
+
+            await enrich_look_glance(self, result, when)
+
+        self.action.look.post_success = _look_post_success
         saved_gate = await db.get_body_memory("proactive_gate")
         if isinstance(saved_gate, dict):
             self.proactive.restore(saved_gate)
