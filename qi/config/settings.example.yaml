@@ -1,24 +1,24 @@
 # LLM 配置（OpenAI 兼容协议）
-# 现行示例：仅 ark + doubao-seed-2-0-mini-260428
-# 密钥放仓库根 .env：ARK_API_KEY=...
+# 现行示例：智谱 Coding 端点 + glm-5.3-flash
+# 密钥放仓库根 .env：ZHIPU_API_KEY=...
 llm:
-  default_provider: "ark"
+  default_provider: "zhipu"
   custom_providers:
-    ark:
-      base_url: "https://ark.cn-beijing.volces.com/api/v3"
-      api_key: "${ARK_API_KEY}"
+    zhipu:
+      base_url: "https://open.bigmodel.cn/api/coding/paas/v4"
+      api_key: "${ZHIPU_API_KEY}"
       models:
-        fast: "doubao-seed-2-0-mini-260428"
-        strong: "doubao-seed-2-0-mini-260428"
+        fast: "glm-5.3-flash"
+        strong: "glm-5.3-flash"
   model_routing:
-    conversation: "ark:fast"
-    narrative: "ark:strong"
-    consciousness: "ark:fast"
-    dream: "ark:fast"
-    creation: "ark:fast"
-    reflection: "ark:strong"
-    fact: "ark:fast"
-    look: "ark:fast"
+    conversation: "zhipu:fast"
+    narrative: "zhipu:strong"
+    consciousness: "zhipu:fast"
+    dream: "zhipu:fast"
+    creation: "zhipu:fast"
+    reflection: "zhipu:strong"
+    fact: "zhipu:fast"
+    look: "zhipu:fast"
 
 # 心跳配置
 rhythm:

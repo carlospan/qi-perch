@@ -85,7 +85,7 @@ What “moving toward life” means is written as things you can observe, not sl
 pip install -e ".[dev]"
 
 cp .env.example .env          # Windows: copy .env.example .env
-# Set ARK_API_KEY=... (default provider in settings.example.yaml)
+# Set ZHIPU_API_KEY=... (default provider in settings.example.yaml)
 
 mkdir -p data                 # Windows: mkdir data
 cp qi/config/settings.example.yaml data/settings.yaml
@@ -141,7 +141,7 @@ Ontology **N0–N5** is the north star (`docs/explanation/栖·数字生命架�
 
 - **v0.1** — personal / research-grade
 - Engineering stages 0–4 are complete as construction milestones; full endogenous cognition under C1–C5 remains the longer journey
-- Default LLM example: Ark `doubao-seed-2-0-mini-260428` (any OpenAI-compatible provider can be configured)
+- Default LLM example: Zhipu `glm-5.3-flash` (any OpenAI-compatible provider can be configured)
 
 ---
 

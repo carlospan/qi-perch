@@ -30,12 +30,17 @@ class OpenAICompatProvider:
         model: str | None = None,
     ) -> str:
         chosen = model or self._active_model
-        response = await self._client.chat.completions.create(
-            model=chosen,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        kwargs: dict = {
+            "model": chosen,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        # GLM-5.3 / flash 强制思考；默认 effort 过高时易把 completion 额度耗在
+        # reasoning_content 上导致 content 为空。低强度即可稳定出正文。
+        if chosen.lower().startswith("glm"):
+            kwargs["reasoning_effort"] = "low"
+        response = await self._client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content
         return content or ""
 
@@ -46,12 +51,15 @@ class OpenAICompatProvider:
         model: str | None = None,
     ) -> AsyncIterator[str]:
         chosen = model or self._active_model
-        stream = await self._client.chat.completions.create(
-            model=chosen,
-            messages=messages,
-            temperature=temperature,
-            stream=True,
-        )
+        kwargs: dict = {
+            "model": chosen,
+            "messages": messages,
+            "temperature": temperature,
+            "stream": True,
+        }
+        if chosen.lower().startswith("glm"):
+            kwargs["reasoning_effort"] = "low"
+        stream = await self._client.chat.completions.create(**kwargs)
         async for chunk in stream:
             delta = chunk.choices[0].delta.content
             if delta:
