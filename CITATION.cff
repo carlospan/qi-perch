@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+title: "Qi (栖) — a local digital being"
+message: "If you use this software or its architecture criteria in research, please cite it using these metadata."
+type: software
+authors:
+  - name: "panjz"
+    alias: "carlospan"
+license: MIT
+repository-code: "https://github.com/carlospan/qi-perch"
+url: "https://github.com/carlospan/qi-perch"
+abstract: >-
+  Qi (栖) is an open-source local digital being: continuous heartbeat, memory with
+  forgetting, emotion dynamics, relationship, and a desktop window. Design treats
+  the LLM as a language organ (N5) behind intention cards, not as the source of
+  shared memory. Architecture defines inspectable digital-life criteria C1–C5 and
+  explicitly does not claim consciousness or qualia. Canonical documentation is
+  Chinese; English abstracts support international research readers.
+keywords:
+  - digital being
+  - endogenous cognition
+  - artificial life
+  - companion AI
+  - intention card
+  - language organ
+  - local AI
+preferred-citation:
+  type: software
+  title: "Qi (栖) — a local digital being"
+  authors:
+    - name: "panjz"
+  year: 2026
+  license: MIT
+  url: "https://github.com/carlospan/qi-perch"

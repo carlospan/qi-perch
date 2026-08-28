@@ -1,8 +1,12 @@
 # docs · 文档宪法
 
+**简体中文** | [English](README.en.md)
+
 > 这份文件是 `docs/` 目录的元规则：每份文档的权威等级、冲突时的**分场景裁决**、以及文档生灭制度。
 > 30 秒读完后，你应该知道手里任何一份文档“说话算不算数”、出了冲突**问谁**。
 > **v3（2026-08-02）**：随体系重构（Diátaxis 四分类 + SDD `specs/`）重写。v2 的“五层权威”内核保留，但裁决改**分场景**（不再写单一总序）；旧路径见各文档头部的“现行路径”注释。
+>
+> 国际研究向英文入口（摘要，非第二真源）：[`README.en.md`](README.en.md)、[`explanation/architecture-abstract.en.md`](explanation/architecture-abstract.en.md)。中英冲突时以**中文 + 代码**为准。
 
 ---
 
