@@ -17,6 +17,9 @@ import type {
   JournalEntry,
   QiView,
   SpeechPayload,
+  SpeechStreamDeltaPayload,
+  SpeechStreamDonePayload,
+  SpeechStreamRetractPayload,
   SystemNoticePayload,
   TalkCardItem,
   TalkItem,
@@ -278,6 +281,9 @@ function createQi() {
   let typingTimer: number | null = null;
   let touchConsideredForTurn = false;
   let wired = false;
+  /** 进行中的流式气泡 id（WS stream id → talk message id） */
+  let activeStreamId: string | null = null;
+  let activeStreamTalkId: string | null = null;
 
   function clearTypingTimer() {
     if (typingTimer != null) {
@@ -356,6 +362,82 @@ function createQi() {
       at: Date.now(),
       tone,
     });
+  }
+
+  function applySpeechDelta(payload: SpeechStreamDeltaPayload) {
+    const sid = String(payload?.id || "").trim();
+    const delta = String(payload?.delta || "");
+    if (!sid || !delta) return;
+    noteReplyStart();
+    setTyping(false);
+    if (activeStreamId === sid && activeStreamTalkId) {
+      const idx = talk.value.findIndex((m) => m.id === activeStreamTalkId);
+      if (idx >= 0) {
+        const cur = talk.value[idx];
+        talk.value[idx] = { ...cur, text: cur.text + delta };
+        speech.value = talk.value[idx].text;
+        return;
+      }
+    }
+    activeStreamId = sid;
+    const mid = uid("qi");
+    activeStreamTalkId = mid;
+    talk.value.push({
+      id: mid,
+      role: "qi",
+      text: delta,
+      at: Date.now(),
+    });
+    speech.value = delta;
+    speaking.value = true;
+  }
+
+  function applySpeechDone(payload: SpeechStreamDonePayload) {
+    const sid = String(payload?.id || "").trim();
+    const text = String(payload?.text || "").trim();
+    noteReplyStart();
+    setTyping(false);
+    if (sid && activeStreamId === sid && activeStreamTalkId) {
+      const idx = talk.value.findIndex((m) => m.id === activeStreamTalkId);
+      if (idx >= 0) {
+        const cur = talk.value[idx];
+        talk.value[idx] = {
+          ...cur,
+          text: text || cur.text,
+          tone: payload.tone || cur.tone,
+        };
+        speech.value = talk.value[idx].text;
+      }
+    } else if (text) {
+      appendTalk("qi", text, payload.tone);
+      speech.value = text;
+    }
+    activeStreamId = null;
+    activeStreamTalkId = null;
+    speaking.value = false;
+    requestEmotionSnapshot();
+  }
+
+  function applySpeechRetract(payload: SpeechStreamRetractPayload) {
+    const sid = String(payload?.id || "").trim();
+    if (sid && activeStreamId === sid && activeStreamTalkId) {
+      talk.value = talk.value.filter((m) => m.id !== activeStreamTalkId);
+    } else if (activeStreamTalkId) {
+      talk.value = talk.value.filter((m) => m.id !== activeStreamTalkId);
+    }
+    activeStreamId = null;
+    activeStreamTalkId = null;
+    speech.value = "";
+    speaking.value = false;
+  }
+
+  function retractActiveStreamBubble() {
+    if (!activeStreamTalkId) return;
+    talk.value = talk.value.filter((m) => m.id !== activeStreamTalkId);
+    activeStreamId = null;
+    activeStreamTalkId = null;
+    speech.value = "";
+    speaking.value = false;
   }
 
   function applyHistory(messages: TalkMessage[]) {
@@ -453,6 +535,7 @@ function createQi() {
       });
       qiWs.on("turn_interrupted", (payload: TurnInterruptedPayload) => {
         setTyping(false);
+        retractActiveStreamBubble();
         const orig = (payload?.original_text || "").trim();
         // 若刚发了打断白话，先拿掉那条；再拿掉原句气泡
         const last = talk.value[talk.value.length - 1];
@@ -463,9 +546,22 @@ function createQi() {
         const pre = (payload?.prefill || "").trim();
         composerPrefill.value = pre;
       });
+      qiWs.on("speech_delta", (payload: SpeechStreamDeltaPayload) => {
+        applySpeechDelta(payload);
+      });
+      qiWs.on("speech_done", (payload: SpeechStreamDonePayload) => {
+        applySpeechDone(payload);
+      });
+      qiWs.on("speech_retract", (payload: SpeechStreamRetractPayload) => {
+        applySpeechRetract(payload);
+      });
       qiWs.on("speech", (payload: SpeechPayload) => {
         noteReplyStart();
         setTyping(false);
+        // 非流式整段到达时，清掉可能残留的流式半截
+        if (activeStreamTalkId) {
+          retractActiveStreamBubble();
+        }
         speech.value = payload.text;
         appendTalk("qi", payload.text, payload.tone);
         requestEmotionSnapshot();

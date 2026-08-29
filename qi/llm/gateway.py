@@ -202,8 +202,60 @@ class LLMGateway:
         messages: list[dict],
         temperature: float | None = None,
     ) -> AsyncIterator[str]:
+        """
+        流式产出增量文本。对话用途会刷新 last_outcome。
+        不在中途重试（避免半截重复）；失败分级：missing_key / unreachable / empty。
+        """
         if temperature is None:
             temperature = _DEFAULT_TEMPERATURES.get(purpose, 0.7)
-        provider, model = self._resolve(purpose)
-        async for chunk in provider.stream(messages, temperature=temperature, model=model):
-            yield chunk
+
+        try:
+            provider, model = self._resolve(purpose)
+        except RuntimeError as e:
+            logger.warning("LLM 流式路由失败 purpose=%s: %s", purpose, e)
+            outcome = LLMCallOutcome(text="", failure="unreachable")
+            self._remember_if_conversation(purpose, outcome)
+            return
+
+        if provider.key_missing():
+            logger.warning(
+                "LLM api_key 缺失(stream) provider=%s purpose=%s",
+                provider.name,
+                purpose,
+            )
+            outcome = LLMCallOutcome(text="", failure="missing_key")
+            self._remember_if_conversation(purpose, outcome)
+            return
+
+        parts: list[str] = []
+        try:
+            async for chunk in provider.stream(
+                messages, temperature=temperature, model=model
+            ):
+                piece = str(chunk or "")
+                if not piece:
+                    continue
+                parts.append(piece)
+                yield piece
+        except Exception as e:
+            logger.warning(
+                "LLM 流式失败 provider=%s purpose=%s: %s",
+                provider.name,
+                purpose,
+                e,
+            )
+            outcome = LLMCallOutcome(text="".join(parts).strip(), failure="unreachable")
+            self._remember_if_conversation(purpose, outcome)
+            return
+
+        text = "".join(parts).strip()
+        if not text:
+            outcome = LLMCallOutcome(text="", failure="empty")
+            logger.warning(
+                "LLM 流式空内容 provider=%s purpose=%s",
+                provider.name,
+                purpose,
+            )
+        else:
+            outcome = LLMCallOutcome(text=text, failure=None)
+        self._remember_if_conversation(purpose, outcome)

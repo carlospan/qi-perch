@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -20,6 +21,7 @@ from qi.llm.prompt_builder import PromptBuilder
 
 if TYPE_CHECKING:
     from qi.core.emotion import EmotionState
+    from qi.embodiment.speech_stream import SpeechStreamSession
     from qi.llm.gateway import LLMGateway
     from qi.storage.database import Database
 
@@ -278,6 +280,7 @@ class Expression:
         scar_hint: str = "",
         season: str = "spring",
         proactive_kind: str | None = None,
+        speech_stream: SpeechStreamSession | None = None,
     ) -> str:
         if intention.silence or intention.act == "silence":
             intention.outcome = "silence"
@@ -347,15 +350,12 @@ class Expression:
         text = ""
         # 每拍对话最多 2 次 LLM：主调用 +（HARD 修复 XOR 催答空重试 XOR 去重重生）
         used_retry = False
-        try:
-            text = await self.llm.call(purpose="conversation", messages=messages)
-        except Exception:
-            logger.debug("表达 LLM 异常，走模板", exc_info=True)
-            text = ""
+        text = await self._primary_conversation(messages, speech_stream=speech_stream)
 
         text = str(text or "").strip()
         # 催答：空返回或省略号敷衍 → 约束重试一次（占本拍重试预算）
         if chase and (not text or _is_ellipsis_dodge(text)) and not used_retry:
+            await self._retract_stream(speech_stream)
             chase_messages = list(messages)
             if chase_messages:
                 sys0 = dict(chase_messages[0])
@@ -385,6 +385,7 @@ class Expression:
             and (not text or _is_ellipsis_dodge(text))
             and not used_retry
         ):
+            await self._retract_stream(speech_stream)
             sub_messages = list(messages)
             if sub_messages:
                 sys0 = dict(sub_messages[0])
@@ -418,6 +419,7 @@ class Expression:
                 intention.evidence["soft_violations"] = soft
             hard = [v for v in all_viols if is_hard_violation(v)]
             if hard:
+                await self._retract_stream(speech_stream)
                 if used_retry:
                     intention.outcome = "template"
                     return _build_fallback(
@@ -438,6 +440,7 @@ class Expression:
                 intention.outcome = "llm"
                 return text
             # 跨轮复读：若本拍已用过重试预算 → 直接模板，不再打第三次 LLM
+            await self._retract_stream(speech_stream)
             if used_retry:
                 templated = render_template(intention, user_message=user_message)
                 if templated and not is_duplicate_reply(templated, hist):
@@ -483,6 +486,7 @@ class Expression:
 
         # 对话路径：不可达 / 缺 key /（非催答）空结果 → 不模板冒充，交给系统态
         # 主动开口仍走模板，保证器官推进；催答 empty 仍用催答模板（既有包）
+        await self._retract_stream(speech_stream)
         fail_kind = None
         last = getattr(self.llm, "last_outcome", None)
         if last is not None:
@@ -502,6 +506,42 @@ class Expression:
             return templated
         intention.outcome = "empty"
         return ""
+
+    async def _retract_stream(
+        self, speech_stream: SpeechStreamSession | None
+    ) -> None:
+        if speech_stream is not None:
+            await speech_stream.retract()
+
+    async def _primary_conversation(
+        self,
+        messages: list[dict],
+        *,
+        speech_stream: SpeechStreamSession | None,
+    ) -> str:
+        """主调用：有 speech_stream 则流式推 chunk；否则整段 call。"""
+        if speech_stream is None:
+            try:
+                return await self.llm.call(purpose="conversation", messages=messages)
+            except Exception:
+                logger.debug("表达 LLM 异常，走模板", exc_info=True)
+                return ""
+
+        parts: list[str] = []
+        try:
+            async for chunk in self.llm.stream(
+                purpose="conversation", messages=messages
+            ):
+                parts.append(chunk)
+                await speech_stream.delta(chunk)
+            return "".join(parts).strip()
+        except asyncio.CancelledError:
+            await speech_stream.retract()
+            raise
+        except Exception:
+            logger.debug("表达 LLM 流式异常，走模板", exc_info=True)
+            await speech_stream.retract()
+            return ""
 
     async def _fix_generation(
         self,

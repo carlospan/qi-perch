@@ -108,8 +108,27 @@ export type TurnInterruptedPayload = {
   prefill?: string;
 };
 
+export type SpeechStreamDeltaPayload = {
+  id: string;
+  delta: string;
+};
+
+export type SpeechStreamDonePayload = {
+  id: string;
+  text: string;
+  emotion: string;
+  tone: string;
+};
+
+export type SpeechStreamRetractPayload = {
+  id: string;
+};
+
 export type ServerMessage =
   | { type: "speech"; payload: SpeechPayload }
+  | { type: "speech_delta"; payload: SpeechStreamDeltaPayload }
+  | { type: "speech_done"; payload: SpeechStreamDonePayload }
+  | { type: "speech_retract"; payload: SpeechStreamRetractPayload }
   | {
       type: "state";
       payload: {

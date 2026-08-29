@@ -106,6 +106,7 @@ class Brain:
         self._pending_queue: deque[str] = deque()
         self._pending_speech: _PendingSpeech | None = None
         self._pending_system_notice: dict | None = None
+        self._speech_stream = None  # SpeechStreamSession | None；打断时收回
         self._last_emotion_saved_at: datetime | None = None
         self._heartbeat_lock = asyncio.Lock()
         self._skip_next_user_save = False
@@ -262,6 +263,7 @@ class Brain:
                                 speech.text,
                                 speech.now,
                                 proactive=speech.proactive,
+                                stream=getattr(speech, "stream", None),
                             )
                             await self._maybe_prefer_close_after_deliver()
                         if not self.alive:
@@ -451,9 +453,10 @@ class Brain:
         now: datetime,
         *,
         proactive: bool = False,
+        stream: object | None = None,
     ) -> None:
         await _brain_delivery.deliver_qi_message(
-            self, response, now, proactive=proactive
+            self, response, now, proactive=proactive, stream=stream
         )
 
     async def _maybe_prefer_close_after_deliver(self) -> None:
@@ -794,6 +797,12 @@ class Brain:
 
             self.avatar.set_thinking(True)
             await self._sync_avatar(now, force=True)
+            from qi.embodiment.speech_stream import SpeechStreamSession
+
+            speech_stream = None
+            if self.embodiment is not None:
+                speech_stream = SpeechStreamSession(self.embodiment)
+                self._speech_stream = speech_stream
             try:
                 response = await self.expression.express(
                     user_message=pending,
@@ -808,6 +817,7 @@ class Brain:
                     relationship_hint=ctx.relationship_hint,
                     scar_hint=ctx.scar_hint,
                     season=ctx.season_hint,
+                    speech_stream=speech_stream,
                 )
             finally:
                 self.avatar.set_thinking(False)
@@ -816,15 +826,25 @@ class Brain:
             self._ledger_safe_add_tokens(self._ledger_token_cost_for_text(response))
 
             if response:
+                use_stream = (
+                    speech_stream is not None
+                    and speech_stream.live
+                )
                 self._pending_speech = _PendingSpeech(
-                    text=response, now=now, proactive=False
+                    text=response,
+                    now=now,
+                    proactive=False,
+                    stream=speech_stream if use_stream else None,
                 )
             else:
+                if speech_stream is not None:
+                    await speech_stream.retract()
                 self._note_dialogue_llm_failure(card)
                 logger.warning(
                     "对话表达仍为空 outcome=%s（意向卡已建）",
                     card.outcome,
                 )
+            self._speech_stream = None
 
             # 第一次之后再想一次：在开口之后写意识流，供「忆」与下一轮，不污染本轮回复
             if self.inner_life is not None and triggered_first:
@@ -1171,8 +1191,16 @@ class Brain:
         self._pending_system_notice = None
         return notice
 
-    def on_turn_interrupted(self) -> None:
-        """具身取消进行中轮次：清待发 speech / 系统态，松思考态。"""
+    def on_turn_interrupted(self):
+        """具身取消进行中轮次：清待发 speech / 系统态，松思考态。
+
+        返回需收回的流式会话（若有），由具身 await retract。
+        """
+        stream = self._speech_stream
+        pending = self._pending_speech
+        if stream is None and pending is not None:
+            stream = getattr(pending, "stream", None)
+        self._speech_stream = None
         self._pending_speech = None
         self._pending_system_notice = None
         self._primed_turn_message = None
@@ -1182,6 +1210,7 @@ class Brain:
                 self.avatar.set_thinking(False)
             except Exception:
                 logger.debug("打断后清除 thinking 失败", exc_info=True)
+        return stream
 
     def _note_dialogue_llm_failure(self, card) -> None:
         """对话 LLM 失败：挂起系统态，不装 speech。"""
@@ -1677,7 +1706,10 @@ class Brain:
         # 生成已在锁内完成；出锁后尽快推送——不堵心跳。
         # 不再人为 sleep(0.5~1.5)：模型生成已有延迟（P0 去掉递送前随机睡眠）。
         await self._deliver_qi_message(
-            speech.text, speech.now, proactive=speech.proactive
+            speech.text,
+            speech.now,
+            proactive=speech.proactive,
+            stream=getattr(speech, "stream", None),
         )
         await self._maybe_prefer_close_after_deliver()
         return speech.text

@@ -25,7 +25,9 @@ async def test_receive_enqueues_under_lock_and_processes_fifo():
             )
         return pending
 
-    async def fake_deliver(text: str, now: datetime, *, proactive: bool = False) -> None:
+    async def fake_deliver(
+        text: str, now: datetime, *, proactive: bool = False, stream=None
+    ) -> None:
         delivered.append(text)
 
     brain._heartbeat = fake_heartbeat  # type: ignore[method-assign]
@@ -101,7 +103,9 @@ async def test_background_heartbeat_cannot_steal_uncommitted_message():
             await release_bg.wait()
         return pending
 
-    async def fake_deliver(text: str, now: datetime, *, proactive: bool = False) -> None:
+    async def fake_deliver(
+        text: str, now: datetime, *, proactive: bool = False, stream=None
+    ) -> None:
         delivered.append(text)
 
     brain._heartbeat = fake_heartbeat  # type: ignore[method-assign]
@@ -151,7 +155,9 @@ async def test_user_reply_no_post_generation_sleep():
             )
         return pending
 
-    async def fake_deliver(text: str, now: datetime, *, proactive: bool = False) -> None:
+    async def fake_deliver(
+        text: str, now: datetime, *, proactive: bool = False, stream=None
+    ) -> None:
         delivered.append(text)
 
     brain._heartbeat = fake_heartbeat  # type: ignore[method-assign]
@@ -171,7 +177,7 @@ async def test_creation_card_delivers_content_with_qi_line():
     delivered: list[str] = []
     broadcasts: list[dict] = []
 
-    async def fake_deliver(text, now, proactive=False):
+    async def fake_deliver(text, now, proactive=False, stream=None):
         delivered.append(text)
 
     async def fake_broadcast(msg):

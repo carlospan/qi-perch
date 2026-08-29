@@ -46,7 +46,16 @@ onMounted(() => {
 });
 
 watch(
-  () => props.groups.map((g) => g.messages.length).reduce((a, b) => a + b, 0),
+  () =>
+    props.groups
+      .map((g) =>
+        g.messages
+          .map((m) =>
+            m.kind === "text" ? `${m.id}:${m.text.length}` : m.id
+          )
+          .join("|")
+      )
+      .join(";"),
   () => {
     void scrollBottom();
   },

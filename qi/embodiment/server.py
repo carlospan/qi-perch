@@ -451,8 +451,14 @@ class EmbodimentServer:
             except asyncio.CancelledError:
                 pass
         self._turn_task = None
+        stream = None
         if hasattr(self.brain, "on_turn_interrupted"):
-            self.brain.on_turn_interrupted()
+            stream = self.brain.on_turn_interrupted()
+        if stream is not None:
+            try:
+                await stream.retract()
+            except Exception:
+                logger.debug("打断收回流式气泡失败", exc_info=True)
 
         await self.broadcast(
             {

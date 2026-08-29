@@ -81,10 +81,28 @@ async def deliver_qi_message(
     now: datetime,
     *,
     proactive: bool = False,
+    stream: object | None = None,
 ) -> None:
     brain.avatar.set_talking(True)
     await brain._sync_avatar(now, force=True)
-    if proactive:
+    streamed = bool(stream is not None and getattr(stream, "live", False))
+    if streamed:
+        emotion = brain.emotion.description()
+        tone = brain.emotion.mode.value
+        await stream.finish(response, emotion, tone)  # type: ignore[union-attr]
+        if brain.tts is not None and brain.embodiment is not None:
+            try:
+                import base64
+
+                speed, pitch = emotion_to_voice_params(brain.emotion)
+                audio = await brain.tts.speak(response, speed=speed, pitch=pitch)
+                if audio:
+                    await brain.embodiment.send_audio(
+                        base64.b64encode(audio).decode("ascii")
+                    )
+            except Exception:
+                logger.exception("TTS 合成失败")
+    elif proactive:
         await brain._push_proactive_text(response)
     else:
         await brain._emit_speech(response)
@@ -99,6 +117,8 @@ async def deliver_qi_message(
             response,
             emotion_context=brain.emotion.model_dump_json(),
         )
+    if streamed:
+        logger.debug("流式对话已 finish + 落记忆 len=%s", len(response or ""))
 
 
 async def broadcast_journal_entries(brain: Brain) -> None:

@@ -15,11 +15,13 @@ SEASON_EMOTION_HOURS = 24.0
 
 @dataclass
 class _PendingSpeech:
-    """生成已完成、待在心跳锁外停顿后再推送的话语。"""
+    """生成已完成、待在心跳锁外推送的话语。"""
 
     text: str
     now: datetime
     proactive: bool
+    # 对话流式：锁内已推 delta；出锁后 finish + 只落记忆、不再整段 emit
+    stream: object | None = None
 
 
 @dataclass
