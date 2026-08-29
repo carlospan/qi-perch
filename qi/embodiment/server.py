@@ -214,6 +214,45 @@ class EmbodimentServer:
         self._ping_task: asyncio.Task | None = None
         self._turn_task: asyncio.Task | None = None
         self._turn_user_text: str | None = None
+        self._emotion_last_payload: dict | None = None
+        self._emotion_push_task: asyncio.Task | None = None
+        self._emotion_push_gen = 0
+
+    def schedule_emotion_push(self) -> None:
+        """心跳后调度：约 1s 合并；有可见变化才广播 emotion_update。"""
+        if not self.running:
+            return
+        self._emotion_push_gen += 1
+        gen = self._emotion_push_gen
+        if self._emotion_push_task is not None and not self._emotion_push_task.done():
+            self._emotion_push_task.cancel()
+
+        async def _debounced() -> None:
+            from qi.embodiment.emotion_push import (
+                EMOTION_PUSH_DEBOUNCE_S,
+                build_emotion_snapshot,
+                emotion_snapshot_changed,
+            )
+
+            try:
+                await asyncio.sleep(EMOTION_PUSH_DEBOUNCE_S)
+            except asyncio.CancelledError:
+                return
+            if gen != self._emotion_push_gen or not self.running:
+                return
+            try:
+                payload = build_emotion_snapshot(self.brain)
+            except Exception:
+                logger.debug("构建情绪快照失败", exc_info=True)
+                return
+            if not emotion_snapshot_changed(self._emotion_last_payload, payload):
+                return
+            self._emotion_last_payload = payload
+            await self.send_emotion_update(payload)
+
+        self._emotion_push_task = asyncio.create_task(
+            _debounced(), name="qi_emotion_push"
+        )
 
     async def start(self) -> None:
         import websockets
@@ -240,6 +279,14 @@ class EmbodimentServer:
             except asyncio.CancelledError:
                 pass
             self._ping_task = None
+
+        if self._emotion_push_task is not None:
+            self._emotion_push_task.cancel()
+            try:
+                await self._emotion_push_task
+            except asyncio.CancelledError:
+                pass
+            self._emotion_push_task = None
 
         # 先关客户端，否则 wait_closed 会一直等卡在 LLM/收消息里的 handler
         for ws in list(self.clients):
@@ -336,6 +383,8 @@ class EmbodimentServer:
         elif msg_type == "command":
             cmd = (payload.get("text") or "").strip()
             if cmd == "/state":
+                from qi.embodiment.emotion_push import build_emotion_snapshot
+
                 e = self.brain.emotion
                 mode = (
                     self.brain.public_mode()
@@ -352,21 +401,12 @@ class EmbodimentServer:
                         mode if mode != "stasis" else "solitary",
                         season=season,
                     )
+                payload = build_emotion_snapshot(self.brain)
+                self._emotion_last_payload = payload
                 await self.broadcast(
                     {
                         "type": "emotion_update",
-                        "payload": {
-                            "energy": e.energy,
-                            "valence": e.valence,
-                            "arousal": e.arousal,
-                            "security": e.security,
-                            "curiosity": e.curiosity,
-                            "attachment": e.attachment,
-                            "mode": mode,
-                            "stasis": bool(getattr(self.brain, "in_stasis", False)),
-                            "description": e.description(),
-                            "stage": self.brain.relationship_stage,
-                        },
+                        "payload": payload,
                     }
                 )
                 await self.broadcast(self._state_packet())

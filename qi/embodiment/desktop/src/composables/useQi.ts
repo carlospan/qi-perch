@@ -293,7 +293,6 @@ function createQi() {
     return null;
   });
 
-  let emotionPoll: number | null = null;
   let typingTimer: number | null = null;
   let touchConsideredForTurn = false;
   let wired = false;
@@ -463,7 +462,6 @@ function createQi() {
     activeStreamId = null;
     activeStreamTalkId = null;
     speaking.value = false;
-    requestEmotionSnapshot();
   }
 
   function applySpeechRetract(payload: SpeechStreamRetractPayload) {
@@ -681,7 +679,6 @@ function createQi() {
         }
         speech.value = payload.text;
         appendTalk("qi", payload.text, payload.tone);
-        requestEmotionSnapshot();
       });
       qiWs.on(
         "state",
@@ -725,7 +722,6 @@ function createQi() {
             stasis: false,
             mode: payload.mode || "ambient",
           };
-          requestEmotionSnapshot();
         }
       );
       qiWs.on("audio", (payload: { data: string; mime?: string }) => {
@@ -797,22 +793,12 @@ function createQi() {
 
     document.addEventListener("visibilitychange", onVis);
     qiWs.connect();
-
-    if (emotionPoll == null) {
-      emotionPoll = window.setInterval(() => {
-        if (connected.value) requestEmotionSnapshot();
-      }, 8000);
-    }
   }
 
   function disconnect() {
     document.removeEventListener("visibilitychange", onVis);
     clearTypingTimer();
     clearAllAckTimers();
-    if (emotionPoll != null) {
-      clearInterval(emotionPoll);
-      emotionPoll = null;
-    }
     qiWs.disconnect();
   }
 

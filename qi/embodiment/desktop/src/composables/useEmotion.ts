@@ -66,8 +66,7 @@ export function applyEmotionSnapshot(e: EmotionSnapshot): AtmosphereVars {
 
 /**
  * emotion_update → 氛围。
- * 后端目前仅在 command `/state` 时推送 emotion_update（心跳未主动广播）。
- * 前端用已有协议拉取，不改后端 / 不改 ws 连接逻辑。
+ * 连上拉一次 /state；其后靠后端事件推送（P0 情绪事件推送）。
  */
 export function useEmotion() {
   function onEmotionUpdate(payload: EmotionSnapshot) {

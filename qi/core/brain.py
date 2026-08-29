@@ -900,6 +900,13 @@ class Brain:
             logger.debug("账本 compute 记账失败", exc_info=True)
 
         self._last_response = response
+        if self.embodiment is not None and hasattr(
+            self.embodiment, "schedule_emotion_push"
+        ):
+            try:
+                self.embodiment.schedule_emotion_push()
+            except Exception:
+                logger.debug("调度情绪推送失败", exc_info=True)
         return response
 
     async def _speak_proactive(self, kind: str, now: datetime) -> str | None:
