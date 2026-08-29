@@ -103,7 +103,7 @@ requirements.lock   锁定版本（CI 用）
    expression.express → LLMGateway.call(purpose="conversation")                 │
    (失败/空 → render_template 模板降级)                                          │
                 │                                                               │
-   _PendingSpeech（出锁后停顿 0.5~1.5s 再推送）                                  │
+   _PendingSpeech（出锁后尽快推送；无人为 sleep）                                 │
                 │                                                               │
    _deliver_qi_message → EmbodimentServer.broadcast / console.print             │
                 │                                                               │

@@ -138,10 +138,10 @@ async def test_background_heartbeat_cannot_steal_uncommitted_message():
 
 
 @pytest.mark.asyncio
-async def test_user_reply_think_pause_outside_lock():
-    """生成在锁内，停顿在锁外——停顿期间锁应可被其他任务拿到。"""
+async def test_user_reply_no_post_generation_sleep():
+    """生成完直接递送，不再 sleep(0.5~1.5)。"""
     brain = Brain({}, MagicMock())
-    lock_held_during_pause = False
+    delivered: list[str] = []
 
     async def fake_heartbeat() -> str | None:
         pending = brain._pending_queue.popleft() if brain._pending_queue else None
@@ -152,21 +152,16 @@ async def test_user_reply_think_pause_outside_lock():
         return pending
 
     async def fake_deliver(text: str, now: datetime, *, proactive: bool = False) -> None:
-        return None
-
-    async def pause(_seconds: float) -> None:
-        nonlocal lock_held_during_pause
-        lock_held_during_pause = brain._heartbeat_lock.locked()
-        # 停顿期间应能抢到锁
-        async with brain._heartbeat_lock:
-            pass
+        delivered.append(text)
 
     brain._heartbeat = fake_heartbeat  # type: ignore[method-assign]
     brain._deliver_qi_message = fake_deliver  # type: ignore[method-assign]
 
-    with patch("qi.core.brain.asyncio.sleep", side_effect=pause):
+    sleep_mock = AsyncMock()
+    with patch("qi.core.brain.asyncio.sleep", sleep_mock):
         assert await brain.receive_user_message("想了想") == "想了想"
-    assert lock_held_during_pause is False
+    sleep_mock.assert_not_called()
+    assert delivered == ["想了想"]
 
 
 @pytest.mark.asyncio

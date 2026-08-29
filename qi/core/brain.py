@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import random
 import time
 from collections import deque
 from collections.abc import Callable
@@ -1675,9 +1674,8 @@ class Brain:
             return await self._reply_stasis_notice()
         if speech is None:
             return None
-        # 生成已在锁内完成；出锁后再「想了想」，再推送——不堵心跳
-        # C4 时机阀：随机仅扰动投递时刻，不是动机来源
-        await asyncio.sleep(random.uniform(0.5, 1.5))
+        # 生成已在锁内完成；出锁后尽快推送——不堵心跳。
+        # 不再人为 sleep(0.5~1.5)：模型生成已有延迟（P0 去掉递送前随机睡眠）。
         await self._deliver_qi_message(
             speech.text, speech.now, proactive=speech.proactive
         )

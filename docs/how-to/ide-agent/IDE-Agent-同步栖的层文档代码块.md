@@ -105,7 +105,7 @@ L1 心跳：
   →（无 pending）inner_life.tick → 有 pending 则 express →（first_time 则再 tick）
   → 无 pending 则 action.tick 优先，再主动言语 → 同步 avatar。
 - pending：`_pending_queue`（maxlen=8）；话语：`_pending_speech` 锁外推送。
-- 用户回复停顿在 `receive_user_message` 出锁后 sleep(0.5~1.5)；`expression.express` 无 sleep。
+- 用户回复出锁后尽快递送（无人为 sleep(0.5~1.5)）；`expression.express` 无 sleep。
 - restore：ActionLayer + `_maybe_mark_waking`。情绪落盘：`_maybe_save_emotion` 节流。
 - qi/cli.py 并发模型：阻塞调用用 run_in_executor；LLM 失败有兜底。
 

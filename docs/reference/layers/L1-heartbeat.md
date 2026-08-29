@@ -559,7 +559,7 @@ class Brain:
         ...
 
     async def receive_user_message(self, message: str) -> str | None:
-        """入队（满则拒收最新并系统态）；锁内心跳；出锁后 sleep(0.5~1.5) 再 _deliver_qi_message。"""
+        """入队（满则拒收最新并系统态）；锁内心跳；出锁后尽快 _deliver_qi_message（无人为 sleep）。"""
         text = (message or "").strip()
         if not text:
             return None
@@ -573,7 +573,6 @@ class Brain:
             speech = self._take_pending_speech()
         if speech is None:
             return None
-        await asyncio.sleep(random.uniform(0.5, 1.5))
         await self._deliver_qi_message(
             speech.text, speech.now, proactive=speech.proactive
         )
@@ -863,8 +862,8 @@ L2（记忆）需要：
 - [ ] 不用"您"（检查 prompt）
 - [ ] 不说"有什么可以帮您"（检查 prompt）
 - [ ] 回复不超过 3 句（检查 prompt 中的长度约束）
-- [ ] 不秒回（`receive_user_message` 出锁后 `sleep(0.5~1.5)`；`expression.express` 内无 sleep；主动开口出锁后直接推送）
-  <!-- 回写(2026-07-25)：停顿位置对齐 brain.receive_user_message，依据：brain.py / expression.py -->
+- [ ] 不秒回靠真实耗时（LLM 等），**不**在递送前人为 `sleep(0.5~1.5)`；`expression.express` 内无 sleep；主动开口出锁后直接推送
+  <!-- 回写(2026-08-30)：删递送前随机 sleep（P0）；原 2026-07-25 时机阀注释废止 -->
 - [ ] 情绪用自然语言描述，不报数值（检查 prompt_builder）
 
 
