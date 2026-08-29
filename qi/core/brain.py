@@ -104,7 +104,7 @@ class Brain:
         # 本进程会话内是否已有过真实交谈——冷启动后的第一句话不构成「共同沉默」
         self._interacted_this_session = False
         self.heartbeat_count = 0
-        self._pending_queue: deque[str] = deque(maxlen=PENDING_QUEUE_MAX)
+        self._pending_queue: deque[str] = deque()
         self._pending_speech: _PendingSpeech | None = None
         self._pending_system_notice: dict | None = None
         self._last_emotion_saved_at: datetime | None = None
@@ -1656,11 +1656,16 @@ class Brain:
 
             # 正常对话路径（无 assist 请求）
             if len(self._pending_queue) >= PENDING_QUEUE_MAX:
-                dropped = self._pending_queue.popleft()
+                from qi.embodiment.system_notice import notice_payload
+
                 logger.warning(
-                    "待处理消息队列已满，丢弃最早一条: %s",
-                    dropped[:40],
+                    "待处理消息队列已满，拒收最新一条: %s",
+                    text[:40],
                 )
+                self._pending_system_notice = notice_payload("queue_full")
+                self._primed_turn_message = None
+                self._current_turn = None
+                return None
             self._pending_queue.append(text)
             await self._heartbeat()
             self._current_turn = None

@@ -418,7 +418,7 @@ class PromptBuilder:
 #      _interacted_this_session；format_why 痕迹；忆推送。依据：brain.py -->
 # <!-- 回写(2026-08-09)：idle 默认 GWS（gws.enabled=true）；legacy 为对照路径。依据：brain.py -->
 
-PENDING_QUEUE_MAX = 8
+PENDING_QUEUE_MAX = 3
 EMOTION_SAVE_MIN_INTERVAL = 30.0
 SEASON_EMOTION_HOURS = 24.0
 
@@ -472,7 +472,7 @@ class Brain:
         self.last_interaction = datetime.now()
         self._interacted_this_session = False  # F2：冷启动不测共同沉默
         self.heartbeat_count = 0
-        self._pending_queue: deque[str] = deque(maxlen=PENDING_QUEUE_MAX)
+        self._pending_queue: deque[str] = deque()
         self._pending_speech: _PendingSpeech | None = None
         self._last_emotion_saved_at: datetime | None = None
         self._heartbeat_lock = asyncio.Lock()
@@ -559,13 +559,15 @@ class Brain:
         ...
 
     async def receive_user_message(self, message: str) -> str | None:
-        """入队（满则丢最早）；锁内心跳；出锁后 sleep(0.5~1.5) 再 _deliver_qi_message。"""
+        """入队（满则拒收最新并系统态）；锁内心跳；出锁后 sleep(0.5~1.5) 再 _deliver_qi_message。"""
         text = (message or "").strip()
         if not text:
             return None
         async with self._heartbeat_lock:
             if len(self._pending_queue) >= PENDING_QUEUE_MAX:
-                self._pending_queue.popleft()  # 丢最早
+                # 拒收最新 + 系统态（见 P0 队列满告知）；不静默丢最早
+                ...
+                return None
             self._pending_queue.append(text)
             await self._heartbeat()
             speech = self._take_pending_speech()

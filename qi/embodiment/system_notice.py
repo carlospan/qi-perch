@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-SystemNoticeKind = Literal["missing_key", "unreachable", "empty", "timeout", "turn_busy"]
+SystemNoticeKind = Literal[
+    "missing_key", "unreachable", "empty", "timeout", "turn_busy", "queue_full"
+]
 
 _MESSAGES: dict[SystemNoticeKind, str] = {
     "missing_key": "还没有可用的模型钥匙。请检查 API 密钥配置。",
@@ -12,6 +14,7 @@ _MESSAGES: dict[SystemNoticeKind, str] = {
     "empty": "这轮没接好。你可以再发一句。",
     "timeout": "等太久了，先解开输入。若稍后她仍回了，气泡仍会显示。",
     "turn_busy": "我还在想上一句。想改口可以直接说，或点「我想重说」。",
+    "queue_full": "话说得有点密，这一句我还接不住。稍等我说完再发，或先「我想重说」。",
 }
 
 

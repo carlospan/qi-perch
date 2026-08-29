@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-# 用户消息短队列上限：满则丢最早一条，避免连发冲掉/堵死
-PENDING_QUEUE_MAX = 8
+# 用户消息短队列上限：满则拒收最新并系统态告知（不静默丢最早）
+PENDING_QUEUE_MAX = 3
 # 情绪落盘最小间隔（秒）；用户来消息时仍立即写
 EMOTION_SAVE_MIN_INTERVAL = 30.0
 # 季节判定读取的情绪时间窗（小时）

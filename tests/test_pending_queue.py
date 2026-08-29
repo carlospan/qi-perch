@@ -55,7 +55,8 @@ async def test_receive_empty_message_skipped():
 
 
 @pytest.mark.asyncio
-async def test_queue_drops_oldest_when_full():
+async def test_queue_rejects_newest_when_full():
+    """满则拒收最新，保留队内旧句，并挂起系统态。"""
     brain = Brain({}, MagicMock())
 
     async def fake_heartbeat() -> str | None:
@@ -68,10 +69,14 @@ async def test_queue_drops_oldest_when_full():
         await brain.receive_user_message(f"m{i}")
     assert list(brain._pending_queue) == [f"m{i}" for i in range(PENDING_QUEUE_MAX)]
 
-    await brain.receive_user_message("overflow")
-    assert "m0" not in brain._pending_queue
-    assert brain._pending_queue[-1] == "overflow"
-    assert len(brain._pending_queue) == PENDING_QUEUE_MAX
+    out = await brain.receive_user_message("overflow")
+    assert out is None
+    assert "overflow" not in brain._pending_queue
+    assert list(brain._pending_queue) == [f"m{i}" for i in range(PENDING_QUEUE_MAX)]
+    notice = brain.take_pending_system_notice()
+    assert notice is not None
+    assert notice["kind"] == "queue_full"
+    assert notice["message"]
 
 
 @pytest.mark.asyncio

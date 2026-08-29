@@ -9,7 +9,14 @@ from qi.llm.providers.openai_compat import OpenAICompatProvider
 
 
 def test_notice_payload_kinds():
-    for kind in ("missing_key", "unreachable", "empty", "timeout"):
+    for kind in (
+        "missing_key",
+        "unreachable",
+        "empty",
+        "timeout",
+        "turn_busy",
+        "queue_full",
+    ):
         p = notice_payload(kind)  # type: ignore[arg-type]
         assert p["kind"] == kind
         assert p["message"]

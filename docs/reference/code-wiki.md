@@ -145,7 +145,7 @@ requirements.lock   锁定版本（CI 用）
 | [brain_delivery.py](../../qi/core/brain_delivery.py) | 话语推送、avatar 同步、journal 广播、first_time 通知、行动结果投递 |
 | [brain_persist.py](../../qi/core/brain_persist.py) | 情绪落盘节流、proactive gate / action budget 持久化 |
 | [brain_trace.py](../../qi/core/brain_trace.py) | 心跳决策痕迹记录（`broadcast_traces` 表），供 `format_why` 排障，不进 prompt |
-| [brain_types.py](../../qi/core/brain_types.py) | 共享类型与常量：`PromptContext` / `_PendingSpeech` / `PENDING_QUEUE_MAX=8`（待处理队列上限）。注意：共振阈值/前瞻窗口等节奏参数不在本文件，而在 `rhythm.py` / `proactive.py` 的实现中 |
+| [brain_types.py](../../qi/core/brain_types.py) | 共享类型与常量：`PromptContext` / `_PendingSpeech` / `PENDING_QUEUE_MAX=3`（待处理队列上限；满则拒收最新并系统态告知）。注意：共振阈值/前瞻窗口等节奏参数不在本文件，而在 `rhythm.py` / `proactive.py` 的实现中 |
 | [emotion.py](../../qi/core/emotion.py) | **情绪动力学**——`EmotionState`(6 维 + mode)、衰减/耦合/天气/节律/阶段锚/nudge/夹紧 |
 | [expression.py](../../qi/core/expression.py) | **表达层**——意向卡 → LLM 措辞；HARD/空走模板；模板不贴 memory 原文；去重撞车吐安全句 |
 | [perception.py](../../qi/core/perception.py) | **感知层**——冲击评估（LLM JSON 主路径 + 关键词回退 + 短路）、intent 调制、安全感 hint |

@@ -97,7 +97,7 @@ export type ActionPayload =
     };
 
 export type SystemNoticePayload = {
-  kind: "missing_key" | "unreachable" | "empty" | "timeout" | "turn_busy";
+  kind: "missing_key" | "unreachable" | "empty" | "timeout" | "turn_busy" | "queue_full";
   message: string;
   action?: "open_settings" | null;
 };
