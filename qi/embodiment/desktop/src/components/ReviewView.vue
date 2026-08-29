@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import type { CreationCard, ExploreCard, TalkCardItem } from "../types";
+import type {
+  CreationCard,
+  ExploreCard,
+  ReviewMemoryItem,
+  TalkCardItem,
+} from "../types";
 
-export type ReviewFilter = "creation" | "explore";
+export type ReviewFilter = "creation" | "explore" | "memory";
 
 const props = defineProps<{
   creations: TalkCardItem[];
   explores: TalkCardItem[];
+  memories?: ReviewMemoryItem[];
 }>();
 
 const filter = ref<ReviewFilter>("creation");
@@ -14,6 +20,7 @@ const filter = ref<ReviewFilter>("creation");
 const chips: { id: ReviewFilter; label: string }[] = [
   { id: "creation", label: "创作" },
   { id: "explore", label: "见闻" },
+  { id: "memory", label: "记忆" },
 ];
 
 const SEASON_ZH: Record<string, string> = {
@@ -31,10 +38,20 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 const list = computed(() => {
+  if (filter.value === "memory") return [];
   const rows =
     filter.value === "creation" ? props.creations : props.explores;
   return [...rows].sort((a, b) => b.at - a.at);
 });
+
+const memoryList = computed(() => {
+  const rows = props.memories ?? [];
+  return [...rows].sort((a, b) => b.at - a.at);
+});
+
+const empty = computed(() =>
+  filter.value === "memory" ? memoryList.value.length === 0 : list.value.length === 0
+);
 
 function whenLabel(at: number) {
   const d = new Date(at);
@@ -69,6 +86,14 @@ function exploreBody(card: ExploreCard) {
     .slice(0, 2);
   return titles.join(" · ") || (card.found?.query || "").trim() || "……";
 }
+
+function memoryStyle(m: ReviewMemoryItem) {
+  const blur = m.fading ? "0.45px" : m.strength < 0.45 ? "0.2px" : "0";
+  return {
+    opacity: String(m.opacity),
+    filter: blur === "0" ? undefined : `blur(${blur})`,
+  };
+}
 </script>
 
 <template>
@@ -91,7 +116,7 @@ function exploreBody(card: ExploreCard) {
             />
           </svg>
         </div>
-        <p class="page-hero-sub">回顾她的创作与见闻，那些被记得的瞬间。</p>
+        <p class="page-hero-sub">回顾她的创作、见闻与记忆，那些被记得的瞬间。</p>
       </header>
 
       <div class="chips" role="tablist" aria-label="回顾分类">
@@ -122,10 +147,24 @@ function exploreBody(card: ExploreCard) {
             d="M16.5 3.2c1.7 1.1 2.5 2.5 2.2 3.8-1.7 0-3.6-1.2-5-2.6.8-.5 1.7-.9 2.8-1.2z"
           />
         </svg>
-        <svg v-else class="ico" viewBox="0 0 24 24" aria-hidden="true">
+        <svg
+          v-else-if="c.id === 'explore'"
+          class="ico"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
           <path
             fill="currentColor"
             d="M7.5 13.5c0-3.8 3-7.5 4.5-9.2 1.5 1.7 4.5 5.4 4.5 9.2a4.5 4.5 0 11-9 0z"
+          />
+        </svg>
+        <svg v-else class="ico" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            d="M12 4.5c-2.8 2.2-5.5 5.8-5.5 9.2a5.5 5.5 0 1011 0c0-3.4-2.7-7-5.5-9.2z"
           />
         </svg>
         {{ c.label }}
@@ -133,10 +172,33 @@ function exploreBody(card: ExploreCard) {
       </div>
 
       <div class="desk-scroll">
-        <p v-if="list.length === 0" class="empty">
+        <p v-if="empty" class="empty">
           <template v-if="filter === 'creation'">还没有递过创作。</template>
-          <template v-else>还没有留下见闻。</template>
+          <template v-else-if="filter === 'explore'">还没有留下见闻。</template>
+          <template v-else>记忆还很浅，或尚未织成故事。</template>
         </p>
+
+        <div v-else-if="filter === 'memory'" class="card-grid">
+          <article
+            v-for="(m, idx) in memoryList"
+            :key="`mem-${m.id}`"
+            class="card memory"
+            :class="[idx % 2 ? 'tilt-b' : 'tilt-a']"
+            :style="memoryStyle(m)"
+          >
+            <div class="sheet" aria-hidden="true" />
+            <div class="grain" aria-hidden="true" />
+            <div class="inner">
+              <div class="kicker">记忆</div>
+              <p class="body">{{ m.content }}</p>
+              <p v-if="m.whisper" class="whisper">{{ m.whisper }}</p>
+              <footer class="foot">
+                <span>{{ whenLabel(m.at) }}</span>
+                <span class="stamp">栖</span>
+              </footer>
+            </div>
+          </article>
+        </div>
 
         <div v-else class="card-grid">
           <article
@@ -372,6 +434,26 @@ function exploreBody(card: ExploreCard) {
 }
 .card.explore {
   color: #1d2831;
+}
+
+.card.memory {
+  color: #2a2830;
+}
+
+.card.memory .sheet {
+  background: linear-gradient(165deg, #f2efe8 0%, #e5e0d6 55%, #d9d3c8 100%);
+}
+
+.card.memory .kicker {
+  color: #6a6570;
+}
+
+.whisper {
+  margin: 10px 0 0;
+  font-family: var(--serif);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, currentColor 45%, transparent);
 }
 
 .bookmark {

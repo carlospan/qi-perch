@@ -423,6 +423,8 @@ class EmbodimentServer:
                 await self._send_journal(websocket)
             elif cmd == "/time_traces":
                 await self._send_time_traces(websocket)
+            elif cmd == "/review_memories":
+                await self._send_review_memories(websocket)
             elif cmd == "/wake":
                 result = await self.brain.resume_from_stasis()
                 await self.broadcast(
@@ -674,6 +676,27 @@ class EmbodimentServer:
                 return
             except Exception:
                 logger.debug("向请求方发送 time_traces 失败", exc_info=True)
+        await self.broadcast(packet)
+
+    async def _send_review_memories(self, websocket: Any | None) -> None:
+        """方向 D：回顾页记忆列表（真 strength；非 speech）。"""
+        from qi.embodiment.memory_fade import gather_review_memories
+
+        db = getattr(self.brain, "_db", None)
+        items: list[dict] = []
+        try:
+            items = await gather_review_memories(db)
+        except Exception:
+            logger.exception("拉取回顾记忆失败")
+
+        packet = {"type": "review_memories", "payload": {"items": items}}
+        raw = json.dumps(packet, ensure_ascii=False)
+        if websocket is not None:
+            try:
+                await websocket.send(raw)
+                return
+            except Exception:
+                logger.debug("向请求方发送 review_memories 失败", exc_info=True)
         await self.broadcast(packet)
 
     async def broadcast(self, message: dict) -> None:

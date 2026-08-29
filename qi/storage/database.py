@@ -686,6 +686,28 @@ class Database:
             return None
         return str(row["timestamp"]) if row["timestamp"] is not None else None
 
+    async def list_review_narratives(
+        self,
+        *,
+        min_strength: float = 0.1,
+        limit: int = 80,
+    ) -> list[dict]:
+        """回顾「记忆」：未归档且 strength ≥ 阈值；先新后旧。"""
+        conn = self._require_conn()
+        async with conn.execute(
+            """
+            SELECT id, content, strength, created_at
+            FROM narrative_memories
+            WHERE COALESCE(archived, 0) = 0
+              AND strength >= ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (float(min_strength), int(limit)),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
     async def delete_narrative_memory(self, memory_id: int) -> None:
         conn = self._require_conn()
         await conn.execute("DELETE FROM narrative_memories WHERE id = ?", (memory_id,))

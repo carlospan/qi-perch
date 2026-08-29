@@ -26,6 +26,8 @@ import type {
   TalkItem,
   TalkMessage,
   TimeTracesPayload,
+  ReviewMemoriesPayload,
+  ReviewMemoryItem,
   TurnInterruptedPayload,
 } from "../types";
 import { qiWs } from "../ws";
@@ -157,6 +159,8 @@ function createQi() {
   const journal = ref<JournalEntry[]>([]);
   /** 方向 D：存在页底部时间痕迹旁白 */
   const timeTraceLine = ref("");
+  /** 方向 D：回顾「记忆」列表 */
+  const reviewMemories = ref<ReviewMemoryItem[]>([]);
 
   const mode = computed(() => {
     if (emotion.value.stasis || emotion.value.mode === "stasis") {
@@ -620,6 +624,10 @@ function createQi() {
     qiWs.send({ type: "command", payload: { text: "/time_traces" } });
   }
 
+  function requestReviewMemories() {
+    qiWs.send({ type: "command", payload: { text: "/review_memories" } });
+  }
+
   function requestWake() {
     if (!connected.value) return;
     qiWs.send({ type: "command", payload: { text: "/wake" } });
@@ -630,8 +638,12 @@ function createQi() {
   }
 
   watch(view, (next, prev) => {
-    if (next === "presence" && prev !== "presence" && connected.value) {
+    if (!connected.value) return;
+    if (next === "presence" && prev !== "presence") {
       requestTimeTraces();
+    }
+    if (next === "review" && prev !== "review") {
+      requestReviewMemories();
     }
   });
 
@@ -644,6 +656,7 @@ function createQi() {
         requestHistory();
         requestJournal();
         requestTimeTraces();
+        requestReviewMemories();
       });
       qiWs.on("close", () => {
         connected.value = false;
@@ -656,6 +669,20 @@ function createQi() {
       qiWs.on("time_traces", (payload: TimeTracesPayload) => {
         const line = String(payload?.line || "").trim();
         timeTraceLine.value = line;
+      });
+      qiWs.on("review_memories", (payload: ReviewMemoriesPayload) => {
+        const rows = Array.isArray(payload?.items) ? payload.items : [];
+        reviewMemories.value = rows
+          .map((r) => ({
+            id: Number(r.id) || 0,
+            content: String(r.content || "").trim(),
+            strength: Number(r.strength) || 0,
+            opacity: Number(r.opacity) || 0.32,
+            fading: Boolean(r.fading),
+            whisper: String(r.whisper || "").trim(),
+            at: typeof r.at === "number" ? r.at : 0,
+          }))
+          .filter((r) => r.id && r.content);
       });
       qiWs.on("system_notice", (payload: SystemNoticePayload) => {
         if (!payload?.message?.trim()) return;
@@ -857,6 +884,7 @@ function createQi() {
     inStasis,
     presenceStatus,
     timeTraceLine,
+    reviewMemories,
     talk,
     talkByDay,
     creationCards,
@@ -874,6 +902,7 @@ function createQi() {
     refreshHistory,
     requestWake,
     requestTimeTraces,
+    requestReviewMemories,
   };
 }
 

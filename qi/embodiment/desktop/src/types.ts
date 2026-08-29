@@ -143,6 +143,21 @@ export type TimeTracesPayload = {
   days_known?: number;
 };
 
+/** 方向 D：回顾 · 记忆褪色条目 */
+export type ReviewMemoryItem = {
+  id: number;
+  content: string;
+  strength: number;
+  opacity: number;
+  fading: boolean;
+  whisper: string;
+  at: number;
+};
+
+export type ReviewMemoriesPayload = {
+  items: ReviewMemoryItem[];
+};
+
 export type ServerMessage =
   | { type: "speech"; payload: SpeechPayload }
   | { type: "speech_delta"; payload: SpeechStreamDeltaPayload }
@@ -164,6 +179,7 @@ export type ServerMessage =
   | { type: "presence"; payload: { online: boolean } }
   | { type: "emotion_update"; payload: EmotionSnapshot }
   | { type: "time_traces"; payload: TimeTracesPayload }
+  | { type: "review_memories"; payload: ReviewMemoriesPayload }
   | { type: "ping"; payload: { ts: number } }
   | { type: "audio"; payload: { data: string; mime?: string } }
   | {

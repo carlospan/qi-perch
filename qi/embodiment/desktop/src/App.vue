@@ -22,6 +22,7 @@ const {
   inStasis,
   presenceStatus,
   timeTraceLine,
+  reviewMemories,
   avatar,
   replyEpoch,
   talkByDay,
@@ -185,6 +186,7 @@ onUnmounted(() => disconnect());
                 <ReviewView
                   :creations="creationCards"
                   :explores="exploreCards"
+                  :memories="reviewMemories"
                 />
               </div>
 
