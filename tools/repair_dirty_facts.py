@@ -4,7 +4,7 @@
 ----
 包 19 收紧 looks_like_person_name 后，用新门控动态扫描 active identity：
 片段经 identity_name_fragment 取出后不再像人名 → retire（superseded_by=自身）。
-不写死 id；预演须保留真名「潘纪振」类合法条目。
+不写死 id；预演须保留真名「阿振」类合法条目。
 
 - 预演（默认）：列出命中与判定理由，不改库。
 - --apply：retire，不硬删。
@@ -39,7 +39,7 @@ from qi.memory.facts import (  # noqa: E402
 )
 
 DEFAULT_DB = "data/qi.db"
-_KEEP_NAME = "潘纪振"
+_KEEP_NAME = "阿振"
 
 
 def find_dirty_identity(conn: sqlite3.Connection) -> tuple[list[dict], list[dict]]:

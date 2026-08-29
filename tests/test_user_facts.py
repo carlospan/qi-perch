@@ -326,7 +326,7 @@ async def test_name_question_does_not_extract_ma(db_store):
 
 @pytest.mark.asyncio
 async def test_awaiting_name_bare_utterance_script(db_store):
-    """实测剧本：我是说我的名字 →（栖邀名）→ 潘纪振。"""
+    """实测剧本：我是说我的名字 →（栖邀名）→ 阿振。"""
     _, store = db_store
     noticer = FactNoticer(store, llm=None)
     t0 = datetime(2026, 7, 23, 22, 21, 0)
@@ -343,7 +343,7 @@ async def test_awaiting_name_bare_utterance_script(db_store):
         {"role": "qi", "content": "好啊，你告诉我。"},
     ]
     r1 = await noticer.notice(
-        "潘纪振",
+        "阿振",
         EmotionState(),
         "stranger",
         now=t1,
@@ -353,7 +353,7 @@ async def test_awaiting_name_bare_utterance_script(db_store):
     assert r1[0]["action"] in ("add", "supersede")
     facts = await store.active_facts("identity")
     assert len(facts) == 1
-    assert "潘纪振" in facts[0]["content"]
+    assert "阿振" in facts[0]["content"]
 
 
 @pytest.mark.asyncio
@@ -370,7 +370,7 @@ async def test_awaiting_name_after_qi_asks_your_name(db_store):
         },
     ]
     results = await noticer.notice(
-        "潘纪振",
+        "阿振",
         EmotionState(),
         "stranger",
         now=now,
@@ -379,7 +379,7 @@ async def test_awaiting_name_after_qi_asks_your_name(db_store):
     assert len(results) == 1
     facts = await store.active_facts("identity")
     assert len(facts) == 1
-    assert "潘纪振" in facts[0]["content"]
+    assert "阿振" in facts[0]["content"]
 
 
 @pytest.mark.asyncio
@@ -388,7 +388,7 @@ async def test_bare_name_without_await_ignored(db_store):
     noticer = FactNoticer(store, llm=None)
     now = datetime(2026, 7, 23, 12, 0)
     results = await noticer.notice(
-        "潘纪振", EmotionState(), "stranger", now=now
+        "阿振", EmotionState(), "stranger", now=now
     )
     assert results == []
     assert await store.active_facts("identity") == []
@@ -418,7 +418,7 @@ async def test_purge_bogus_identity_on_notice(db_store):
 async def test_looks_like_person_name_gate():
     from qi.memory.facts import looks_like_person_name
 
-    assert looks_like_person_name("潘纪振")
+    assert looks_like_person_name("阿振")
     assert looks_like_person_name("小明")
     assert not looks_like_person_name("吗")
     assert not looks_like_person_name("什么")
@@ -686,16 +686,16 @@ async def test_correction_signal_requires_name_context(db_store):
     db, store = db_store
     noticer = FactNoticer(store, llm=None)
     now = datetime(2026, 7, 31, 22, 11)
-    await noticer.notice("我叫潘纪振", EmotionState(), "bonded", now=now)
+    await noticer.notice("我叫阿振", EmotionState(), "bonded", now=now)
 
     # 非名字语境的「其实是」不触发改名
     await noticer.notice("你的记忆其实是存在我本地", EmotionState(), "bonded", now=now)
     facts = await store.active_facts("identity")
     assert len(facts) == 1
-    assert "潘纪振" in facts[0]["content"]
+    assert "阿振" in facts[0]["content"]
 
     # 真改名（带「叫」语境）仍工作
-    await noticer.notice("我不叫潘纪振，其实我叫小明", EmotionState(), "bonded", now=now)
+    await noticer.notice("我不叫阿振，其实我叫小明", EmotionState(), "bonded", now=now)
     facts = await store.active_facts("identity")
     assert any("小明" in (f.get("content") or "") for f in facts)
 

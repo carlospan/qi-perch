@@ -401,7 +401,7 @@ def test_free_talk_skips_irrelevant_memory():
 
 def test_knowledge_probe_uses_facts_not_narrative():
     """「了解多少」走 facts，不灌旧叙事。"""
-    facts = "- name：潘纪振\n- hometown：湖南\n- occupation：在上班"
+    facts = "- name：阿振\n- hometown：湖南\n- occupation：在上班"
     card = build_intention_card(
         channel="dialogue",
         user_message="你现在对我了解多少",
@@ -497,7 +497,7 @@ def test_presence_ping_does_not_arm_teach_relation():
     """「你在吗」即便 facts 含施教真值，也不得钉 taught_by_qi（#1379）。"""
     facts = (
         "入睡方法这件事：是栖教他的（允许自己躺着），不是他教栖。"
-        "他叫潘纪振。"
+        "他叫阿振。"
     )
     card = build_intention_card(
         channel="dialogue",
@@ -558,7 +558,7 @@ def test_anchor_teaching_relation_facts_fallback():
     assert "是你（栖）教给用户的" in hint
     # 无 facts / 无方向信息时不锚定
     assert anchor_teaching_relation([], facts_text="") == ""
-    assert anchor_teaching_relation([], facts_text="- identity：他叫潘纪振") == ""
+    assert anchor_teaching_relation([], facts_text="- identity：他叫阿振") == ""
     # 冲突（两个方向都有）不锚定
     conflict = facts + "\n- life_event：他教栖认星星"
     assert anchor_teaching_relation([], facts_text=conflict) == ""

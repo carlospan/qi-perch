@@ -404,7 +404,7 @@ def format_facts_for_prompt(facts: list[dict], relationship_stage: str) -> str:
 
 - [x] 说"我叫小明"后，user_facts 出现一条 `identity` 事实，confidence≈0.95，stability=stable
 - [x] 身份事实在 stranger 阶段也被记下（不受阶段门控）
-- [x] 「记得我的名字吗」类问句不误抽；「我是说我的名字」→ 光给「潘纪振」可落库
+- [x] 「记得我的名字吗」类问句不误抽；「我是说我的名字」→ 光给「阿振」可落库
 - [x] 形态非法的旧 identity（如「他叫吗」）会被作废，不进 prompt
 - [x] 其他事实在 stranger 阶段**不**被记下；acquaintance 及以上才记
 - [x] 无关闲聊不产生事实、不触发 LLM 调用

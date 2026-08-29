@@ -2,7 +2,7 @@
 
 背景
 ----
-包 19 验收实测发现（2026-08-04）：user_facts id=1「他叫潘纪振」在
+包 19 验收实测发现（2026-08-04）：user_facts id=1「他叫阿振」在
 7/30 时期被脏事实 id=18「他希望被叫做过去拿」supersede 顶掉；包 16
 清退了 id=18 自身，但真名未恢复——当前 active identity 中无任何姓名
 事实，栖冷启动后将不记得用户真名。附带损伤：id=15「他觉得自己聪明」
@@ -32,7 +32,7 @@ DEFAULT_DB = "data/qi.db"
 
 # 待恢复条目：(fact_type, content) —— 内容完全匹配才恢复，防误改
 _RESTORE_TARGETS = [
-    ("identity", "他叫潘纪振"),        # 真名（必恢复）
+    ("identity", "他叫阿振"),        # 真名（必恢复）
     ("identity", "他觉得自己聪明"),     # 被脏事实 #24 顶掉的附带损伤
 ]
 
@@ -84,7 +84,7 @@ def main() -> int:
             return 0
 
         # 安全断言：真名条目必须存在且仅一条
-        real_names = [r for r in rows if r["content"] == "他叫潘纪振"]
+        real_names = [r for r in rows if r["content"] == "他叫阿振"]
         if len(real_names) != 1:
             print("[错误] 真名条目数量异常，中止。", file=sys.stderr)
             return 2
@@ -108,7 +108,7 @@ def main() -> int:
         print(f"[OK] 已恢复 {len(to_restore)} 条。当前 active identity：")
         for r in actives:
             print(f"  id={r['id']}  {r['content']}")
-        if not any(r["content"] == "他叫潘纪振" for r in actives):
+        if not any(r["content"] == "他叫阿振" for r in actives):
             print("[错误] 复查失败：真名仍不在 active！", file=sys.stderr)
             return 2
         return 0
