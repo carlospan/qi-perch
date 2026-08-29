@@ -421,6 +421,8 @@ class EmbodimentServer:
                 await self._send_history_before(websocket, before_id)
             elif cmd == "/journal":
                 await self._send_journal(websocket)
+            elif cmd == "/time_traces":
+                await self._send_time_traces(websocket)
             elif cmd == "/wake":
                 result = await self.brain.resume_from_stasis()
                 await self.broadcast(
@@ -639,6 +641,39 @@ class EmbodimentServer:
                 return
             except Exception:
                 logger.debug("向请求方发送 journal 失败", exc_info=True)
+        await self.broadcast(packet)
+
+    async def _send_time_traces(self, websocket: Any | None) -> None:
+        """方向 D：时间的痕迹旁白（真统计；非 speech）。"""
+        from qi.embodiment.time_traces import (
+            format_time_trace_line,
+            gather_time_trace_stats,
+        )
+
+        db = getattr(self.brain, "_db", None)
+        stats = {"remembered": 0, "fading": 0, "days_known": 1}
+        try:
+            stats = await gather_time_trace_stats(db)
+        except Exception:
+            logger.exception("拉取时间痕迹失败")
+
+        line = format_time_trace_line(stats)
+        packet = {
+            "type": "time_traces",
+            "payload": {
+                "line": line,
+                "remembered": stats["remembered"],
+                "fading": stats["fading"],
+                "days_known": stats["days_known"],
+            },
+        }
+        raw = json.dumps(packet, ensure_ascii=False)
+        if websocket is not None:
+            try:
+                await websocket.send(raw)
+                return
+            except Exception:
+                logger.debug("向请求方发送 time_traces 失败", exc_info=True)
         await self.broadcast(packet)
 
     async def broadcast(self, message: dict) -> None:

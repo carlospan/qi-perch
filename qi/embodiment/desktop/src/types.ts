@@ -135,6 +135,14 @@ export type SpeechStreamRetractPayload = {
   id: string;
 };
 
+/** 方向 D：时间的痕迹（非 speech） */
+export type TimeTracesPayload = {
+  line: string;
+  remembered?: number;
+  fading?: number;
+  days_known?: number;
+};
+
 export type ServerMessage =
   | { type: "speech"; payload: SpeechPayload }
   | { type: "speech_delta"; payload: SpeechStreamDeltaPayload }
@@ -155,6 +163,7 @@ export type ServerMessage =
   | { type: "turn_interrupted"; payload: TurnInterruptedPayload }
   | { type: "presence"; payload: { online: boolean } }
   | { type: "emotion_update"; payload: EmotionSnapshot }
+  | { type: "time_traces"; payload: TimeTracesPayload }
   | { type: "ping"; payload: { ts: number } }
   | { type: "audio"; payload: { data: string; mime?: string } }
   | {

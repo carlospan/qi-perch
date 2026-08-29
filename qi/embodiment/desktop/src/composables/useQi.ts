@@ -5,7 +5,7 @@
  * 「内在」：/journal 灌独白 / 梦 / 第一次；无则诚实空占位。
  */
 
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useEmotion } from "./useEmotion";
 import type {
   ActionPayload,
@@ -25,6 +25,7 @@ import type {
   TalkCardItem,
   TalkItem,
   TalkMessage,
+  TimeTracesPayload,
   TurnInterruptedPayload,
 } from "../types";
 import { qiWs } from "../ws";
@@ -154,6 +155,8 @@ function createQi() {
   const historyPrependTick = ref(0);
   /** 内在日记（启动后由 /journal 灌入；库空则保持空） */
   const journal = ref<JournalEntry[]>([]);
+  /** 方向 D：存在页底部时间痕迹旁白 */
+  const timeTraceLine = ref("");
 
   const mode = computed(() => {
     if (emotion.value.stasis || emotion.value.mode === "stasis") {
@@ -613,6 +616,10 @@ function createQi() {
     qiWs.send({ type: "command", payload: { text: "/journal" } });
   }
 
+  function requestTimeTraces() {
+    qiWs.send({ type: "command", payload: { text: "/time_traces" } });
+  }
+
   function requestWake() {
     if (!connected.value) return;
     qiWs.send({ type: "command", payload: { text: "/wake" } });
@@ -622,6 +629,12 @@ function createQi() {
     qiWs.setPresence(document.visibilityState === "visible");
   }
 
+  watch(view, (next, prev) => {
+    if (next === "presence" && prev !== "presence" && connected.value) {
+      requestTimeTraces();
+    }
+  });
+
   function connect() {
     if (!wired) {
       wired = true;
@@ -630,6 +643,7 @@ function createQi() {
         requestEmotionSnapshot();
         requestHistory();
         requestJournal();
+        requestTimeTraces();
       });
       qiWs.on("close", () => {
         connected.value = false;
@@ -638,6 +652,10 @@ function createQi() {
         setTyping(true);
         speaking.value = false;
         noteReplyStart();
+      });
+      qiWs.on("time_traces", (payload: TimeTracesPayload) => {
+        const line = String(payload?.line || "").trim();
+        timeTraceLine.value = line;
       });
       qiWs.on("system_notice", (payload: SystemNoticePayload) => {
         if (!payload?.message?.trim()) return;
@@ -810,6 +828,16 @@ function createQi() {
     () => mode.value === "stasis" || Boolean(emotion.value.stasis)
   );
 
+  /** 形象旁真状态短旁白（非 speech） */
+  const presenceStatus = computed(() => {
+    if (typing.value) return "正在回你";
+    if (avatar.value.posture === "thinking") return "在想";
+    if (inStasis.value || mode.value === "stasis") return "睡着了";
+    if (mode.value === "dreaming") return "在做梦";
+    if (mode.value === "solitary") return "自己待着";
+    return "在这儿";
+  });
+
   return {
     view,
     connected,
@@ -827,6 +855,8 @@ function createQi() {
     avatar,
     mode,
     inStasis,
+    presenceStatus,
+    timeTraceLine,
     talk,
     talkByDay,
     creationCards,
@@ -843,6 +873,7 @@ function createQi() {
     disconnect,
     refreshHistory,
     requestWake,
+    requestTimeTraces,
   };
 }
 

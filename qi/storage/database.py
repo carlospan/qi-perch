@@ -646,6 +646,46 @@ class Database:
             rows = await cursor.fetchall()
         return [int(r["id"]) for r in rows]
 
+    async def count_narrative_by_strength_bands(
+        self,
+        *,
+        recall_min: float = 0.2,
+        forget_below: float = 0.1,
+    ) -> dict:
+        """方向 D：记得 / 正在淡去（未归档）。忘却带 strength < forget_below 不计入。"""
+        conn = self._require_conn()
+        async with conn.execute(
+            """
+            SELECT
+              SUM(CASE WHEN strength >= ? THEN 1 ELSE 0 END) AS remembered,
+              SUM(
+                CASE
+                  WHEN strength >= ? AND strength < ? THEN 1
+                  ELSE 0
+                END
+              ) AS fading
+            FROM narrative_memories
+            WHERE COALESCE(archived, 0) = 0
+            """,
+            (float(recall_min), float(forget_below), float(recall_min)),
+        ) as cursor:
+            row = await cursor.fetchone()
+        return {
+            "remembered": int(row["remembered"] or 0) if row else 0,
+            "fading": int(row["fading"] or 0) if row else 0,
+        }
+
+    async def first_message_at(self) -> str | None:
+        """最早一条对话时间戳（认识第 N 天用）。"""
+        conn = self._require_conn()
+        async with conn.execute(
+            "SELECT timestamp FROM messages ORDER BY timestamp ASC, id ASC LIMIT 1"
+        ) as cursor:
+            row = await cursor.fetchone()
+        if row is None:
+            return None
+        return str(row["timestamp"]) if row["timestamp"] is not None else None
+
     async def delete_narrative_memory(self, memory_id: int) -> None:
         conn = self._require_conn()
         await conn.execute("DELETE FROM narrative_memories WHERE id = ?", (memory_id,))

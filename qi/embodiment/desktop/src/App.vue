@@ -20,6 +20,8 @@ const {
   mode,
   emotion,
   inStasis,
+  presenceStatus,
+  timeTraceLine,
   avatar,
   replyEpoch,
   talkByDay,
@@ -47,6 +49,16 @@ const dreaming = computed(
 );
 /** 自然语言心境（后端 EmotionState.description，非数值标签） */
 const moodText = computed(() => (emotion.value.description || "").trim());
+/** 形象区极轻氛围：对应真状态 */
+const stageMood = computed(() => {
+  const s = presenceStatus.value;
+  if (s === "正在回你") return "replying";
+  if (s === "在想") return "thinking";
+  if (s === "睡着了") return "stasis";
+  if (s === "在做梦") return "dreaming";
+  if (s === "自己待着") return "solitary";
+  return "ambient";
+});
 
 onMounted(() => {
   connect();
@@ -98,7 +110,7 @@ onUnmounted(() => disconnect());
               :class="{ 'is-hidden': view !== 'presence' }"
               :aria-hidden="view !== 'presence'"
             >
-              <div class="presence-stage">
+              <div class="presence-stage" :data-mood="stageMood">
                 <div class="presence-stage-vignette" aria-hidden="true" />
                 <PresenceVrm
                   :active="view === 'presence'"
@@ -106,6 +118,20 @@ onUnmounted(() => disconnect());
                   :typing="typing"
                   :speech-tick="replyEpoch"
                 />
+                <p
+                  v-if="presenceStatus"
+                  class="presence-status"
+                  aria-live="polite"
+                >
+                  {{ presenceStatus }}
+                </p>
+                <p
+                  v-if="timeTraceLine"
+                  class="time-trace"
+                  aria-live="polite"
+                >
+                  {{ timeTraceLine }}
+                </p>
               </div>
               <div class="presence-chat">
                 <div class="presence-chat-bg" aria-hidden="true" />
@@ -411,6 +437,64 @@ h1 {
     color-mix(in srgb, var(--night) 92%, transparent) 0%,
     color-mix(in srgb, var(--night) 98%, transparent) 100%
   );
+  transition: filter 0.6s ease, opacity 0.6s ease;
+}
+
+.presence-stage[data-mood="thinking"] {
+  filter: brightness(1.04);
+}
+
+.presence-stage[data-mood="replying"] {
+  filter: brightness(1.06);
+}
+
+.presence-stage[data-mood="dreaming"] {
+  filter: brightness(0.92) saturate(0.9);
+}
+
+.presence-stage[data-mood="stasis"] {
+  filter: brightness(0.88) saturate(0.75);
+}
+
+.presence-stage[data-mood="solitary"] {
+  filter: brightness(0.96);
+}
+
+.presence-status {
+  position: absolute;
+  left: 50%;
+  bottom: 4.6rem;
+  z-index: 3;
+  transform: translateX(-50%);
+  margin: 0;
+  max-width: 90%;
+  padding: 0 0.5rem;
+  text-align: center;
+  font-family: var(--serif, "Noto Serif SC", "Songti SC", serif);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  color: color-mix(in srgb, var(--ink) 55%, transparent);
+  pointer-events: none;
+  text-shadow: 0 1px 8px rgba(5, 8, 14, 0.55);
+}
+
+.time-trace {
+  position: absolute;
+  left: 50%;
+  bottom: 1.1rem;
+  z-index: 3;
+  transform: translateX(-50%);
+  margin: 0;
+  max-width: 92%;
+  padding: 0 0.65rem;
+  text-align: center;
+  font-family: var(--serif, "Noto Serif SC", "Songti SC", serif);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--ink-dim, var(--ink)) 42%, transparent);
+  pointer-events: none;
+  text-shadow: 0 1px 10px rgba(5, 8, 14, 0.65);
 }
 
 .presence-stage-vignette {
