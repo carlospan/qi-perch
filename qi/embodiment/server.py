@@ -14,6 +14,8 @@ WS_HOST = "127.0.0.1"
 WS_PORT = 9527
 # 桌面 /history 默认窗口（旧→新中的最近 N 条）；避免库长大后全表推送
 HISTORY_WINDOW = 200
+# 上翻加载更早：每页条数
+HISTORY_PAGE = 50
 # 与 history 同窗回灌的创作卡片上限（按 shared_at 新→旧再裁到窗口）
 HISTORY_CARD_LIMIT = 40
 
@@ -370,6 +372,13 @@ class EmbodimentServer:
                 await self.broadcast(self._state_packet())
             elif cmd == "/history":
                 await self._send_history(websocket)
+            elif cmd == "/history_before":
+                raw_before = payload.get("before_id")
+                try:
+                    before_id = int(raw_before)
+                except (TypeError, ValueError):
+                    before_id = 0
+                await self._send_history_before(websocket, before_id)
             elif cmd == "/journal":
                 await self._send_journal(websocket)
             elif cmd == "/wake":
@@ -480,16 +489,7 @@ class EmbodimentServer:
         await self.send_speech(ack, emotion=emotion, tone="quiet")
         self._turn_user_text = None
 
-    async def _send_history(self, websocket: Any | None) -> None:
-        """把最近 HISTORY_WINDOW 条对话 + 同窗创作卡推给请求方（本机单用户；无 websocket 则广播）。"""
-        db = getattr(self.brain, "_db", None)
-        rows: list[dict] = []
-        if db is not None:
-            try:
-                rows = await db.load_messages(limit=HISTORY_WINDOW)
-            except Exception:
-                logger.exception("拉取对话历史失败")
-
+    def _format_history_messages(self, rows: list[dict]) -> list[dict]:
         messages = []
         for r in rows:
             role = r.get("role")
@@ -510,6 +510,19 @@ class EmbodimentServer:
                     "tone": r.get("tone") or "",
                 }
             )
+        return messages
+
+    async def _send_history(self, websocket: Any | None) -> None:
+        """把最近 HISTORY_WINDOW 条对话 + 同窗创作卡推给请求方（本机单用户；无 websocket 则广播）。"""
+        db = getattr(self.brain, "_db", None)
+        rows: list[dict] = []
+        if db is not None:
+            try:
+                rows = await db.load_messages(limit=HISTORY_WINDOW)
+            except Exception:
+                logger.exception("拉取对话历史失败")
+
+        messages = self._format_history_messages(rows)
 
         cards: list[dict] = []
         if db is not None:
@@ -523,7 +536,11 @@ class EmbodimentServer:
 
         packet = {
             "type": "history",
-            "payload": {"messages": messages, "cards": cards},
+            "payload": {
+                "messages": messages,
+                "cards": cards,
+                "has_more": len(rows) >= HISTORY_WINDOW,
+            },
         }
         raw = json.dumps(packet, ensure_ascii=False)
         if websocket is not None:
@@ -532,6 +549,36 @@ class EmbodimentServer:
                 return
             except Exception:
                 logger.debug("向请求方发送 history 失败", exc_info=True)
+        await self.broadcast(packet)
+
+    async def _send_history_before(
+        self, websocket: Any | None, before_id: int
+    ) -> None:
+        """上翻：before_id 之前最多 HISTORY_PAGE 条文本（无卡片）。"""
+        db = getattr(self.brain, "_db", None)
+        rows: list[dict] = []
+        if db is not None and before_id > 0:
+            try:
+                rows = await db.load_messages_before(before_id, limit=HISTORY_PAGE)
+            except Exception:
+                logger.exception("拉取更早对话失败")
+
+        messages = self._format_history_messages(rows)
+        packet = {
+            "type": "history_page",
+            "payload": {
+                "messages": messages,
+                "has_more": len(rows) >= HISTORY_PAGE,
+                "before_id": before_id,
+            },
+        }
+        raw = json.dumps(packet, ensure_ascii=False)
+        if websocket is not None:
+            try:
+                await websocket.send(raw)
+                return
+            except Exception:
+                logger.debug("向请求方发送 history_page 失败", exc_info=True)
         await self.broadcast(packet)
 
     async def _send_journal(self, websocket: Any | None) -> None:

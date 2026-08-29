@@ -26,6 +26,10 @@ const {
   creationCards,
   exploreCards,
   journal,
+  historyExhausted,
+  historyLoadingOlder,
+  historyPrependTick,
+  requestHistoryOlder,
   systemNotice,
   dismissSystemNotice,
   composerPrefill,
@@ -112,7 +116,11 @@ onUnmounted(() => disconnect());
                     layout="desktop"
                     :groups="talkByDay"
                     :typing="typing"
+                    :history-exhausted="historyExhausted"
+                    :history-loading="historyLoadingOlder"
+                    :prepend-tick="historyPrependTick"
                     @send="send"
+                    @need-older="requestHistoryOlder"
                   />
                 </div>
                 <footer v-show="view === 'presence'" class="composer-inline">

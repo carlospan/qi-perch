@@ -14,15 +14,30 @@ const props = withDefaults(
     typing?: boolean;
     /** desktop：右栏对话面板，弱化全屏遮罩 */
     layout?: "default" | "desktop";
+    historyExhausted?: boolean;
+    historyLoading?: boolean;
+    /** 递增表示刚 prepend，应保阅读位置 */
+    prependTick?: number;
   }>(),
-  { layout: "default" }
+  {
+    layout: "default",
+    historyExhausted: false,
+    historyLoading: false,
+    prependTick: 0,
+  }
 );
 
 const emit = defineEmits<{
   send: [text: string];
+  needOlder: [];
 }>();
 
 const body = ref<HTMLElement | null>(null);
+/** 贴底跟随新消息；上翻阅读时关闭 */
+let stickBottom = true;
+let savedScrollHeight = 0;
+let savedScrollTop = 0;
+let expectPrepend = false;
 
 function timeLabel(at: number) {
   const d = new Date(at);
@@ -34,16 +49,52 @@ function timeLabel(at: number) {
 /** 视口锚定到时间线尾部（最新消息） */
 async function scrollBottom() {
   await nextTick();
-  // 等 Transition / 布局完成后再滚，避免 scrollHeight 仍是旧值
   await new Promise<void>((r) => requestAnimationFrame(() => r()));
   await new Promise<void>((r) => requestAnimationFrame(() => r()));
   const el = body.value;
   if (el) el.scrollTop = el.scrollHeight;
 }
 
+async function restoreAfterPrepend() {
+  await nextTick();
+  await new Promise<void>((r) => requestAnimationFrame(() => r()));
+  await new Promise<void>((r) => requestAnimationFrame(() => r()));
+  const el = body.value;
+  if (!el) return;
+  const delta = el.scrollHeight - savedScrollHeight;
+  el.scrollTop = savedScrollTop + delta;
+}
+
+function onScroll() {
+  const el = body.value;
+  if (!el) return;
+  const distBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+  stickBottom = distBottom < 96;
+  if (
+    el.scrollTop < 72 &&
+    !props.historyLoading &&
+    !props.historyExhausted
+  ) {
+    savedScrollHeight = el.scrollHeight;
+    savedScrollTop = el.scrollTop;
+    expectPrepend = true;
+    emit("needOlder");
+  }
+}
+
 onMounted(() => {
   void scrollBottom();
 });
+
+watch(
+  () => props.prependTick,
+  (n, prev) => {
+    if (n && n !== prev) {
+      expectPrepend = false;
+      void restoreAfterPrepend();
+    }
+  }
+);
 
 watch(
   () =>
@@ -57,7 +108,8 @@ watch(
       )
       .join(";"),
   () => {
-    void scrollBottom();
+    if (expectPrepend) return;
+    if (stickBottom) void scrollBottom();
   },
   { immediate: true }
 );
@@ -65,7 +117,7 @@ watch(
 watch(
   () => props.typing,
   (on) => {
-    if (on) void scrollBottom();
+    if (on && stickBottom) void scrollBottom();
   }
 );
 </script>
@@ -76,7 +128,13 @@ watch(
       <span class="t">相处</span>
       <span class="sub">此刻的对话</span>
     </div>
-    <div ref="body" class="panel-body">
+    <div ref="body" class="panel-body" @scroll.passive="onScroll">
+      <p v-if="historyExhausted" class="history-end" aria-live="polite">
+        没有更早的了
+      </p>
+      <p v-else-if="historyLoading" class="history-loading" aria-live="polite">
+        加载更早…
+      </p>
       <p v-if="groups.length === 0 && !typing" class="empty">
         还没有说过话。说一句，会留在这里——下次打开也能看见。
       </p>
@@ -214,6 +272,16 @@ watch(
   text-align: center;
   font-size: 13px;
   line-height: 1.7;
+  color: var(--ink-faint);
+  font-weight: 300;
+}
+
+.history-end,
+.history-loading {
+  margin: 8px 12px 4px;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.5px;
   color: var(--ink-faint);
   font-weight: 300;
 }

@@ -163,6 +163,15 @@ export type ServerMessage =
         messages: TalkMessage[];
         /** 创作卡 + 见闻卡回灌（可选；旧后端无此字段） */
         cards?: Array<(CreationCard | ExploreCard | AssistConfirmCard) & { at?: number }>;
+        has_more?: boolean;
+      };
+    }
+  | {
+      type: "history_page";
+      payload: {
+        messages: TalkMessage[];
+        has_more: boolean;
+        before_id?: number;
       };
     }
   | { type: "journal"; payload: { entries: JournalEntry[] } }
@@ -184,7 +193,10 @@ export type ClientMessage =
   | { type: "turn_control"; payload: { action: "rephrase" | "stop" } }
   | { type: "presence"; payload: { online: boolean } }
   | { type: "pong"; payload: { ts: number } }
-  | { type: "command"; payload: { text: string } };
+  | {
+      type: "command";
+      payload: { text: string; before_id?: number };
+    };
 
 /** 相处 / 回顾 / 内在 */
 export type QiView = "presence" | "review" | "inner" | "state";

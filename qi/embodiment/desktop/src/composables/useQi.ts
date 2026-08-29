@@ -145,6 +145,13 @@ function createQi() {
   /** 创作 / 见闻 / assist 确认卡（随 /history.cards 回灌） */
   const cards = ref<TalkCardItem[]>([]);
   const historyLoaded = ref(false);
+  /** 是否还有更早文本可上翻 */
+  const historyHasMore = ref(true);
+  const historyLoadingOlder = ref(false);
+  /** 到头轻提示（谈区顶） */
+  const historyExhausted = ref(false);
+  /** 通知 TalkView：刚完成一次 prepend，请保位置 */
+  const historyPrependTick = ref(0);
   /** 内在日记（启动后由 /journal 灌入；库空则保持空） */
   const journal = ref<JournalEntry[]>([]);
 
@@ -481,7 +488,7 @@ function createQi() {
     speaking.value = false;
   }
 
-  function applyHistory(messages: TalkMessage[]) {
+  function applyHistory(messages: TalkMessage[], hasMore?: boolean) {
     const pendingMine =
       typing.value && talk.value.length
         ? talk.value.filter((m) => m.role === "me").slice(-1)
@@ -498,6 +505,13 @@ function createQi() {
       }));
 
     historyLoaded.value = true;
+    if (typeof hasMore === "boolean") {
+      historyHasMore.value = hasMore;
+      historyExhausted.value = !hasMore;
+    } else {
+      historyHasMore.value = true;
+      historyExhausted.value = false;
+    }
 
     for (const m of pendingMine) {
       const already = talk.value.some(
@@ -505,6 +519,61 @@ function createQi() {
       );
       if (!already) talk.value.push(m);
     }
+  }
+
+  function applyHistoryPage(messages: TalkMessage[], hasMore: boolean) {
+    historyLoadingOlder.value = false;
+    historyHasMore.value = hasMore;
+    if (!hasMore) historyExhausted.value = true;
+
+    const incoming = (messages ?? [])
+      .filter((m) => m.text?.trim())
+      .map((m) => ({
+        id: m.id || uid(m.role),
+        role: (m.role === "me" ? "me" : "qi") as "qi" | "me",
+        text: m.text.trim(),
+        at: typeof m.at === "number" ? m.at : Date.now(),
+        tone: m.tone,
+      }));
+    if (!incoming.length) {
+      if (!hasMore) historyExhausted.value = true;
+      historyPrependTick.value += 1;
+      return;
+    }
+    const seen = new Set(talk.value.map((m) => m.id));
+    const fresh = incoming.filter((m) => !seen.has(m.id));
+    if (!fresh.length) {
+      if (!hasMore) historyExhausted.value = true;
+      historyPrependTick.value += 1;
+      return;
+    }
+    talk.value = [...fresh, ...talk.value];
+    historyPrependTick.value += 1;
+  }
+
+  function oldestDbMessageId(): number | null {
+    for (const m of talk.value) {
+      const match = /^db-(\d+)$/.exec(m.id);
+      if (match) return Number(match[1]);
+    }
+    return null;
+  }
+
+  function requestHistoryOlder() {
+    if (!connected.value || historyLoadingOlder.value || !historyHasMore.value) {
+      return;
+    }
+    const beforeId = oldestDbMessageId();
+    if (beforeId == null) {
+      historyHasMore.value = false;
+      historyExhausted.value = true;
+      return;
+    }
+    historyLoadingOlder.value = true;
+    qiWs.send({
+      type: "command",
+      payload: { text: "/history_before", before_id: beforeId },
+    });
   }
 
   function applyJournal(entries: JournalEntry[]) {
@@ -667,9 +736,19 @@ function createQi() {
         (payload: {
           messages?: TalkMessage[];
           cards?: Array<(CreationCard | ExploreCard) & { at?: number }>;
+          has_more?: boolean;
         }) => {
-          applyHistory(payload?.messages ?? []);
+          applyHistory(payload?.messages ?? [], payload?.has_more);
           applyHistoryCards(payload?.cards ?? []);
+        }
+      );
+      qiWs.on(
+        "history_page",
+        (payload: { messages?: TalkMessage[]; has_more?: boolean }) => {
+          applyHistoryPage(
+            payload?.messages ?? [],
+            payload?.has_more !== false
+          );
         }
       );
       qiWs.on("journal", (payload: { entries?: JournalEntry[] }) => {
@@ -769,6 +848,10 @@ function createQi() {
     pendingAssist,
     journal,
     historyLoaded,
+    historyExhausted,
+    historyLoadingOlder,
+    historyPrependTick,
+    requestHistoryOlder,
     send,
     connect,
     disconnect,

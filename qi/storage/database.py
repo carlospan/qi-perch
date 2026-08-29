@@ -488,6 +488,47 @@ class Database:
             for row in rows
         ]
 
+    async def load_messages_before(
+        self, before_id: int, limit: int = 50
+    ) -> list[dict]:
+        """
+        加载严格早于 before_id 的对话（旧→新），最多 limit 条。
+        按 (timestamp, id) 与 before 行比较，避免仅靠 id 在异常时钟下错序。
+        """
+        if before_id <= 0 or limit <= 0:
+            return []
+        conn = self._require_conn()
+        async with conn.execute(
+            "SELECT id, timestamp FROM messages WHERE id = ?",
+            (before_id,),
+        ) as cursor:
+            anchor = await cursor.fetchone()
+        if anchor is None:
+            return []
+        async with conn.execute(
+            """
+            SELECT id, role, content, timestamp, tone
+            FROM messages
+            WHERE timestamp < ?
+               OR (timestamp = ? AND id < ?)
+            ORDER BY timestamp DESC, id DESC
+            LIMIT ?
+            """,
+            (anchor["timestamp"], anchor["timestamp"], before_id, limit),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        rows = list(reversed(rows))
+        return [
+            {
+                "id": row["id"],
+                "role": row["role"],
+                "content": row["content"],
+                "timestamp": row["timestamp"],
+                "tone": row["tone"],
+            }
+            for row in rows
+        ]
+
     # ----- 原始事件 -----
 
     async def save_raw_event(
