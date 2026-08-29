@@ -309,8 +309,11 @@ class EmbodimentServer:
         payload = msg.get("payload") or {}
         if msg_type == "user_message":
             text = (payload.get("text") or "").strip()
+            client_id = str(payload.get("client_id") or "").strip()
             if not text:
                 return
+            # P0 ACK：先回执「接到了」，再处理（满/忙仍先 ACK）
+            await self.send_message_ack(client_id)
             await self._on_user_message(text)
         elif msg_type == "turn_control":
             action = str(payload.get("action") or "").strip().lower()
@@ -574,6 +577,15 @@ class EmbodimentServer:
 
     async def send_typing(self) -> None:
         await self.broadcast({"type": "typing", "payload": {}})
+
+    async def send_message_ack(self, client_id: str) -> None:
+        """发送回执：客户端 client_id 原样带回（可空，仍发 type 便于探测）。"""
+        await self.broadcast(
+            {
+                "type": "message_ack",
+                "payload": {"client_id": client_id or ""},
+            }
+        )
 
     async def send_system_notice(self, payload: dict) -> None:
         """系统态提示（失败可见）；非栖的 speech。"""

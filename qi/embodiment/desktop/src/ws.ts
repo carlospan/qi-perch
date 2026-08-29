@@ -64,8 +64,11 @@ export class QiWebSocket {
     }
   }
 
-  sendUserMessage(text: string) {
-    this.send({ type: "user_message", payload: { text } });
+  sendUserMessage(text: string, clientId?: string) {
+    this.send({
+      type: "user_message",
+      payload: { text, client_id: clientId || undefined },
+    });
   }
 
   setPresence(online: boolean) {

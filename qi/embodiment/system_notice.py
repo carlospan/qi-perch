@@ -5,7 +5,13 @@ from __future__ import annotations
 from typing import Literal
 
 SystemNoticeKind = Literal[
-    "missing_key", "unreachable", "empty", "timeout", "turn_busy", "queue_full"
+    "missing_key",
+    "unreachable",
+    "empty",
+    "timeout",
+    "turn_busy",
+    "queue_full",
+    "delivery_timeout",
 ]
 
 _MESSAGES: dict[SystemNoticeKind, str] = {
@@ -15,6 +21,7 @@ _MESSAGES: dict[SystemNoticeKind, str] = {
     "timeout": "等太久了，先解开输入。若稍后她仍回了，气泡仍会显示。",
     "turn_busy": "我还在想上一句。想改口可以直接说，或点「我想重说」。",
     "queue_full": "话说得有点密，这一句我还接不住。稍等我说完再发，或先「我想重说」。",
+    "delivery_timeout": "这句可能没送到。气泡还在，你可以再发一次。",
 }
 
 

@@ -15,6 +15,7 @@ import type {
   EmotionSnapshot,
   ExploreCard,
   JournalEntry,
+  MessageAckPayload,
   QiView,
   SpeechPayload,
   SpeechStreamDeltaPayload,
@@ -30,10 +31,18 @@ import { qiWs } from "../ws";
 
 /** 与 HITL：busy 约 60s 强制解锁 */
 const TYPING_TIMEOUT_MS = 60_000;
+/** 发送回执：约 3s 无 ACK → 可能没送到 */
+const ACK_TIMEOUT_MS = 3_000;
 
 const TIMEOUT_NOTICE: SystemNoticePayload = {
   kind: "timeout",
   message: "等太久了，先解开输入。若稍后她仍回了，气泡仍会显示。",
+  action: null,
+};
+
+const DELIVERY_TIMEOUT_NOTICE: SystemNoticePayload = {
+  kind: "delivery_timeout",
+  message: "这句可能没送到。气泡还在，你可以再发一次。",
   action: null,
 };
 
@@ -284,6 +293,8 @@ function createQi() {
   /** 进行中的流式气泡 id（WS stream id → talk message id） */
   let activeStreamId: string | null = null;
   let activeStreamTalkId: string | null = null;
+  /** client_id → 等待 ACK 的 timer */
+  const pendingAckTimers = new Map<string, number>();
 
   function clearTypingTimer() {
     if (typingTimer != null) {
@@ -300,6 +311,36 @@ function createQi() {
       typing.value = false;
       systemNotice.value = TIMEOUT_NOTICE;
     }, TYPING_TIMEOUT_MS);
+  }
+
+  function clearAckTimer(clientId: string) {
+    const t = pendingAckTimers.get(clientId);
+    if (t != null) {
+      window.clearTimeout(t);
+      pendingAckTimers.delete(clientId);
+    }
+  }
+
+  function clearAllAckTimers() {
+    for (const t of pendingAckTimers.values()) {
+      window.clearTimeout(t);
+    }
+    pendingAckTimers.clear();
+  }
+
+  function armAckTimeout(clientId: string) {
+    clearAckTimer(clientId);
+    const timer = window.setTimeout(() => {
+      pendingAckTimers.delete(clientId);
+      applySystemNotice(DELIVERY_TIMEOUT_NOTICE);
+    }, ACK_TIMEOUT_MS);
+    pendingAckTimers.set(clientId, timer);
+  }
+
+  function applyMessageAck(payload: MessageAckPayload) {
+    const id = String(payload?.client_id || "").trim();
+    if (id) clearAckTimer(id);
+    else clearAllAckTimers();
   }
 
   function setTyping(on: boolean) {
@@ -492,7 +533,9 @@ function createQi() {
     speech.value = "";
     speaking.value = false;
     appendTalk("me", value);
-    qiWs.sendUserMessage(value);
+    const clientId = uid("msg");
+    armAckTimeout(clientId);
+    qiWs.sendUserMessage(value, clientId);
   }
 
   function requestHistory() {
@@ -531,10 +574,15 @@ function createQi() {
       });
       qiWs.on("system_notice", (payload: SystemNoticePayload) => {
         if (!payload?.message?.trim()) return;
+        clearAllAckTimers();
         applySystemNotice(payload);
+      });
+      qiWs.on("message_ack", (payload: MessageAckPayload) => {
+        applyMessageAck(payload);
       });
       qiWs.on("turn_interrupted", (payload: TurnInterruptedPayload) => {
         setTyping(false);
+        clearAllAckTimers();
         retractActiveStreamBubble();
         const orig = (payload?.original_text || "").trim();
         // 若刚发了打断白话，先拿掉那条；再拿掉原句气泡
@@ -681,6 +729,7 @@ function createQi() {
   function disconnect() {
     document.removeEventListener("visibilitychange", onVis);
     clearTypingTimer();
+    clearAllAckTimers();
     if (emotionPoll != null) {
       clearInterval(emotionPoll);
       emotionPoll = null;

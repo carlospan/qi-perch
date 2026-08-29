@@ -16,6 +16,7 @@ def test_notice_payload_kinds():
         "timeout",
         "turn_busy",
         "queue_full",
+        "delivery_timeout",
     ):
         p = notice_payload(kind)  # type: ignore[arg-type]
         assert p["kind"] == kind

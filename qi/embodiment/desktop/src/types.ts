@@ -97,9 +97,20 @@ export type ActionPayload =
     };
 
 export type SystemNoticePayload = {
-  kind: "missing_key" | "unreachable" | "empty" | "timeout" | "turn_busy" | "queue_full";
+  kind:
+    | "missing_key"
+    | "unreachable"
+    | "empty"
+    | "timeout"
+    | "turn_busy"
+    | "queue_full"
+    | "delivery_timeout";
   message: string;
   action?: "open_settings" | null;
+};
+
+export type MessageAckPayload = {
+  client_id: string;
 };
 
 export type TurnInterruptedPayload = {
@@ -129,6 +140,7 @@ export type ServerMessage =
   | { type: "speech_delta"; payload: SpeechStreamDeltaPayload }
   | { type: "speech_done"; payload: SpeechStreamDonePayload }
   | { type: "speech_retract"; payload: SpeechStreamRetractPayload }
+  | { type: "message_ack"; payload: MessageAckPayload }
   | {
       type: "state";
       payload: {
@@ -168,7 +180,7 @@ export type TalkCardItem = {
 export type TalkItem = (TalkMessage & { kind: "text" }) | TalkCardItem;
 
 export type ClientMessage =
-  | { type: "user_message"; payload: { text: string } }
+  | { type: "user_message"; payload: { text: string; client_id?: string } }
   | { type: "turn_control"; payload: { action: "rephrase" | "stop" } }
   | { type: "presence"; payload: { online: boolean } }
   | { type: "pong"; payload: { ts: number } }
