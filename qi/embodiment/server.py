@@ -425,6 +425,8 @@ class EmbodimentServer:
                 await self._send_time_traces(websocket)
             elif cmd == "/review_memories":
                 await self._send_review_memories(websocket)
+            elif cmd == "/activity_glance":
+                await self._send_activity_glance(websocket)
             elif cmd == "/wake":
                 result = await self.brain.resume_from_stasis()
                 await self.broadcast(
@@ -699,6 +701,43 @@ class EmbodimentServer:
                 logger.debug("向请求方发送 review_memories 失败", exc_info=True)
         await self.broadcast(packet)
 
+    async def _send_activity_glance(self, websocket: Any | None) -> None:
+        """方向 D：存在页一行动向旁白。"""
+        packet = await self._activity_glance_packet()
+        raw = json.dumps(packet, ensure_ascii=False)
+        if websocket is not None:
+            try:
+                await websocket.send(raw)
+                return
+            except Exception:
+                logger.debug("向请求方发送 activity_glance 失败", exc_info=True)
+        await self.broadcast(packet)
+
+    async def _activity_glance_packet(self) -> dict:
+        from qi.embodiment.activity_glance import (
+            activity_glance_payload,
+            gather_activity_glance,
+        )
+
+        db = (
+            getattr(self.brain, "_db", None)
+            if self.brain is not None
+            else None
+        )
+        item = None
+        try:
+            item = await gather_activity_glance(db)
+        except Exception:
+            logger.exception("拉取动向旁白失败")
+        return {
+            "type": "activity_glance",
+            "payload": activity_glance_payload(item),
+        }
+
+    async def push_activity_glance(self) -> None:
+        """有新日记/创作/见闻后刷新动向旁白（可空 line）。"""
+        await self.broadcast(await self._activity_glance_packet())
+
     async def broadcast(self, message: dict) -> None:
         if not self.clients:
             return
@@ -716,6 +755,10 @@ class EmbodimentServer:
     async def notify_journal_entry(self, entry: dict) -> None:
         """实时推送单条内在日记（独白/梦/第一次）到前端。"""
         await self.broadcast({"type": "journal_entry", "payload": entry})
+        try:
+            await self.push_activity_glance()
+        except Exception:
+            logger.debug("日记后刷新动向失败", exc_info=True)
 
     async def send_state_change(self, avatar_state: dict) -> None:
         await self.broadcast({"type": "state", "payload": {"avatar_state": avatar_state}})

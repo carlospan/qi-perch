@@ -28,6 +28,7 @@ import type {
   TimeTracesPayload,
   ReviewMemoriesPayload,
   ReviewMemoryItem,
+  ActivityGlancePayload,
   TurnInterruptedPayload,
 } from "../types";
 import { qiWs } from "../ws";
@@ -161,6 +162,8 @@ function createQi() {
   const timeTraceLine = ref("");
   /** 方向 D：回顾「记忆」列表 */
   const reviewMemories = ref<ReviewMemoryItem[]>([]);
+  /** 方向 D：存在页一行动向旁白（无近事则空） */
+  const activityGlanceLine = ref("");
 
   const mode = computed(() => {
     if (emotion.value.stasis || emotion.value.mode === "stasis") {
@@ -628,6 +631,10 @@ function createQi() {
     qiWs.send({ type: "command", payload: { text: "/review_memories" } });
   }
 
+  function requestActivityGlance() {
+    qiWs.send({ type: "command", payload: { text: "/activity_glance" } });
+  }
+
   function requestWake() {
     if (!connected.value) return;
     qiWs.send({ type: "command", payload: { text: "/wake" } });
@@ -641,6 +648,7 @@ function createQi() {
     if (!connected.value) return;
     if (next === "presence" && prev !== "presence") {
       requestTimeTraces();
+      requestActivityGlance();
     }
     if (next === "review" && prev !== "review") {
       requestReviewMemories();
@@ -657,6 +665,7 @@ function createQi() {
         requestJournal();
         requestTimeTraces();
         requestReviewMemories();
+        requestActivityGlance();
       });
       qiWs.on("close", () => {
         connected.value = false;
@@ -669,6 +678,9 @@ function createQi() {
       qiWs.on("time_traces", (payload: TimeTracesPayload) => {
         const line = String(payload?.line || "").trim();
         timeTraceLine.value = line;
+      });
+      qiWs.on("activity_glance", (payload: ActivityGlancePayload) => {
+        activityGlanceLine.value = String(payload?.line || "").trim();
       });
       qiWs.on("review_memories", (payload: ReviewMemoriesPayload) => {
         const rows = Array.isArray(payload?.items) ? payload.items : [];
@@ -884,6 +896,7 @@ function createQi() {
     inStasis,
     presenceStatus,
     timeTraceLine,
+    activityGlanceLine,
     reviewMemories,
     talk,
     talkByDay,
@@ -903,6 +916,7 @@ function createQi() {
     requestWake,
     requestTimeTraces,
     requestReviewMemories,
+    requestActivityGlance,
   };
 }
 

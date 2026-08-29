@@ -171,3 +171,9 @@ async def deliver_action_result(brain: Brain, result: dict, now: datetime) -> No
             )
         except Exception:
             logger.exception("行动结果推送失败")
+        rtype = result.get("type")
+        if rtype in ("creation_card", "explore_drift"):
+            try:
+                await brain.embodiment.push_activity_glance()
+            except Exception:
+                logger.debug("行动后刷新动向失败", exc_info=True)

@@ -21,9 +21,12 @@ async def test_notify_journal_entry_broadcasts_payload():
     server.broadcast = AsyncMock()
     entry = {"kind": "独白", "text": "一点念头", "at": 123}
     await server.notify_journal_entry(entry)
-    server.broadcast.assert_awaited_once_with(
-        {"type": "journal_entry", "payload": entry}
-    )
+    types = [c.args[0]["type"] for c in server.broadcast.await_args_list]
+    assert "journal_entry" in types
+    assert server.broadcast.await_args_list[0].args[0] == {
+        "type": "journal_entry",
+        "payload": entry,
+    }
 
 
 @pytest.mark.asyncio

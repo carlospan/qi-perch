@@ -158,6 +158,15 @@ export type ReviewMemoriesPayload = {
   items: ReviewMemoryItem[];
 };
 
+/** 方向 D：存在页一行动向旁白 */
+export type ActivityGlancePayload = {
+  line: string;
+  source?: string;
+  kind?: string;
+  at?: number;
+  key?: string;
+};
+
 export type ServerMessage =
   | { type: "speech"; payload: SpeechPayload }
   | { type: "speech_delta"; payload: SpeechStreamDeltaPayload }
@@ -180,6 +189,7 @@ export type ServerMessage =
   | { type: "emotion_update"; payload: EmotionSnapshot }
   | { type: "time_traces"; payload: TimeTracesPayload }
   | { type: "review_memories"; payload: ReviewMemoriesPayload }
+  | { type: "activity_glance"; payload: ActivityGlancePayload }
   | { type: "ping"; payload: { ts: number } }
   | { type: "audio"; payload: { data: string; mime?: string } }
   | {

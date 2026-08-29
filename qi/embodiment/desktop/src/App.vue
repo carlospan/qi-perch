@@ -22,6 +22,7 @@ const {
   inStasis,
   presenceStatus,
   timeTraceLine,
+  activityGlanceLine,
   reviewMemories,
   avatar,
   replyEpoch,
@@ -125,6 +126,13 @@ onUnmounted(() => disconnect());
                   aria-live="polite"
                 >
                   {{ presenceStatus }}
+                </p>
+                <p
+                  v-if="activityGlanceLine"
+                  class="activity-glance"
+                  aria-live="polite"
+                >
+                  {{ activityGlanceLine }}
                 </p>
                 <p
                   v-if="timeTraceLine"
@@ -465,7 +473,7 @@ h1 {
 .presence-status {
   position: absolute;
   left: 50%;
-  bottom: 4.6rem;
+  bottom: 5.6rem;
   z-index: 3;
   transform: translateX(-50%);
   margin: 0;
@@ -478,6 +486,25 @@ h1 {
   color: color-mix(in srgb, var(--ink) 55%, transparent);
   pointer-events: none;
   text-shadow: 0 1px 8px rgba(5, 8, 14, 0.55);
+}
+
+.activity-glance {
+  position: absolute;
+  left: 50%;
+  bottom: 2.55rem;
+  z-index: 3;
+  transform: translateX(-50%);
+  margin: 0;
+  max-width: 92%;
+  padding: 0 0.65rem;
+  text-align: center;
+  font-family: var(--serif, "Noto Serif SC", "Songti SC", serif);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  letter-spacing: 0.07em;
+  color: color-mix(in srgb, var(--ink-dim, var(--ink)) 48%, transparent);
+  pointer-events: none;
+  text-shadow: 0 1px 10px rgba(5, 8, 14, 0.6);
 }
 
 .time-trace {
