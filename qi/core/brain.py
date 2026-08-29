@@ -106,6 +106,7 @@ class Brain:
         self.heartbeat_count = 0
         self._pending_queue: deque[str] = deque(maxlen=PENDING_QUEUE_MAX)
         self._pending_speech: _PendingSpeech | None = None
+        self._pending_system_notice: dict | None = None
         self._last_emotion_saved_at: datetime | None = None
         self._heartbeat_lock = asyncio.Lock()
         self._skip_next_user_save = False
@@ -820,6 +821,7 @@ class Brain:
                     text=response, now=now, proactive=False
                 )
             else:
+                self._note_dialogue_llm_failure(card)
                 logger.warning(
                     "对话表达仍为空 outcome=%s（意向卡已建）",
                     card.outcome,
@@ -1163,6 +1165,40 @@ class Brain:
         speech = self._pending_speech
         self._pending_speech = None
         return speech
+
+    def take_pending_system_notice(self) -> dict | None:
+        """取出并清空本轮系统态提示（供具身广播）。"""
+        notice = self._pending_system_notice
+        self._pending_system_notice = None
+        return notice
+
+    def on_turn_interrupted(self) -> None:
+        """具身取消进行中轮次：清待发 speech / 系统态，松思考态。"""
+        self._pending_speech = None
+        self._pending_system_notice = None
+        self._primed_turn_message = None
+        self._current_turn = None
+        if getattr(self, "avatar", None) is not None:
+            try:
+                self.avatar.set_thinking(False)
+            except Exception:
+                logger.debug("打断后清除 thinking 失败", exc_info=True)
+
+    def _note_dialogue_llm_failure(self, card) -> None:
+        """对话 LLM 失败：挂起系统态，不装 speech。"""
+        from qi.embodiment.system_notice import kind_from_llm_failure, notice_payload
+
+        outcome = getattr(card, "outcome", None)
+        fail = None
+        last = getattr(self.llm, "last_outcome", None)
+        if last is not None:
+            fail = getattr(last, "failure", None)
+        if outcome != "llm_failure" and not fail:
+            return
+        kind = kind_from_llm_failure(fail)
+        if kind is None:
+            return
+        self._pending_system_notice = notice_payload(kind)
 
     async def _maybe_save_emotion(self, now: datetime, *, force: bool = False) -> None:
         """空心跳节流落盘；有用户消息或强制时立即写。"""
@@ -1593,6 +1629,7 @@ class Brain:
         text = (message or "").strip()
         if not text:
             return None
+        self._pending_system_notice = None
         now = datetime.now()
         # 蛰伏：禁止「按一下跳一下」的假活业务心跳
         if self.in_stasis:

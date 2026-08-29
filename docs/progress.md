@@ -32,7 +32,8 @@
 
 - **2026-08-15 · 人机协作铁律入宪**：`docs/README.md` 开篇立 HITL + Spec-driven + 渐进对齐（一块一拍）；细则仍在 `SDD-GUIDE` §2.5；任务包模板与 IDE-Agent 手册对齐。
 - **2026-08-15 · L7 look 防连瞥硬门**：自主 15min 间隔不可被「事不过三」突破；邀看仍不受限；`tests/test_look.py` 覆盖间隔内连冲动与邀看旁路。真源 `docs/specs/archive/2026-08-15-L7-world-reach/2026-08-13-L7-look-窗口瞥视-任务包.md`。
-- **2026-08-22 · 感受验收自动跑批约定**：how-to [`感受验收-自动跑批.md`](how-to/感受验收-自动跑批.md)；`tools/acceptance_run.py` / `acceptance_ws_only.py`；Cursor 规则 `qi-acceptance-after-code.mdc`（改码后 Agent 默认跑 pytest + 感受批）。
+- **2026-08-22 · 感受验收自动跑批约定**：how-to [`感受验收-自动跑批.md`](how-to/感受验收-自动跑批.md)；`tools/acceptance_run.py` / `acceptance_ws_only.py`；Cursor 规则 `qi-acceptance-after-code.mdc`。
+- **2026-08-29 · 全感受批改明示才跑**：日常刀默认 pytest + 针对本刀短验；`acceptance_run` **仅维护者明示**时再跑。规则与 how-to / 判据 / IDE-Agent 手册已回写。
 - **2026-08-15 · docs/工作流整改**：Cursor `qi-sdd-hitl.mdc`（一块一拍）；how-to「L7 感受验清单」「文档与代码一致性扫描」；宪法/SDD/判据回写。
 - **2026-08-15 · docs 迁档收束**：`specs/tasks/` 仅留世界触达冻结 + 模板；约 88 份闭环过程稿迁入 `specs/archive/` 分桶（world-reach / explore / n3-scar-share / curiosity-unblock / L6 cards / 相处验证 / doc-links 等）。归档不删。
 

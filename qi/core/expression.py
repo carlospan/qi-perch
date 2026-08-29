@@ -481,7 +481,21 @@ class Expression:
             intention.outcome = "template"
             return _DEDUP_SAFE
 
-        # UNREACHABLE / EMPTY：一律模板开口（契约演进）
+        # 对话路径：不可达 / 缺 key /（非催答）空结果 → 不模板冒充，交给系统态
+        # 主动开口仍走模板，保证器官推进；催答 empty 仍用催答模板（既有包）
+        fail_kind = None
+        last = getattr(self.llm, "last_outcome", None)
+        if last is not None:
+            fail_kind = getattr(last, "failure", None)
+        dialogue = getattr(intention, "channel", None) == "dialogue"
+        if dialogue and fail_kind in ("unreachable", "missing_key"):
+            intention.outcome = "llm_failure"
+            return ""
+        if dialogue and fail_kind == "empty" and not chase:
+            intention.outcome = "llm_failure"
+            return ""
+
+        # UNREACHABLE / EMPTY（主动或催答等）：模板开口
         templated = render_template(intention, user_message=user_message)
         if templated:
             intention.outcome = "template"

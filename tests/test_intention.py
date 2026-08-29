@@ -286,6 +286,7 @@ async def test_last_intention_written_with_outcome():
                 self.last_outcome = LLMCallOutcome(text="", failure="unreachable")
 
             async def call(self, purpose, messages, temperature=None):
+                self.last_outcome = LLMCallOutcome(text="", failure="unreachable")
                 return ""
 
         brain = Brain(
@@ -307,17 +308,15 @@ async def test_last_intention_written_with_outcome():
         brain.inner_life = None
         brain.first_times = None
 
-        from qi.core.expression import _EMPTY_CARD_SAFE
-
         brain._pending_queue.append("你还记得哈尔滨冰球俱乐部吗")
         await brain._heartbeat()
         card = await db.get_body_memory(LAST_INTENTION_KEY)
         assert card is not None
-        assert card.get("outcome") == "template"
-        assert brain._pending_speech is not None
-        # 实质问 + 空 LLM：走诚实模板，不再用「没接好请再说」
-        assert "没接好" not in brain._pending_speech.text
-        assert brain._pending_speech.text != _EMPTY_CARD_SAFE
+        assert card.get("outcome") == "llm_failure"
+        assert brain._pending_speech is None
+        notice = brain.take_pending_system_notice()
+        assert notice is not None
+        assert notice["kind"] == "unreachable"
         brain.memory.vector_store.close()
         await db.close()
 

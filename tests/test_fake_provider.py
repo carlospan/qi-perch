@@ -112,8 +112,8 @@ async def test_fixed_return_advances_four_lines():
 
 
 @pytest.mark.asyncio
-async def test_unreachable_dialogue_template_but_organs_advance():
-    """对话 UNREACHABLE：模板开口（包 4 契约），情绪/记忆/关系仍推进。"""
+async def test_unreachable_dialogue_system_notice_organs_advance():
+    """对话 UNREACHABLE：不模板冒充；挂系统态；情绪/记忆/关系仍推进。"""
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         llm = FakeLLM(mode="unreachable")
         brain, db = await _wire_brain(tmp, llm)
@@ -123,11 +123,13 @@ async def test_unreachable_dialogue_template_but_organs_advance():
         brain._pending_queue.append(_USER_LINE)
         await brain._heartbeat()
 
-        assert brain._pending_speech is not None
-        assert brain._pending_speech.text
+        assert brain._pending_speech is None
+        notice = brain.take_pending_system_notice()
+        assert notice is not None
+        assert notice["kind"] == "unreachable"
         assert llm.last_outcome.failure == "unreachable"
         intent = await db.get_body_memory("last_intention")
-        assert intent and intent.get("outcome") == "template"
+        assert intent and intent.get("outcome") == "llm_failure"
         assert brain.emotion.valence != before.valence or brain.emotion.security != before.security
         recent = await db.load_recent_messages(limit=5)
         assert any(m.get("content") == _USER_LINE for m in recent)

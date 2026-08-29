@@ -13,8 +13,15 @@ class OpenAICompatProvider:
     def __init__(self, name: str, base_url: str, api_key: str, models: dict[str, str]):
         self.name = name
         self.models = models
+        self.api_key = api_key or ""
         self._client = AsyncOpenAI(base_url=base_url, api_key=api_key or "no-key")
         self._active_model: str = models.get("fast") or next(iter(models.values()))
+
+    def key_missing(self) -> bool:
+        key = str(self.api_key).strip()
+        return (not key) or key == "no-key" or (
+            key.startswith("${") and key.endswith("}")
+        )
 
     def use_tier(self, tier: str) -> str:
         """按档位取出模型名；没有该档则回退到 fast / 第一个。"""

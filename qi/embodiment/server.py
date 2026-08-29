@@ -210,6 +210,8 @@ class EmbodimentServer:
         self.running = False
         self._server = None
         self._ping_task: asyncio.Task | None = None
+        self._turn_task: asyncio.Task | None = None
+        self._turn_user_text: str | None = None
 
     async def start(self) -> None:
         import websockets
@@ -309,23 +311,11 @@ class EmbodimentServer:
             text = (payload.get("text") or "").strip()
             if not text:
                 return
-            if getattr(self.brain, "in_stasis", False):
-                await self.brain.receive_user_message(text)
-                return
-            await self.send_typing()
-            response = await self.brain.receive_user_message(text)
-            # speech 由 brain 表达路径推送；若空则提示
-            if not response:
-                await self.broadcast(
-                    {
-                        "type": "speech",
-                        "payload": {
-                            "text": "……",
-                            "emotion": self.brain.emotion.description(),
-                            "tone": "quiet",
-                        },
-                    }
-                )
+            await self._on_user_message(text)
+        elif msg_type == "turn_control":
+            action = str(payload.get("action") or "").strip().lower()
+            if action in ("rephrase", "stop"):
+                await self._interrupt_active_turn(action)  # type: ignore[arg-type]
         elif msg_type == "presence":
             online = bool(payload.get("online", True))
             prev = bool(getattr(self.brain, "user_online", True))
@@ -389,6 +379,97 @@ class EmbodimentServer:
                 )
                 if result.get("ok"):
                     await self.broadcast(self._state_packet())
+
+    def _turn_in_flight(self) -> bool:
+        return self._turn_task is not None and not self._turn_task.done()
+
+    async def _on_user_message(self, text: str) -> None:
+        if getattr(self.brain, "in_stasis", False):
+            await self.brain.receive_user_message(text)
+            return
+
+        if self._turn_in_flight():
+            from qi.core.turn_interrupt import classify_turn_interrupt
+
+            kind = await classify_turn_interrupt(
+                getattr(self.brain, "llm", None),
+                text,
+            )
+            if kind in ("rephrase", "stop"):
+                if self._turn_in_flight():
+                    await self._interrupt_active_turn(kind)
+                return
+            from qi.embodiment.system_notice import notice_payload
+
+            await self.send_system_notice(notice_payload("turn_busy"))
+            return
+
+        self._turn_user_text = text
+        await self.send_typing()
+        task = asyncio.create_task(
+            self._run_user_turn(text),
+            name="qi_user_turn",
+        )
+        self._turn_task = task
+
+        def _done(t: asyncio.Task) -> None:
+            if self._turn_task is t:
+                self._turn_task = None
+            try:
+                t.result()
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.exception("用户轮次异常")
+
+        task.add_done_callback(_done)
+        # 不 await：让 WS 循环能收到打断 / 重说
+
+    async def _run_user_turn(self, text: str) -> None:
+        try:
+            response = await self.brain.receive_user_message(text)
+        except asyncio.CancelledError:
+            raise
+        notice = None
+        if hasattr(self.brain, "take_pending_system_notice"):
+            notice = self.brain.take_pending_system_notice()
+        if notice:
+            await self.send_system_notice(notice)
+        elif not response:
+            logger.debug("用户轮次无 speech 且无 system_notice")
+
+    async def _interrupt_active_turn(self, action: str) -> None:
+        """取消进行中轮次；广播 turn_interrupted + 短应。"""
+        from qi.core.turn_interrupt import REPHRASE_ACK, STOP_ACK
+
+        original = self._turn_user_text
+        task = self._turn_task
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        self._turn_task = None
+        if hasattr(self.brain, "on_turn_interrupted"):
+            self.brain.on_turn_interrupted()
+
+        await self.broadcast(
+            {
+                "type": "turn_interrupted",
+                "payload": {
+                    "action": action,
+                    "original_text": original or "",
+                    "prefill": (original or "") if action == "rephrase" else "",
+                },
+            }
+        )
+        ack = REPHRASE_ACK if action == "rephrase" else STOP_ACK
+        emotion = ""
+        if getattr(self.brain, "emotion", None) is not None:
+            emotion = self.brain.emotion.description()
+        await self.send_speech(ack, emotion=emotion, tone="quiet")
+        self._turn_user_text = None
 
     async def _send_history(self, websocket: Any | None) -> None:
         """把最近 HISTORY_WINDOW 条对话 + 同窗创作卡推给请求方（本机单用户；无 websocket 则广播）。"""
@@ -487,6 +568,10 @@ class EmbodimentServer:
 
     async def send_typing(self) -> None:
         await self.broadcast({"type": "typing", "payload": {}})
+
+    async def send_system_notice(self, payload: dict) -> None:
+        """系统态提示（失败可见）；非栖的 speech。"""
+        await self.broadcast({"type": "system_notice", "payload": payload})
 
     async def send_emotion_update(self, snapshot: dict) -> None:
         await self.broadcast({"type": "emotion_update", "payload": snapshot})

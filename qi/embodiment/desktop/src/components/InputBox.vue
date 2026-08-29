@@ -3,12 +3,15 @@ import { computed, nextTick, ref, watch } from "vue";
 
 const props = defineProps<{
   disabled?: boolean;
-  /** 栖正在回复：可改草稿，暂缓连发 */
+  /** 栖正在回复：可继续发送（打断/重说）；按钮文案提示「在想」 */
   busy?: boolean;
+  /** 重说时预填原句 */
+  prefill?: string;
 }>();
 
 const emit = defineEmits<{
   send: [text: string];
+  "update:prefill": [value: string];
 }>();
 
 const text = ref("");
@@ -18,13 +21,27 @@ const field = ref<HTMLTextAreaElement | null>(null);
 const MIN_HEIGHT_PX = 44;
 const MAX_HEIGHT_PX = 168;
 
-const blocked = computed(() => Boolean(props.disabled || props.busy));
+/** 仅离线禁发；busy 时仍可发（叫住她 / 重说） */
+const blocked = computed(() => Boolean(props.disabled));
 
 const placeholder = computed(() => {
   if (props.disabled) return "通道还没连上……";
-  if (props.busy) return "栖还在想……想好了再说一句";
+  if (props.busy) return "她还在想——可以说想重说，或等她说完";
   return "说点什么……（Enter 发送，Shift+Enter 换行）";
 });
+
+watch(
+  () => props.prefill,
+  (v) => {
+    if (v == null || v === "") return;
+    text.value = v;
+    emit("update:prefill", "");
+    void nextTick(() => {
+      resize();
+      field.value?.focus();
+    });
+  }
+);
 
 function resize() {
   const el = field.value;
@@ -79,10 +96,10 @@ watch(text, () => {
     />
     <button
       type="submit"
-      :aria-label="busy ? '栖还在想，稍后再发' : '发送'"
+      :aria-label="busy ? '发送（可叫住她）' : '发送'"
       :disabled="blocked || !text.trim()"
     >
-      {{ busy ? "想着" : "发送" }}
+      发送
     </button>
   </form>
 </template>

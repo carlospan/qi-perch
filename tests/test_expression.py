@@ -88,9 +88,11 @@ def test_empty_card_template_relationship_question():
 async def test_express_answer_chase_empty_retries_then_safe_template():
     """催答 + 空 LLM → 约束重试；仍空 → 催答安全句。"""
     from qi.core.expression import _ANSWER_CHASE_SAFE
+    from qi.llm.gateway import LLMCallOutcome
 
     llm = AsyncMock()
     llm.call = AsyncMock(side_effect=["", ""])
+    llm.last_outcome = LLMCallOutcome(text="", failure="empty")
     expr = Expression({}, llm)
     card = IntentionCard(
         act="free_talk",
@@ -109,6 +111,32 @@ async def test_express_answer_chase_empty_retries_then_safe_template():
     assert "【催答】" in retry_sys
     assert out == _ANSWER_CHASE_SAFE
     assert card.outcome == "template"
+
+
+@pytest.mark.asyncio
+async def test_express_dialogue_unreachable_no_speech():
+    """对话 unreachable → 空串 + llm_failure，不模板冒充。"""
+    from qi.llm.gateway import LLMCallOutcome
+
+    llm = AsyncMock()
+    llm.call = AsyncMock(return_value="")
+    llm.last_outcome = LLMCallOutcome(text="", failure="unreachable")
+    expr = Expression({}, llm)
+    card = IntentionCard(
+        act="free_talk",
+        topic="你好",
+        materials=[Material(tag="none", text="")],
+        channel="dialogue",
+    )
+    out = await expr.express(
+        user_message="你好",
+        emotion=EmotionState(),
+        now=datetime(2026, 8, 29, 22, 0),
+        intention=card,
+        recent_messages=[],
+    )
+    assert out == ""
+    assert card.outcome == "llm_failure"
 
 
 @pytest.mark.asyncio

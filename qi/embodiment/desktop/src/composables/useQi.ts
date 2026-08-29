@@ -17,11 +17,22 @@ import type {
   JournalEntry,
   QiView,
   SpeechPayload,
+  SystemNoticePayload,
   TalkCardItem,
   TalkItem,
   TalkMessage,
+  TurnInterruptedPayload,
 } from "../types";
 import { qiWs } from "../ws";
+
+/** 与 HITL：busy 约 60s 强制解锁 */
+const TYPING_TIMEOUT_MS = 60_000;
+
+const TIMEOUT_NOTICE: SystemNoticePayload = {
+  kind: "timeout",
+  message: "等太久了，先解开输入。若稍后她仍回了，气泡仍会显示。",
+  action: null,
+};
 
 function uid(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -107,6 +118,8 @@ function createQi() {
   const speech = ref("");
   const speaking = ref(false);
   const replyEpoch = ref(0);
+  const systemNotice = ref<SystemNoticePayload | null>(null);
+  const composerPrefill = ref("");
   const season = ref("spring");
   const emotion = ref<EmotionSnapshot>({ mode: "awake", description: "" });
   const avatar = ref<AvatarState>({
@@ -262,8 +275,61 @@ function createQi() {
   });
 
   let emotionPoll: number | null = null;
+  let typingTimer: number | null = null;
   let touchConsideredForTurn = false;
   let wired = false;
+
+  function clearTypingTimer() {
+    if (typingTimer != null) {
+      window.clearTimeout(typingTimer);
+      typingTimer = null;
+    }
+  }
+
+  function armTypingTimeout() {
+    clearTypingTimer();
+    typingTimer = window.setTimeout(() => {
+      typingTimer = null;
+      if (!typing.value) return;
+      typing.value = false;
+      systemNotice.value = TIMEOUT_NOTICE;
+    }, TYPING_TIMEOUT_MS);
+  }
+
+  function setTyping(on: boolean) {
+    typing.value = on;
+    if (on) armTypingTimeout();
+    else clearTypingTimer();
+  }
+
+  function applySystemNotice(payload: SystemNoticePayload) {
+    systemNotice.value = payload;
+    setTyping(false);
+  }
+
+  function dismissSystemNotice() {
+    systemNotice.value = null;
+  }
+
+  function popLastMineIfMatch(original?: string) {
+    const last = talk.value[talk.value.length - 1];
+    if (!last || last.role !== "me") return;
+    const orig = (original || "").trim();
+    if (orig && last.text.trim() !== orig) return;
+    talk.value = talk.value.slice(0, -1);
+  }
+
+  function requestRephrase() {
+    if (!connected.value || !typing.value) return;
+    systemNotice.value = null;
+    qiWs.send({ type: "turn_control", payload: { action: "rephrase" } });
+  }
+
+  function requestStopSpeaking() {
+    if (!connected.value || !typing.value) return;
+    systemNotice.value = null;
+    qiWs.send({ type: "turn_control", payload: { action: "stop" } });
+  }
 
   function noteReplyStart() {
     if (touchConsideredForTurn) return;
@@ -339,7 +405,8 @@ function createQi() {
     const value = text.trim();
     if (!value) return;
     touchConsideredForTurn = false;
-    typing.value = true;
+    systemNotice.value = null;
+    setTyping(true);
     speech.value = "";
     speaking.value = false;
     appendTalk("me", value);
@@ -376,13 +443,29 @@ function createQi() {
         connected.value = false;
       });
       qiWs.on("typing", () => {
-        typing.value = true;
+        setTyping(true);
         speaking.value = false;
         noteReplyStart();
       });
+      qiWs.on("system_notice", (payload: SystemNoticePayload) => {
+        if (!payload?.message?.trim()) return;
+        applySystemNotice(payload);
+      });
+      qiWs.on("turn_interrupted", (payload: TurnInterruptedPayload) => {
+        setTyping(false);
+        const orig = (payload?.original_text || "").trim();
+        // 若刚发了打断白话，先拿掉那条；再拿掉原句气泡
+        const last = talk.value[talk.value.length - 1];
+        if (last?.role === "me") {
+          talk.value = talk.value.slice(0, -1);
+        }
+        popLastMineIfMatch(orig);
+        const pre = (payload?.prefill || "").trim();
+        composerPrefill.value = pre;
+      });
       qiWs.on("speech", (payload: SpeechPayload) => {
         noteReplyStart();
-        typing.value = false;
+        setTyping(false);
         speech.value = payload.text;
         appendTalk("qi", payload.text, payload.tone);
         requestEmotionSnapshot();
@@ -501,6 +584,7 @@ function createQi() {
 
   function disconnect() {
     document.removeEventListener("visibilitychange", onVis);
+    clearTypingTimer();
     if (emotionPoll != null) {
       clearInterval(emotionPoll);
       emotionPoll = null;
@@ -523,6 +607,11 @@ function createQi() {
     speech,
     speaking,
     replyEpoch,
+    systemNotice,
+    dismissSystemNotice,
+    composerPrefill,
+    requestRephrase,
+    requestStopSpeaking,
     season,
     emotion,
     avatar,

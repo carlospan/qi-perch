@@ -96,6 +96,18 @@ export type ActionPayload =
       sandbox: string;
     };
 
+export type SystemNoticePayload = {
+  kind: "missing_key" | "unreachable" | "empty" | "timeout" | "turn_busy";
+  message: string;
+  action?: "open_settings" | null;
+};
+
+export type TurnInterruptedPayload = {
+  action: "rephrase" | "stop";
+  original_text?: string;
+  prefill?: string;
+};
+
 export type ServerMessage =
   | { type: "speech"; payload: SpeechPayload }
   | {
@@ -108,6 +120,8 @@ export type ServerMessage =
       };
     }
   | { type: "typing"; payload: Record<string, never> }
+  | { type: "system_notice"; payload: SystemNoticePayload }
+  | { type: "turn_interrupted"; payload: TurnInterruptedPayload }
   | { type: "presence"; payload: { online: boolean } }
   | { type: "emotion_update"; payload: EmotionSnapshot }
   | { type: "ping"; payload: { ts: number } }
@@ -136,6 +150,7 @@ export type TalkItem = (TalkMessage & { kind: "text" }) | TalkCardItem;
 
 export type ClientMessage =
   | { type: "user_message"; payload: { text: string } }
+  | { type: "turn_control"; payload: { action: "rephrase" | "stop" } }
   | { type: "presence"; payload: { online: boolean } }
   | { type: "pong"; payload: { ts: number } }
   | { type: "command"; payload: { text: string } };

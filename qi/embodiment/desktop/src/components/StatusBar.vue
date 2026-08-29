@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { SystemNoticePayload } from "../types";
+
 defineProps<{
   mode: string;
   season: string;
@@ -7,7 +9,11 @@ defineProps<{
   mood?: string;
   /** 栖正在生成回复 */
   replying?: boolean;
+  /** 系统态（失败可见，非她的话） */
+  notice?: SystemNoticePayload | null;
 }>();
+
+const emit = defineEmits<{ dismissNotice: [] }>();
 
 const seasonLabel: Record<string, string> = {
   spring: "春",
@@ -27,7 +33,7 @@ const modeLabel: Record<string, string> = {
 </script>
 
 <template>
-  <div class="status" :class="{ replying }">
+  <div class="status" :class="{ replying, hasNotice: !!notice }">
     <div class="row">
       <span class="dot" :class="{ on: connected, pulse: connected && replying }" />
       <span v-if="!connected" class="offline">未连上</span>
@@ -43,7 +49,18 @@ const modeLabel: Record<string, string> = {
       </template>
     </div>
     <p
-      v-if="connected && mood && !replying"
+      v-if="notice?.message"
+      class="notice"
+      role="status"
+      aria-live="polite"
+    >
+      <span class="notice-text">{{ notice.message }}</span>
+      <button type="button" class="notice-x" aria-label="关闭提示" @click="emit('dismissNotice')">
+        ×
+      </button>
+    </p>
+    <p
+      v-else-if="connected && mood && !replying"
       class="mood"
       :title="mood"
     >
@@ -145,5 +162,42 @@ const modeLabel: Record<string, string> = {
   50% {
     opacity: 1;
   }
+}
+
+.notice {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.35rem 0.45rem;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ember) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ember) 28%, transparent);
+  font-size: 0.68rem;
+  color: var(--ink-dim);
+  letter-spacing: 0.02em;
+  text-align: left;
+  line-height: 1.35;
+}
+
+.notice-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.notice-x {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0 0.1rem;
+}
+
+.notice-x:hover {
+  color: var(--ink-dim);
 }
 </style>

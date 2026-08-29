@@ -12,8 +12,8 @@ from qi.llm.providers.openai_compat import OpenAICompatProvider
 
 logger = logging.getLogger("qi.llm")
 
-# 失败语义：unreachable=到不了模型；empty=管道通了但没话
-LLMFailureKind = Literal["unreachable", "empty"]
+# 失败语义：unreachable=到不了模型；empty=管道通了但没话；missing_key=未配置密钥
+LLMFailureKind = Literal["unreachable", "empty", "missing_key"]
 
 
 @dataclass(frozen=True)
@@ -127,6 +127,16 @@ class LLMGateway:
         except RuntimeError as e:
             logger.warning("LLM 路由失败 purpose=%s: %s", purpose, e)
             outcome = LLMCallOutcome(text="", failure="unreachable")
+            self._remember_if_conversation(purpose, outcome)
+            return outcome
+
+        if provider.key_missing():
+            logger.warning(
+                "LLM api_key 缺失 provider=%s purpose=%s",
+                provider.name,
+                purpose,
+            )
+            outcome = LLMCallOutcome(text="", failure="missing_key")
             self._remember_if_conversation(purpose, outcome)
             return outcome
 

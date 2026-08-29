@@ -26,6 +26,11 @@ const {
   creationCards,
   exploreCards,
   journal,
+  systemNotice,
+  dismissSystemNotice,
+  composerPrefill,
+  requestRephrase,
+  requestStopSpeaking,
   send,
   requestWake,
   connect,
@@ -69,6 +74,8 @@ onUnmounted(() => disconnect());
             :connected="connected"
             :mood="moodText"
             :replying="typing"
+            :notice="systemNotice"
+            @dismiss-notice="dismissSystemNotice"
           />
           <WindowControls />
         </div>
@@ -118,12 +125,23 @@ onUnmounted(() => disconnect());
                   >
                     唤醒
                   </button>
-                  <InputBox
-                    v-else
-                    :disabled="!connected"
-                    :busy="typing"
-                    @send="send"
-                  />
+                  <template v-else>
+                    <div v-if="typing" class="turn-actions" aria-label="叫住她">
+                      <button type="button" class="turn-btn" @click="requestRephrase">
+                        我想重说
+                      </button>
+                      <button type="button" class="turn-btn" @click="requestStopSpeaking">
+                        先别说了
+                      </button>
+                    </div>
+                    <InputBox
+                      :disabled="!connected"
+                      :busy="typing"
+                      :prefill="composerPrefill"
+                      @update:prefill="composerPrefill = $event"
+                      @send="send"
+                    />
+                  </template>
                 </footer>
               </div>
             </div>
@@ -161,6 +179,8 @@ onUnmounted(() => disconnect());
                 v-else
                 :disabled="!connected"
                 :busy="typing"
+                :prefill="composerPrefill"
+                @update:prefill="composerPrefill = $event"
                 @send="send"
               />
             </div>
@@ -433,6 +453,30 @@ h1 {
     color-mix(in srgb, var(--panel-veil) 55%, transparent) 100%
   );
   backdrop-filter: blur(4px);
+}
+
+.turn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.turn-btn {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  padding: 0.28rem 0.65rem;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, var(--panel-veil) 70%, transparent);
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.turn-btn:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ember) 40%, transparent);
 }
 
 .presence-chat-bg {
