@@ -427,6 +427,10 @@ class EmbodimentServer:
                 await self._send_review_memories(websocket)
             elif cmd == "/activity_glance":
                 await self._send_activity_glance(websocket)
+            elif cmd == "/settings_llm":
+                await self._send_settings_llm(websocket)
+            elif cmd == "/settings_llm_save":
+                await self._save_settings_llm(websocket, payload)
             elif cmd == "/wake":
                 result = await self.brain.resume_from_stasis()
                 await self.broadcast(
@@ -737,6 +741,75 @@ class EmbodimentServer:
     async def push_activity_glance(self) -> None:
         """有新日记/创作/见闻后刷新动向旁白（可空 line）。"""
         await self.broadcast(await self._activity_glance_packet())
+
+    async def _send_settings_llm(self, websocket: Any | None) -> None:
+        from qi.config.secrets import settings_llm_snapshot
+
+        packet = {
+            "type": "settings_llm",
+            "payload": settings_llm_snapshot(),
+        }
+        raw = json.dumps(packet, ensure_ascii=False)
+        if websocket is not None:
+            try:
+                await websocket.send(raw)
+                return
+            except Exception:
+                logger.debug("向请求方发送 settings_llm 失败", exc_info=True)
+        await self.broadcast(packet)
+
+    async def _save_settings_llm(self, websocket: Any | None, payload: dict) -> None:
+        from qi.config.secrets import (
+            apply_secrets_to_environ,
+            settings_llm_snapshot,
+            write_secrets_file,
+        )
+
+        api_key = payload.get("api_key")
+        base_url = payload.get("base_url")
+        model = payload.get("model")
+        # 未传字段 = 不改；传空串 = 清除（可选字段）或拒绝清空 key
+        try:
+            kwargs: dict = {}
+            if "api_key" in payload:
+                kwargs["api_key"] = str(api_key or "")
+            if "base_url" in payload:
+                kwargs["base_url"] = str(base_url or "")
+            if "model" in payload:
+                kwargs["model"] = str(model or "")
+            if kwargs:
+                write_secrets_file(**kwargs)
+                apply_secrets_to_environ()
+            result = {"ok": True, **settings_llm_snapshot()}
+            if hasattr(self.brain, "reload_llm_settings"):
+                reloaded = self.brain.reload_llm_settings()
+                result["ok"] = bool(reloaded.get("ok", True))
+                if reloaded.get("error"):
+                    result["error"] = str(reloaded["error"])
+                result.update(
+                    {
+                        k: reloaded[k]
+                        for k in ("has_key", "api_key_masked", "base_url", "model")
+                        if k in reloaded
+                    }
+                )
+        except Exception as e:
+            logger.exception("保存 LLM 设置失败")
+            result = {
+                "ok": False,
+                "error": str(e),
+                **settings_llm_snapshot(),
+            }
+
+        packet = {"type": "settings_llm_saved", "payload": result}
+        raw = json.dumps(packet, ensure_ascii=False)
+        if websocket is not None:
+            try:
+                await websocket.send(raw)
+                return
+            except Exception:
+                logger.debug("向请求方发送 settings_llm_saved 失败", exc_info=True)
+        await self.broadcast(packet)
 
     async def broadcast(self, message: dict) -> None:
         if not self.clients:

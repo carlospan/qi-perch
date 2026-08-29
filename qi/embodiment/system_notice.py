@@ -15,7 +15,7 @@ SystemNoticeKind = Literal[
 ]
 
 _MESSAGES: dict[SystemNoticeKind, str] = {
-    "missing_key": "还没有可用的模型钥匙。请检查 API 密钥配置。",
+    "missing_key": "还没有可用的模型钥匙。点左下角齿轮打开设置，粘贴 API 密钥。",
     "unreachable": "这会儿连不上模型。可以再试一次，或检查网络与配置。",
     "empty": "这轮没接好。你可以再发一句。",
     "timeout": "等太久了，先解开输入。若稍后她仍回了，气泡仍会显示。",

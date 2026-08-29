@@ -29,6 +29,8 @@ import type {
   ReviewMemoriesPayload,
   ReviewMemoryItem,
   ActivityGlancePayload,
+  SettingsLlmPayload,
+  SettingsLlmSavedPayload,
   TurnInterruptedPayload,
 } from "../types";
 import { qiWs } from "../ws";
@@ -164,6 +166,12 @@ function createQi() {
   const reviewMemories = ref<ReviewMemoryItem[]>([]);
   /** 方向 D：存在页一行动向旁白（无近事则空） */
   const activityGlanceLine = ref("");
+  /** P2：设置页（整页，非 tab） */
+  const settingsOpen = ref(false);
+  const settingsLlm = ref<SettingsLlmPayload | null>(null);
+  const settingsSaving = ref(false);
+  const settingsSaveError = ref("");
+  const settingsSaveOk = ref(false);
 
   const mode = computed(() => {
     if (emotion.value.stasis || emotion.value.mode === "stasis") {
@@ -635,6 +643,47 @@ function createQi() {
     qiWs.send({ type: "command", payload: { text: "/activity_glance" } });
   }
 
+  function openSettings() {
+    settingsOpen.value = true;
+    settingsSaveOk.value = false;
+    settingsSaveError.value = "";
+    requestSettingsLlm();
+  }
+
+  function closeSettings() {
+    settingsOpen.value = false;
+    settingsSaveOk.value = false;
+    settingsSaveError.value = "";
+  }
+
+  function requestSettingsLlm() {
+    qiWs.send({ type: "command", payload: { text: "/settings_llm" } });
+  }
+
+  function saveSettingsLlm(payload: {
+    api_key?: string;
+    base_url: string;
+    model: string;
+  }) {
+    settingsSaving.value = true;
+    settingsSaveOk.value = false;
+    settingsSaveError.value = "";
+    const body: {
+      text: string;
+      api_key?: string;
+      base_url: string;
+      model: string;
+    } = {
+      text: "/settings_llm_save",
+      base_url: payload.base_url,
+      model: payload.model,
+    };
+    if (payload.api_key !== undefined) {
+      body.api_key = payload.api_key;
+    }
+    qiWs.send({ type: "command", payload: body });
+  }
+
   function requestWake() {
     if (!connected.value) return;
     qiWs.send({ type: "command", payload: { text: "/wake" } });
@@ -681,6 +730,32 @@ function createQi() {
       });
       qiWs.on("activity_glance", (payload: ActivityGlancePayload) => {
         activityGlanceLine.value = String(payload?.line || "").trim();
+      });
+      qiWs.on("settings_llm", (payload: SettingsLlmPayload) => {
+        settingsLlm.value = {
+          has_key: Boolean(payload?.has_key),
+          api_key_masked: String(payload?.api_key_masked || ""),
+          base_url: String(payload?.base_url || ""),
+          model: String(payload?.model || ""),
+        };
+      });
+      qiWs.on("settings_llm_saved", (payload: SettingsLlmSavedPayload) => {
+        settingsSaving.value = false;
+        settingsLlm.value = {
+          has_key: Boolean(payload?.has_key),
+          api_key_masked: String(payload?.api_key_masked || ""),
+          base_url: String(payload?.base_url || ""),
+          model: String(payload?.model || ""),
+        };
+        if (payload?.ok) {
+          settingsSaveOk.value = true;
+          settingsSaveError.value = "";
+          dismissSystemNotice();
+        } else {
+          settingsSaveOk.value = false;
+          settingsSaveError.value =
+            String(payload?.error || "").trim() || "保存失败，请再试一次。";
+        }
       });
       qiWs.on("review_memories", (payload: ReviewMemoriesPayload) => {
         const rows = Array.isArray(payload?.items) ? payload.items : [];
@@ -897,6 +972,15 @@ function createQi() {
     presenceStatus,
     timeTraceLine,
     activityGlanceLine,
+    settingsOpen,
+    settingsLlm,
+    settingsSaving,
+    settingsSaveError,
+    settingsSaveOk,
+    openSettings,
+    closeSettings,
+    requestSettingsLlm,
+    saveSettingsLlm,
     reviewMemories,
     talk,
     talkByDay,

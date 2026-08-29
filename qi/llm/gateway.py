@@ -83,6 +83,16 @@ class LLMGateway:
                 models=models,
             )
 
+    def reload(self, config: dict) -> None:
+        """热重载 provider（同实例；brain 等持有的引用仍有效）。"""
+        self.providers.clear()
+        self.routing = config.get("llm", {}).get("model_routing", {})
+        self._default_provider = config.get("llm", {}).get(
+            "default_provider", "sensenova"
+        )
+        self.last_outcome = _SUCCESS_IDLE
+        self._init_providers(config)
+
     def _resolve(self, purpose: str) -> tuple[OpenAICompatProvider, str]:
         route = self.routing.get(purpose) or self.routing.get("conversation")
         if not route:

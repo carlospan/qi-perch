@@ -354,6 +354,23 @@ class Brain:
         """接上身体——之后说话会推到前端。"""
         self.embodiment = server
 
+    def reload_llm_settings(self) -> dict:
+        """设置页保存后：重载配置并热替换 LLM providers。"""
+        from qi.config import load_config
+        from qi.config.secrets import settings_llm_snapshot
+
+        try:
+            config = load_config()
+            self.config = config
+            if hasattr(self.llm, "reload"):
+                self.llm.reload(config)
+            snap = settings_llm_snapshot()
+            return {"ok": True, **snap}
+        except Exception as e:
+            logger.exception("热重载 LLM 失败")
+            snap = settings_llm_snapshot()
+            return {"ok": False, "error": str(e), **snap}
+
     def _current_season(self) -> str:
         if self.relationship is not None:
             return self.relationship.state.season

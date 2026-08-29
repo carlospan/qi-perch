@@ -212,7 +212,22 @@ export type ServerMessage =
   | { type: "journal"; payload: { entries: JournalEntry[] } }
   | { type: "journal_entry"; payload: JournalEntry }
   | { type: "wake_result"; payload: { ok: boolean; reason?: string; mode?: string } }
-  | { type: "action"; payload: ActionPayload };
+  | { type: "action"; payload: ActionPayload }
+  | { type: "settings_llm"; payload: SettingsLlmPayload }
+  | { type: "settings_llm_saved"; payload: SettingsLlmSavedPayload };
+
+/** 设置页 · LLM 钥匙快照（不回传完整 key） */
+export type SettingsLlmPayload = {
+  has_key: boolean;
+  api_key_masked: string;
+  base_url: string;
+  model: string;
+};
+
+export type SettingsLlmSavedPayload = SettingsLlmPayload & {
+  ok: boolean;
+  error?: string;
+};
 
 /** 回顾时间线条目：文本投影带 kind:"text"；卡片带 kind:"card" */
 export type TalkCardItem = {
@@ -230,7 +245,13 @@ export type ClientMessage =
   | { type: "pong"; payload: { ts: number } }
   | {
       type: "command";
-      payload: { text: string; before_id?: number };
+      payload: {
+        text: string;
+        before_id?: number;
+        api_key?: string;
+        base_url?: string;
+        model?: string;
+      };
     };
 
 /** 相处 / 回顾 / 内在 */

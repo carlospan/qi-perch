@@ -77,6 +77,9 @@ def load_config(path: str | Path | None = None) -> dict:
     默认按 user_config_candidates() 查找；显式 path 优先。
     """
     _load_dotenv()
+    from qi.config.secrets import apply_secrets_to_environ, apply_user_llm_overrides
+
+    apply_secrets_to_environ()
 
     if path is None:
         qcfg = os.environ.get("QI_CONFIG")
@@ -91,4 +94,4 @@ def load_config(path: str | Path | None = None) -> dict:
     with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
 
-    return _walk_resolve(raw)
+    return apply_user_llm_overrides(_walk_resolve(raw))

@@ -5,6 +5,7 @@ import JournalView from "./components/JournalView.vue";
 import PresenceVrm from "./components/PresenceVrm.vue";
 import ReviewView from "./components/ReviewView.vue";
 import SceneView from "./components/SceneView.vue";
+import SettingsView from "./components/SettingsView.vue";
 import StateView from "./components/StateView.vue";
 import StatusBar from "./components/StatusBar.vue";
 import TalkView from "./components/TalkView.vue";
@@ -36,6 +37,15 @@ const {
   requestHistoryOlder,
   systemNotice,
   dismissSystemNotice,
+  settingsOpen,
+  settingsLlm,
+  settingsSaving,
+  settingsSaveError,
+  settingsSaveOk,
+  openSettings,
+  closeSettings,
+  requestSettingsLlm,
+  saveSettingsLlm,
   composerPrefill,
   requestRephrase,
   requestStopSpeaking,
@@ -94,6 +104,7 @@ onUnmounted(() => disconnect());
             :replying="typing"
             :notice="systemNotice"
             @dismiss-notice="dismissSystemNotice"
+            @open-settings="openSettings"
           />
           <WindowControls />
         </div>
@@ -101,11 +112,25 @@ onUnmounted(() => disconnect());
 
       <div class="workspace">
         <aside class="nav-rail">
-          <ViewTabs v-model="view" layout="vertical" />
+          <ViewTabs
+            v-model="view"
+            layout="vertical"
+            @open-settings="openSettings"
+          />
         </aside>
 
         <main class="main">
-          <div class="stage">
+          <SettingsView
+            v-if="settingsOpen"
+            :snapshot="settingsLlm"
+            :saving="settingsSaving"
+            :save-error="settingsSaveError"
+            :save-ok="settingsSaveOk"
+            @close="closeSettings"
+            @save="saveSettingsLlm"
+            @refresh="requestSettingsLlm"
+          />
+          <div v-show="!settingsOpen" class="stage">
             <!-- 相处页常驻 DOM：切走时仅隐藏，避免 VRM 每次重载 -->
             <div
               class="presence-layout"
@@ -208,7 +233,7 @@ onUnmounted(() => disconnect());
             </Transition>
           </div>
 
-          <footer v-if="view !== 'presence'" class="composer-bar">
+          <footer v-if="!settingsOpen && view !== 'presence'" class="composer-bar">
             <div class="composer-dock">
               <button
                 v-if="inStasis"
@@ -401,6 +426,8 @@ h1 {
   border-right: 1px solid color-mix(in srgb, var(--ink) 6%, transparent);
   display: flex;
   flex-direction: column;
+  align-self: stretch;
+  min-height: 0;
 }
 
 .main {
@@ -410,6 +437,7 @@ h1 {
   display: flex;
   flex-direction: column;
   padding-left: 18px;
+  position: relative;
 }
 
 .stage {

@@ -13,7 +13,10 @@ defineProps<{
   notice?: SystemNoticePayload | null;
 }>();
 
-const emit = defineEmits<{ dismissNotice: [] }>();
+const emit = defineEmits<{
+  dismissNotice: [];
+  openSettings: [];
+}>();
 
 const seasonLabel: Record<string, string> = {
   spring: "春",
@@ -55,6 +58,14 @@ const modeLabel: Record<string, string> = {
       aria-live="polite"
     >
       <span class="notice-text">{{ notice.message }}</span>
+      <button
+        v-if="notice.action === 'open_settings'"
+        type="button"
+        class="notice-go"
+        @click="emit('openSettings')"
+      >
+        去设置
+      </button>
       <button type="button" class="notice-x" aria-label="关闭提示" @click="emit('dismissNotice')">
         ×
       </button>
@@ -184,6 +195,23 @@ const modeLabel: Record<string, string> = {
 .notice-text {
   flex: 1;
   min-width: 0;
+}
+
+.notice-go {
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--ember) 40%, transparent);
+  background: color-mix(in srgb, var(--ember) 16%, transparent);
+  color: var(--ink-dim);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+}
+
+.notice-go:hover {
+  color: var(--ink);
 }
 
 .notice-x {
