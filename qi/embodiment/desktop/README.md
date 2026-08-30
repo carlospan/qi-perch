@@ -11,7 +11,9 @@
 | 内在 | 梦 / 独白等日记（`/journal`） |
 | 状态 | 六维心境（自然语言 + 数值） |
 
-开发期：`npm run tauri:dev` 会尝试自动拉起 Python 大脑（`python -m qi`）。若 9527 已有进程在听则沿用；设 `QI_SKIP_BRAIN=1` 可关掉自动拉起。
+开发期：`npm run tauri:dev` 会按优先级拉起大脑——① 9527 已在听则沿用；② 若已打过 bundled `qi-brain`（见下）则起它；③ 否则 `python -m qi`。设 `QI_SKIP_BRAIN=1` 可关掉自动拉起。
+
+**正式 sidecar（Windows）**：仓库根执行 `python tools/build_qi_brain.py`，产物进 `src-tauri/resources/qi-brain/`；再 `npm run tauri:dev` / `tauri:build`。安装布局下用户不必自装 Python。
 
 ## VRM 形象（相处页）
 

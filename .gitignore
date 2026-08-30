@@ -21,6 +21,8 @@ __pycache__/
 venv/
 dist/
 build/
+# PyInstaller 中间产物（打脑脚本会再生成）
+qi-brain.spec
 .pytest_cache/
 # pytest --basetemp 若指到仓库内，勿提交
 .pytest_basetemp/
@@ -34,6 +36,9 @@ node_modules/
 qi/embodiment/desktop/dist/
 qi/embodiment/desktop/.vite/
 qi/embodiment/desktop/src-tauri/target/
+# P3：PyInstaller 大脑 onedir（由 tools/build_qi_brain.py 生成）
+qi/embodiment/desktop/src-tauri/resources/qi-brain/**
+!qi/embodiment/desktop/src-tauri/resources/qi-brain/README.md
 # 兼容旧路径（若本地残留）
 embodiment/desktop/dist/
 embodiment/desktop/.vite/

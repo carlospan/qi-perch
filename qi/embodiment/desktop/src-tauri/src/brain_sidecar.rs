@@ -1,5 +1,10 @@
-//! 开发期把 Python 大脑（`python -m qi`）当作子进程拉起。
-//! 正式打包 sidecar 另议；可用环境变量覆盖路径或跳过。
+//! 拉起 Python 大脑：bundled `qi-brain`（安装布局）或仓库 `python -m qi`（开发）。
+//!
+//! 选脑优先级（P3 sidecar）：
+//! 1. 9527 已在听 → 沿用（borrowed，退出不杀）
+//! 2. 旁有 bundled `qi-brain` → 起它
+//! 3. 否则仓库根 `python -m qi`
+//! 4. 失败 → 日志提示（前端走既有连接失败可见路径）
 //!
 //! 退出策略（P2 托盘）：仅在壳 **自己拉起** 大脑时，于 `RunEvent::Exit`（「退出栖」）结束子进程；
 //! 沿用已在听的后端（borrowed）不杀。关主窗藏托盘不会走到 Exit。
@@ -52,7 +57,7 @@ pub fn attach(app: &AppHandle) {
     return;
   }
 
-  match spawn_brain() {
+  match spawn_brain(app) {
     Ok(mut child) => {
       let pid = child.id();
       eprintln!("[qi] 已拉起大脑子进程 pid={pid}，等待 {WS_PROBE} …");
@@ -63,7 +68,7 @@ pub fn attach(app: &AppHandle) {
         }
         WaitOutcome::Exited(status) => {
           eprintln!("[qi] 大脑子进程提前退出：{status}");
-          eprintln!("[qi] 可手动运行：qi  或  python -m qi");
+          eprintln!("[qi] 可手动运行：qi  或  python -m qi；或先 python tools/build_qi_brain.py");
           app.manage(BrainSidecar::empty_borrowed());
         }
         WaitOutcome::Timeout => {
@@ -78,7 +83,7 @@ pub fn attach(app: &AppHandle) {
     Err(err) => {
       eprintln!("[qi] 拉起大脑失败：{err}");
       eprintln!("[qi] 可手动运行：qi  或  python -m qi");
-      eprintln!("[qi] 或设置 QI_PYTHON / QI_ROOT；跳过则 QI_SKIP_BRAIN=1");
+      eprintln!("[qi] 或设置 QI_BRAIN_EXE / QI_PYTHON / QI_ROOT；跳过则 QI_SKIP_BRAIN=1");
       app.manage(BrainSidecar::empty_borrowed());
     }
   }
@@ -181,9 +186,38 @@ fn wait_for_ws_or_exit(child: &mut Child, timeout: Duration) -> WaitOutcome {
   }
 }
 
-fn spawn_brain() -> Result<Child, String> {
+fn spawn_brain(app: &AppHandle) -> Result<Child, String> {
+  if let Some(exe) = find_bundled_brain(app) {
+    return spawn_bundled(&exe);
+  }
+  spawn_repo_python()
+}
+
+fn spawn_bundled(exe: &Path) -> Result<Child, String> {
+  let cwd = exe.parent().unwrap_or(exe);
+  let mut cmd = Command::new(exe);
+  cmd.current_dir(cwd)
+    .env("PYTHONUNBUFFERED", "1")
+    .stdin(Stdio::null())
+    .stdout(Stdio::inherit())
+    .stderr(Stdio::inherit());
+
+  eprintln!(
+    "[qi] 启动 bundled 大脑：{}（cwd={}）",
+    exe.display(),
+    cwd.display()
+  );
+
+  cmd.spawn()
+    .map_err(|e| format!("{}：{e}", exe.display()))
+}
+
+fn spawn_repo_python() -> Result<Child, String> {
   let root = find_repo_root().ok_or_else(|| {
-    String::from("找不到仓库根（缺 pyproject.toml）。请设 QI_ROOT=仓库绝对路径")
+    String::from(
+      "找不到 bundled qi-brain，也找不到仓库根（缺 pyproject.toml）。\
+       请先 python tools/build_qi_brain.py，或设 QI_ROOT / QI_BRAIN_EXE",
+    )
   })?;
   let (python, prefix_args) = find_python(&root)?;
 
@@ -205,6 +239,55 @@ fn spawn_brain() -> Result<Child, String> {
 
   cmd.spawn()
     .map_err(|e| format!("{}：{e}", python.display()))
+}
+
+fn brain_exe_name() -> &'static str {
+  if cfg!(windows) {
+    "qi-brain.exe"
+  } else {
+    "qi-brain"
+  }
+}
+
+fn find_bundled_brain(app: &AppHandle) -> Option<PathBuf> {
+  if let Ok(custom) = std::env::var("QI_BRAIN_EXE") {
+    let p = PathBuf::from(&custom);
+    if p.is_file() {
+      return Some(p);
+    }
+    eprintln!("[qi] QI_BRAIN_EXE 不存在：{custom}");
+  }
+
+  let name = brain_exe_name();
+  let mut candidates: Vec<PathBuf> = Vec::new();
+
+  if let Ok(resource_dir) = app.path().resource_dir() {
+    candidates.push(resource_dir.join("qi-brain").join(name));
+    candidates.push(resource_dir.join(name));
+  }
+
+  if let Ok(exe) = std::env::current_exe() {
+    if let Some(dir) = exe.parent() {
+      candidates.push(dir.join("qi-brain").join(name));
+      candidates.push(dir.join("resources").join("qi-brain").join(name));
+    }
+  }
+
+  // tauri:dev：资源尚未拷到 target 时，直接读 src-tauri/resources
+  candidates.push(
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("resources")
+      .join("qi-brain")
+      .join(name),
+  );
+
+  for path in candidates {
+    if path.is_file() {
+      eprintln!("[qi] 发现 bundled 大脑：{}", path.display());
+      return Some(path);
+    }
+  }
+  None
 }
 
 fn find_repo_root() -> Option<PathBuf> {
