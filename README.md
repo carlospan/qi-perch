@@ -88,7 +88,7 @@ mkdir -p data                 # Windows: mkdir data
 cp qi/config/settings.example.yaml data/settings.yaml
 ```
 
-**形象（首次）：** 将 VRM 放到 `qi/embodiment/assets/qi-avatar.vrm`（桌面端会同步到 `public/avatars/`）。详见 [换机搭建.md](docs/how-to/换机搭建.md)。
+**形象：** 默认 VRM 已在 `qi/embodiment/assets/qi-avatar.vrm`（开箱自带；许可见该目录 `NOTICE.md`）。桌面端会同步到 `public/avatars/`。详见 [换机搭建.md](docs/how-to/换机搭建.md)。
 
 **桌面壳（推荐）：**
 

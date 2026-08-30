@@ -19,7 +19,7 @@
 
 ## VRM 形象（相处页）
 
-把形象放到 `qi/embodiment/assets/qi-avatar.vrm`。`npm run dev` / `build` 会同步到 `public/avatars/`（该副本不入库）。
+**开箱自带**：默认形象在 `qi/embodiment/assets/qi-avatar.vrm`（已入库；许可见同目录 `NOTICE.md`）。`npm run dev` / `build` 会同步到 `public/avatars/`（该副本不入库）。
 
 **表情**：接 `state.avatar_state.expression`（含 custom：`soft_smile` / `quiet` / `sleepy` / `curious` 等）。  
 **互动**：点击看向你 + 微晃；`speech` / `typing` 轻 notice。  
