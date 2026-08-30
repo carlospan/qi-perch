@@ -98,6 +98,8 @@ npm install
 npm run tauri:dev             # 开发期会尝试拉起大脑 :9527
 ```
 
+Windows 安装包本机证伪：[docs/how-to/Windows安装包-本机证伪.md](docs/how-to/Windows安装包-本机证伪.md)（或仓库根 `python tools/pack_windows.py`）。
+
 **仅后端**（仓库根）：
 
 ```bash

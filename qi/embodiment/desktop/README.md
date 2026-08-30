@@ -43,7 +43,7 @@ npm run dev
 
 打开 http://localhost:5173
 
-打包：`npm run tauri:build` → `src-tauri/target/release/`。
+打包：见 [Windows安装包-本机证伪.md](../../../docs/how-to/Windows安装包-本机证伪.md)。仓库根也可：`python tools/pack_windows.py`（需先有 `qi-brain`）。
 
 更多说明见仓库根目录 [README.md](../../../README.md)。
 
