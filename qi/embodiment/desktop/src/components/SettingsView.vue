@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { QI_RELEASES_URL, isTauriShell, resolveAppVersionLabel } from "../about";
 import type { SettingsLlmPayload } from "../types";
 
 const props = defineProps<{
@@ -48,7 +49,8 @@ const wipeConfirmOpen = ref(false);
 const localRoots = ref<string[]>([]);
 const devPasteRoot = ref("");
 /** Vite 开发壳：允许粘贴路径（产品主路径仍是系统选目录） */
-const isDevShell = !("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
+const isDevShell = !isTauriShell();
+const appVersionLabel = ref("…");
 
 watch(
   () => props.snapshot,
@@ -78,8 +80,9 @@ watch(
   }
 );
 
-onMounted(() => {
+onMounted(async () => {
   emit("refresh");
+  appVersionLabel.value = await resolveAppVersionLabel();
 });
 
 const formDirty = computed(() => {
@@ -347,6 +350,20 @@ function onDevPasteAdd() {
             {{ memoryMessage }}
           </p>
         </div>
+
+        <div class="about">
+          <p class="label">关于</p>
+          <p class="about-name">栖</p>
+          <p class="about-ver">版本 {{ appVersionLabel }}</p>
+          <a
+            class="about-link"
+            :href="QI_RELEASES_URL"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            在 GitHub 看更新（Releases）
+          </a>
+        </div>
       </div>
     </div>
   </div>
@@ -490,13 +507,42 @@ input::placeholder {
 
 .data-dir,
 .memory-life,
-.allowed-roots {
+.allowed-roots,
+.about {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 0.4rem;
   padding-top: 0.6rem;
   border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.about-name {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+}
+
+.about-ver {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+}
+
+.about-link {
+  font-family: var(--serif);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--ember) 75%, var(--ink-dim));
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.about-link:hover {
+  color: var(--ink);
 }
 
 .root-list {
