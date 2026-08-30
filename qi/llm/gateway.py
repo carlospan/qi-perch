@@ -193,6 +193,47 @@ class LLMGateway:
         self._remember_if_conversation(purpose, outcome)
         return outcome
 
+    async def probe(self, *, timeout_s: float = 15.0) -> tuple[LLMCallOutcome, bool]:
+        """
+        设置页试连通：单次极短 chat。
+        返回 (outcome, timed_out)。不重试、不刷新 last_outcome。
+        """
+        purpose = "settings_probe"
+        try:
+            provider, model = self._resolve(purpose)
+        except RuntimeError as e:
+            logger.warning("LLM 探测路由失败: %s", e)
+            return LLMCallOutcome(text="", failure="unreachable"), False
+
+        if provider.key_missing():
+            return LLMCallOutcome(text="", failure="missing_key"), False
+
+        # GLM 思考模型：max_tokens 过小会全耗在 reasoning，content 空 → 误判 empty
+        messages = [{"role": "user", "content": "只回复一个字：好"}]
+
+        async def _once() -> LLMCallOutcome:
+            try:
+                raw = await provider.chat(
+                    messages=messages,
+                    temperature=0.0,
+                    max_tokens=256,
+                    model=model,
+                )
+            except Exception as e:
+                logger.warning("LLM 探测失败 provider=%s: %s", provider.name, e)
+                return LLMCallOutcome(text="", failure="unreachable")
+            text = (raw or "").strip()
+            if not text:
+                return LLMCallOutcome(text="", failure="empty")
+            return LLMCallOutcome(text=text, failure=None)
+
+        try:
+            outcome = await asyncio.wait_for(_once(), timeout=timeout_s)
+            return outcome, False
+        except asyncio.TimeoutError:
+            logger.warning("LLM 探测超时 timeout_s=%s", timeout_s)
+            return LLMCallOutcome(text="", failure="unreachable"), True
+
     async def call(
         self,
         purpose: str,

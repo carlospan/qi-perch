@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import type { SettingsLlmPayload } from "../types";
 
 const props = defineProps<{
@@ -7,6 +7,9 @@ const props = defineProps<{
   saving?: boolean;
   saveError?: string;
   saveOk?: boolean;
+  probing?: boolean;
+  probeMessage?: string;
+  probeOk?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -19,12 +22,14 @@ const emit = defineEmits<{
     },
   ];
   refresh: [];
+  probe: [];
 }>();
 
 const apiKey = ref("");
 const baseUrl = ref("");
 const model = ref("");
 const keyDirty = ref(false);
+const localProbeHint = ref("");
 
 watch(
   () => props.snapshot,
@@ -33,15 +38,34 @@ watch(
     baseUrl.value = s.base_url || "";
     model.value = s.model || "";
     if (!keyDirty.value) apiKey.value = "";
+    keyDirty.value = false;
+    localProbeHint.value = "";
   },
   { immediate: true }
+);
+
+watch(
+  () => props.probeMessage,
+  () => {
+    if (props.probeMessage) localProbeHint.value = "";
+  }
 );
 
 onMounted(() => {
   emit("refresh");
 });
 
+const formDirty = computed(() => {
+  const s = props.snapshot;
+  if (!s) return keyDirty.value || !!baseUrl.value.trim() || !!model.value.trim();
+  if (keyDirty.value) return true;
+  if (baseUrl.value.trim() !== (s.base_url || "").trim()) return true;
+  if (model.value.trim() !== (s.model || "").trim()) return true;
+  return false;
+});
+
 function onSave() {
+  localProbeHint.value = "";
   const payload: { api_key?: string; base_url: string; model: string } = {
     base_url: baseUrl.value.trim(),
     model: model.value.trim(),
@@ -50,6 +74,15 @@ function onSave() {
     payload.api_key = apiKey.value.trim();
   }
   emit("save", payload);
+}
+
+function onProbe() {
+  if (formDirty.value) {
+    localProbeHint.value = "有未保存的改动。请先「保存并生效」，再试连通。";
+    return;
+  }
+  localProbeHint.value = "";
+  emit("probe");
 }
 </script>
 
@@ -101,11 +134,29 @@ function onSave() {
         </label>
 
         <div class="actions">
-          <button type="button" class="save" :disabled="saving" @click="onSave">
-            {{ saving ? "保存中…" : "保存并生效" }}
-          </button>
+          <div class="btn-row">
+            <button type="button" class="save" :disabled="saving" @click="onSave">
+              {{ saving ? "保存中…" : "保存并生效" }}
+            </button>
+            <button
+              type="button"
+              class="probe"
+              :disabled="saving || probing"
+              @click="onProbe"
+            >
+              {{ probing ? "在试…" : "试一下" }}
+            </button>
+          </div>
           <p v-if="saveOk" class="hint ok">已保存，正在用新钥匙。</p>
           <p v-else-if="saveError" class="hint err">{{ saveError }}</p>
+          <p v-if="localProbeHint" class="hint err">{{ localProbeHint }}</p>
+          <p
+            v-else-if="probeMessage"
+            class="hint"
+            :class="probeOk ? 'ok' : 'err'"
+          >
+            {{ probeMessage }}
+          </p>
         </div>
       </div>
     </div>
@@ -188,6 +239,13 @@ input::placeholder {
   margin-top: 0.4rem;
 }
 
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+}
+
 .save {
   font-family: var(--serif);
   font-size: 0.9rem;
@@ -201,6 +259,28 @@ input::placeholder {
 }
 
 .save:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.probe {
+  font-family: var(--serif);
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+  padding: 0.55rem 1.1rem;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  cursor: pointer;
+  color: var(--ink-dim);
+  background: transparent;
+}
+
+.probe:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ember) 40%, transparent);
+}
+
+.probe:disabled {
   opacity: 0.55;
   cursor: wait;
 }

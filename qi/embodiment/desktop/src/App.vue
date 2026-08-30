@@ -42,10 +42,14 @@ const {
   settingsSaving,
   settingsSaveError,
   settingsSaveOk,
+  settingsProbing,
+  settingsProbeMessage,
+  settingsProbeOk,
   openSettings,
   closeSettings,
   requestSettingsLlm,
   saveSettingsLlm,
+  probeSettingsLlm,
   composerPrefill,
   requestRephrase,
   requestStopSpeaking,
@@ -126,9 +130,13 @@ onUnmounted(() => disconnect());
             :saving="settingsSaving"
             :save-error="settingsSaveError"
             :save-ok="settingsSaveOk"
+            :probing="settingsProbing"
+            :probe-message="settingsProbeMessage"
+            :probe-ok="settingsProbeOk"
             @close="closeSettings"
             @save="saveSettingsLlm"
             @refresh="requestSettingsLlm"
+            @probe="probeSettingsLlm"
           />
           <div v-show="!settingsOpen" class="stage">
             <!-- 相处页常驻 DOM：切走时仅隐藏，避免 VRM 每次重载 -->
@@ -145,27 +153,21 @@ onUnmounted(() => disconnect());
                   :typing="typing"
                   :speech-tick="replyEpoch"
                 />
-                <p
-                  v-if="presenceStatus"
-                  class="presence-status"
+                <div
+                  v-if="presenceStatus || activityGlanceLine || timeTraceLine"
+                  class="presence-life"
                   aria-live="polite"
                 >
-                  {{ presenceStatus }}
-                </p>
-                <p
-                  v-if="activityGlanceLine"
-                  class="activity-glance"
-                  aria-live="polite"
-                >
-                  {{ activityGlanceLine }}
-                </p>
-                <p
-                  v-if="timeTraceLine"
-                  class="time-trace"
-                  aria-live="polite"
-                >
-                  {{ timeTraceLine }}
-                </p>
+                  <p v-if="presenceStatus" class="presence-status">
+                    {{ presenceStatus }}
+                  </p>
+                  <p v-if="activityGlanceLine" class="activity-glance">
+                    {{ activityGlanceLine }}
+                  </p>
+                  <p v-if="timeTraceLine" class="time-trace">
+                    {{ timeTraceLine }}
+                  </p>
+                </div>
               </div>
               <div class="presence-chat">
                 <div class="presence-chat-bg" aria-hidden="true" />
@@ -498,60 +500,57 @@ h1 {
   filter: brightness(0.96);
 }
 
-.presence-status {
+.presence-life {
   position: absolute;
-  left: 50%;
-  bottom: 5.6rem;
+  right: 0.55rem;
+  top: 18%;
   z-index: 3;
-  transform: translateX(-50%);
-  margin: 0;
-  max-width: 90%;
-  padding: 0 0.5rem;
-  text-align: center;
-  font-family: var(--serif, "Noto Serif SC", "Songti SC", serif);
-  font-size: 0.78rem;
-  letter-spacing: 0.12em;
-  color: color-mix(in srgb, var(--ink) 55%, transparent);
+  transform: translateY(0);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.42rem;
+  max-width: min(12.5rem, 52%);
+  padding: 0.55rem 0.65rem 0.6rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, #0a1018 42%, transparent);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
   pointer-events: none;
-  text-shadow: 0 1px 8px rgba(5, 8, 14, 0.55);
+  text-align: left;
+}
+
+.presence-status {
+  margin: 0;
+  max-width: 100%;
+  font-family: var(--serif, "Noto Serif SC", "Songti SC", serif);
+  font-size: 0.88rem;
+  letter-spacing: 0.16em;
+  color: color-mix(in srgb, var(--ember) 88%, #fff 12%);
+  text-shadow:
+    0 0 12px color-mix(in srgb, var(--ember) 35%, transparent),
+    0 1px 8px rgba(5, 8, 14, 0.55);
 }
 
 .activity-glance {
-  position: absolute;
-  left: 50%;
-  bottom: 2.55rem;
-  z-index: 3;
-  transform: translateX(-50%);
   margin: 0;
-  max-width: 92%;
-  padding: 0 0.65rem;
-  text-align: center;
+  max-width: 100%;
   font-family: var(--serif, "Noto Serif SC", "Songti SC", serif);
-  font-size: 0.7rem;
-  line-height: 1.4;
-  letter-spacing: 0.07em;
-  color: color-mix(in srgb, var(--ink-dim, var(--ink)) 48%, transparent);
-  pointer-events: none;
-  text-shadow: 0 1px 10px rgba(5, 8, 14, 0.6);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--ink) 86%, var(--ember) 14%);
+  text-shadow: 0 1px 10px rgba(5, 8, 14, 0.55);
 }
 
 .time-trace {
-  position: absolute;
-  left: 50%;
-  bottom: 1.1rem;
-  z-index: 3;
-  transform: translateX(-50%);
   margin: 0;
-  max-width: 92%;
-  padding: 0 0.65rem;
-  text-align: center;
+  max-width: 100%;
   font-family: var(--serif, "Noto Serif SC", "Songti SC", serif);
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   line-height: 1.45;
-  letter-spacing: 0.06em;
-  color: color-mix(in srgb, var(--ink-dim, var(--ink)) 42%, transparent);
-  pointer-events: none;
-  text-shadow: 0 1px 10px rgba(5, 8, 14, 0.65);
+  letter-spacing: 0.05em;
+  color: color-mix(in srgb, #c9b896 70%, var(--ink-dim) 30%);
+  text-shadow: 0 1px 10px rgba(5, 8, 14, 0.55);
 }
 
 .presence-stage-vignette {

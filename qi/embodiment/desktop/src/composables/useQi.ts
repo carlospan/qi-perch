@@ -31,6 +31,7 @@ import type {
   ActivityGlancePayload,
   SettingsLlmPayload,
   SettingsLlmSavedPayload,
+  SettingsLlmProbePayload,
   TurnInterruptedPayload,
 } from "../types";
 import { qiWs } from "../ws";
@@ -172,6 +173,9 @@ function createQi() {
   const settingsSaving = ref(false);
   const settingsSaveError = ref("");
   const settingsSaveOk = ref(false);
+  const settingsProbing = ref(false);
+  const settingsProbeMessage = ref("");
+  const settingsProbeOk = ref(false);
 
   const mode = computed(() => {
     if (emotion.value.stasis || emotion.value.mode === "stasis") {
@@ -647,6 +651,8 @@ function createQi() {
     settingsOpen.value = true;
     settingsSaveOk.value = false;
     settingsSaveError.value = "";
+    settingsProbeMessage.value = "";
+    settingsProbeOk.value = false;
     requestSettingsLlm();
   }
 
@@ -654,6 +660,9 @@ function createQi() {
     settingsOpen.value = false;
     settingsSaveOk.value = false;
     settingsSaveError.value = "";
+    settingsProbeMessage.value = "";
+    settingsProbeOk.value = false;
+    settingsProbing.value = false;
   }
 
   function requestSettingsLlm() {
@@ -668,6 +677,7 @@ function createQi() {
     settingsSaving.value = true;
     settingsSaveOk.value = false;
     settingsSaveError.value = "";
+    settingsProbeMessage.value = "";
     const body: {
       text: string;
       api_key?: string;
@@ -682,6 +692,13 @@ function createQi() {
       body.api_key = payload.api_key;
     }
     qiWs.send({ type: "command", payload: body });
+  }
+
+  function probeSettingsLlm() {
+    settingsProbing.value = true;
+    settingsProbeMessage.value = "";
+    settingsProbeOk.value = false;
+    qiWs.send({ type: "command", payload: { text: "/settings_llm_probe" } });
   }
 
   function requestWake() {
@@ -756,6 +773,13 @@ function createQi() {
           settingsSaveError.value =
             String(payload?.error || "").trim() || "保存失败，请再试一次。";
         }
+      });
+      qiWs.on("settings_llm_probe", (payload: SettingsLlmProbePayload) => {
+        settingsProbing.value = false;
+        settingsProbeOk.value = Boolean(payload?.ok);
+        settingsProbeMessage.value =
+          String(payload?.message || "").trim() ||
+          (payload?.ok ? "通了。" : "没通，请再试一次。");
       });
       qiWs.on("review_memories", (payload: ReviewMemoriesPayload) => {
         const rows = Array.isArray(payload?.items) ? payload.items : [];
@@ -977,10 +1001,14 @@ function createQi() {
     settingsSaving,
     settingsSaveError,
     settingsSaveOk,
+    settingsProbing,
+    settingsProbeMessage,
+    settingsProbeOk,
     openSettings,
     closeSettings,
     requestSettingsLlm,
     saveSettingsLlm,
+    probeSettingsLlm,
     reviewMemories,
     talk,
     talkByDay,

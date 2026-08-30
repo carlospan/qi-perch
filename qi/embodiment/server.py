@@ -431,6 +431,8 @@ class EmbodimentServer:
                 await self._send_settings_llm(websocket)
             elif cmd == "/settings_llm_save":
                 await self._save_settings_llm(websocket, payload)
+            elif cmd == "/settings_llm_probe":
+                await self._probe_settings_llm(websocket)
             elif cmd == "/wake":
                 result = await self.brain.resume_from_stasis()
                 await self.broadcast(
@@ -809,6 +811,28 @@ class EmbodimentServer:
                 return
             except Exception:
                 logger.debug("向请求方发送 settings_llm_saved 失败", exc_info=True)
+                await self.broadcast(packet)
+
+    async def _probe_settings_llm(self, websocket: Any | None) -> None:
+        """设置页试连通：不入谈区/历史/记忆；结果只回 settings_llm_probe。"""
+        from qi.config.llm_probe import run_settings_llm_probe
+
+        try:
+            result = await run_settings_llm_probe(getattr(self.brain, "llm", None))
+        except Exception:
+            logger.exception("设置页试连通异常")
+            from qi.config.llm_probe import probe_result_payload
+
+            result = probe_result_payload(kind="unreachable")
+
+        packet = {"type": "settings_llm_probe", "payload": result}
+        raw = json.dumps(packet, ensure_ascii=False)
+        if websocket is not None:
+            try:
+                await websocket.send(raw)
+                return
+            except Exception:
+                logger.debug("向请求方发送 settings_llm_probe 失败", exc_info=True)
         await self.broadcast(packet)
 
     async def broadcast(self, message: dict) -> None:

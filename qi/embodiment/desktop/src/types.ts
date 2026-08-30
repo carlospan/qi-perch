@@ -214,7 +214,8 @@ export type ServerMessage =
   | { type: "wake_result"; payload: { ok: boolean; reason?: string; mode?: string } }
   | { type: "action"; payload: ActionPayload }
   | { type: "settings_llm"; payload: SettingsLlmPayload }
-  | { type: "settings_llm_saved"; payload: SettingsLlmSavedPayload };
+  | { type: "settings_llm_saved"; payload: SettingsLlmSavedPayload }
+  | { type: "settings_llm_probe"; payload: SettingsLlmProbePayload };
 
 /** 设置页 · LLM 钥匙快照（不回传完整 key） */
 export type SettingsLlmPayload = {
@@ -227,6 +228,12 @@ export type SettingsLlmPayload = {
 export type SettingsLlmSavedPayload = SettingsLlmPayload & {
   ok: boolean;
   error?: string;
+};
+
+export type SettingsLlmProbePayload = {
+  ok: boolean;
+  kind: "ok" | "missing_key" | "unreachable" | "empty" | "timeout" | string;
+  message: string;
 };
 
 /** 回顾时间线条目：文本投影带 kind:"text"；卡片带 kind:"card" */
