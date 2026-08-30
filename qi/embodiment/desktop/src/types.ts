@@ -216,7 +216,9 @@ export type ServerMessage =
   | { type: "settings_llm"; payload: SettingsLlmPayload }
   | { type: "settings_llm_saved"; payload: SettingsLlmSavedPayload }
   | { type: "settings_llm_probe"; payload: SettingsLlmProbePayload }
-  | { type: "open_data_dir_result"; payload: OpenDataDirResultPayload };
+  | { type: "open_data_dir_result"; payload: OpenDataDirResultPayload }
+  | { type: "export_memory_result"; payload: MemoryLifecycleResultPayload }
+  | { type: "wipe_memory_result"; payload: MemoryLifecycleResultPayload };
 
 /** 设置页 · LLM 钥匙快照（不回传完整 key） */
 export type SettingsLlmPayload = {
@@ -232,6 +234,13 @@ export type OpenDataDirResultPayload = {
   ok: boolean;
   path: string;
   message?: string | null;
+};
+
+export type MemoryLifecycleResultPayload = {
+  ok: boolean;
+  message?: string | null;
+  path?: string | null;
+  backups_dir?: string | null;
 };
 
 export type SettingsLlmSavedPayload = SettingsLlmPayload & {

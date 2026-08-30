@@ -32,6 +32,7 @@ import type {
   SettingsLlmPayload,
   SettingsLlmSavedPayload,
   SettingsLlmProbePayload,
+  MemoryLifecycleResultPayload,
   TurnInterruptedPayload,
 } from "../types";
 import { offlineKindFromFlags } from "../connectionStatus";
@@ -181,6 +182,10 @@ function createQi() {
   const settingsProbing = ref(false);
   const settingsProbeMessage = ref("");
   const settingsProbeOk = ref(false);
+  const memoryExporting = ref(false);
+  const memoryWiping = ref(false);
+  const memoryLifecycleMessage = ref("");
+  const memoryLifecycleOk = ref(false);
   /** 无钥匙轻提示：本会话关掉后不再出 */
   const keyTipDismissed = ref(false);
 
@@ -698,6 +703,10 @@ function createQi() {
     settingsProbeMessage.value = "";
     settingsProbeOk.value = false;
     settingsProbing.value = false;
+    memoryLifecycleMessage.value = "";
+    memoryLifecycleOk.value = false;
+    memoryExporting.value = false;
+    memoryWiping.value = false;
   }
 
   function openGuide() {
@@ -747,6 +756,22 @@ function createQi() {
 
   function openDataDir() {
     qiWs.send({ type: "command", payload: { text: "/open_data_dir" } });
+  }
+
+  function exportMemory() {
+    if (!connected.value || memoryExporting.value || memoryWiping.value) return;
+    memoryExporting.value = true;
+    memoryLifecycleMessage.value = "";
+    memoryLifecycleOk.value = false;
+    qiWs.send({ type: "command", payload: { text: "/export_memory" } });
+  }
+
+  function wipeMemory() {
+    if (!connected.value || memoryExporting.value || memoryWiping.value) return;
+    memoryWiping.value = true;
+    memoryLifecycleMessage.value = "";
+    memoryLifecycleOk.value = false;
+    qiWs.send({ type: "command", payload: { text: "/wipe_memory" } });
   }
 
   function requestWake() {
@@ -835,6 +860,20 @@ function createQi() {
         settingsProbeMessage.value =
           String(payload?.message || "").trim() ||
           (payload?.ok ? "通了。" : "没通，请再试一次。");
+      });
+      qiWs.on("export_memory_result", (payload: MemoryLifecycleResultPayload) => {
+        memoryExporting.value = false;
+        memoryLifecycleOk.value = Boolean(payload?.ok);
+        memoryLifecycleMessage.value =
+          String(payload?.message || "").trim() ||
+          (payload?.ok ? "已导出。" : "导出失败。");
+      });
+      qiWs.on("wipe_memory_result", (payload: MemoryLifecycleResultPayload) => {
+        memoryWiping.value = false;
+        memoryLifecycleOk.value = Boolean(payload?.ok);
+        memoryLifecycleMessage.value =
+          String(payload?.message || "").trim() ||
+          (payload?.ok ? "记忆已清空。" : "清空失败。");
       });
       qiWs.on("review_memories", (payload: ReviewMemoriesPayload) => {
         const rows = Array.isArray(payload?.items) ? payload.items : [];
@@ -1061,6 +1100,10 @@ function createQi() {
     settingsProbing,
     settingsProbeMessage,
     settingsProbeOk,
+    memoryExporting,
+    memoryWiping,
+    memoryLifecycleMessage,
+    memoryLifecycleOk,
     hasLlmKey,
     showKeyTip,
     dismissKeyTip,
@@ -1072,6 +1115,8 @@ function createQi() {
     saveSettingsLlm,
     probeSettingsLlm,
     openDataDir,
+    exportMemory,
+    wipeMemory,
     reviewMemories,
     talk,
     talkByDay,

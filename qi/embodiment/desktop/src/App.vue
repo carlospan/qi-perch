@@ -48,6 +48,10 @@ const {
   settingsProbing,
   settingsProbeMessage,
   settingsProbeOk,
+  memoryExporting,
+  memoryWiping,
+  memoryLifecycleMessage,
+  memoryLifecycleOk,
   showKeyTip,
   dismissKeyTip,
   openSettings,
@@ -58,6 +62,8 @@ const {
   saveSettingsLlm,
   probeSettingsLlm,
   openDataDir,
+  exportMemory,
+  wipeMemory,
   composerPrefill,
   requestRephrase,
   requestStopSpeaking,
@@ -148,11 +154,17 @@ onUnmounted(() => disconnect());
             :probing="settingsProbing"
             :probe-message="settingsProbeMessage"
             :probe-ok="settingsProbeOk"
+            :memory-exporting="memoryExporting"
+            :memory-wiping="memoryWiping"
+            :memory-message="memoryLifecycleMessage"
+            :memory-ok="memoryLifecycleOk"
             @close="closeSettings"
             @save="saveSettingsLlm"
             @refresh="requestSettingsLlm"
             @probe="probeSettingsLlm"
             @open-data-dir="openDataDir"
+            @export-memory="exportMemory"
+            @wipe-memory="wipeMemory"
           />
           <div v-show="!settingsOpen && !guideOpen" class="stage">
             <div

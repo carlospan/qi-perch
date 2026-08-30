@@ -435,6 +435,10 @@ class EmbodimentServer:
                 await self._probe_settings_llm(websocket)
             elif cmd == "/open_data_dir":
                 await self._open_data_dir(websocket)
+            elif cmd == "/export_memory":
+                await self._export_memory(websocket)
+            elif cmd == "/wipe_memory":
+                await self._wipe_memory(websocket)
             elif cmd == "/wake":
                 result = await self.brain.resume_from_stasis()
                 await self.broadcast(
@@ -785,6 +789,127 @@ class EmbodimentServer:
             except Exception:
                 logger.debug("向请求方发送 open_data_dir_result 失败", exc_info=True)
         await self.broadcast(packet)
+
+    async def _reply_settings_op(
+        self, websocket: Any | None, msg_type: str, payload: dict
+    ) -> None:
+        packet = {"type": msg_type, "payload": payload}
+        raw = json.dumps(packet, ensure_ascii=False)
+        if websocket is not None:
+            try:
+                await websocket.send(raw)
+                return
+            except Exception:
+                logger.debug("向请求方发送 %s 失败", msg_type, exc_info=True)
+        await self.broadcast(packet)
+
+    async def _export_memory(self, websocket: Any | None) -> None:
+        from qi.data_lifecycle import backups_dir, export_memory_backup
+
+        try:
+            ok, message, zip_path = await asyncio.to_thread(
+                export_memory_backup, open_folder=True
+            )
+        except Exception as e:
+            logger.exception("导出记忆失败")
+            await self._reply_settings_op(
+                websocket,
+                "export_memory_result",
+                {"ok": False, "message": f"导出失败：{e}"},
+            )
+            return
+        await self._reply_settings_op(
+            websocket,
+            "export_memory_result",
+            {
+                "ok": ok,
+                "message": message if not ok else "已导出到 backups 文件夹",
+                "path": str(zip_path) if zip_path else None,
+                "backups_dir": str(backups_dir()),
+            },
+        )
+
+    async def _wipe_memory(self, websocket: Any | None) -> None:
+        """关闭句柄 → 删记忆文件 → 重建空库并刷新前端。"""
+        from qi.core.emotion import EmotionState
+        from qi.data_lifecycle import wipe_memory_artifacts
+        from qi.storage.database import Database
+
+        if self._turn_in_flight():
+            try:
+                await self._interrupt_active_turn("stop")
+            except Exception:
+                logger.debug("清空记忆前打断本轮失败", exc_info=True)
+
+        try:
+            mm = getattr(self.brain, "memory", None)
+            vs = getattr(mm, "vector_store", None) if mm is not None else None
+            if vs is not None and hasattr(vs, "close"):
+                try:
+                    vs.close()
+                except Exception:
+                    logger.debug("关闭向量库失败", exc_info=True)
+
+            db = getattr(self.brain, "_db", None)
+            if db is not None:
+                await db.close()
+
+            ok, detail = await asyncio.to_thread(wipe_memory_artifacts)
+            if not ok:
+                await self._reply_settings_op(
+                    websocket,
+                    "wipe_memory_result",
+                    {"ok": False, "message": detail},
+                )
+                return
+
+            db_path = (self.brain.config.get("database") or {}).get("path")
+            if not db_path:
+                from qi.paths import under_data
+
+                db_path = str(under_data("qi.db"))
+            new_db = Database(str(db_path))
+            await new_db.initialize()
+
+            self.brain.emotion = EmotionState()
+            self.brain._prev_valence = self.brain.emotion.valence
+            self.brain._pending_queue.clear()
+            self.brain._pending_speech = None
+            self.brain._last_response = None
+            self.brain.last_user_message = None
+            if hasattr(self.brain, "session"):
+                # 清会话侧请求，避免旧确认卡挂住
+                try:
+                    self.brain.session.last_assist_request = None
+                    self.brain.session.pending_assist_confirmation = None
+                except Exception:
+                    pass
+
+            await self.brain.restore_state(new_db)
+
+            await self._reply_settings_op(
+                websocket,
+                "wipe_memory_result",
+                {"ok": True, "message": "记忆已清空。钥匙还在。"},
+            )
+            await self.broadcast(self._state_packet())
+            await self._send_history(None)
+            await self.push_activity_glance()
+            try:
+                await self._send_time_traces(None)
+            except Exception:
+                logger.debug("清空后刷新时间痕迹失败", exc_info=True)
+            try:
+                await self._send_review_memories(None)
+            except Exception:
+                logger.debug("清空后刷新回顾记忆失败", exc_info=True)
+        except Exception as e:
+            logger.exception("清空记忆失败")
+            await self._reply_settings_op(
+                websocket,
+                "wipe_memory_result",
+                {"ok": False, "message": f"清空失败：{e}"},
+            )
 
     async def _save_settings_llm(self, websocket: Any | None, payload: dict) -> None:
         from qi.config.secrets import (

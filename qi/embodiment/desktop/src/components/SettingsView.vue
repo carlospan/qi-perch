@@ -10,6 +10,10 @@ const props = defineProps<{
   probing?: boolean;
   probeMessage?: string;
   probeOk?: boolean;
+  memoryExporting?: boolean;
+  memoryWiping?: boolean;
+  memoryMessage?: string;
+  memoryOk?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -24,6 +28,8 @@ const emit = defineEmits<{
   refresh: [];
   probe: [];
   openDataDir: [];
+  exportMemory: [];
+  wipeMemory: [];
 }>();
 
 const apiKey = ref("");
@@ -31,6 +37,8 @@ const baseUrl = ref("");
 const model = ref("");
 const keyDirty = ref(false);
 const localProbeHint = ref("");
+/** 删除两步确认：展开后需再点确认 */
+const wipeConfirmOpen = ref(false);
 
 watch(
   () => props.snapshot,
@@ -49,6 +57,13 @@ watch(
   () => props.probeMessage,
   () => {
     if (props.probeMessage) localProbeHint.value = "";
+  }
+);
+
+watch(
+  () => props.memoryMessage,
+  (msg) => {
+    if (msg && props.memoryOk) wipeConfirmOpen.value = false;
   }
 );
 
@@ -84,6 +99,23 @@ function onProbe() {
   }
   localProbeHint.value = "";
   emit("probe");
+}
+
+function onExport() {
+  wipeConfirmOpen.value = false;
+  emit("exportMemory");
+}
+
+function onWipeAsk() {
+  wipeConfirmOpen.value = true;
+}
+
+function onWipeCancel() {
+  wipeConfirmOpen.value = false;
+}
+
+function onWipeConfirm() {
+  emit("wipeMemory");
 }
 </script>
 
@@ -168,6 +200,60 @@ function onProbe() {
           <button type="button" class="open-folder" @click="emit('openDataDir')">
             打开数据文件夹
           </button>
+        </div>
+
+        <div class="memory-life">
+          <p class="label">记忆</p>
+          <p class="life-note">
+            导出只含她记得的事（库与向量），不含钥匙和模型。删除不可恢复。
+          </p>
+          <div class="btn-row">
+            <button
+              type="button"
+              class="open-folder"
+              :disabled="memoryExporting || memoryWiping"
+              @click="onExport"
+            >
+              {{ memoryExporting ? "导出中…" : "导出备份" }}
+            </button>
+            <button
+              v-if="!wipeConfirmOpen"
+              type="button"
+              class="danger"
+              :disabled="memoryExporting || memoryWiping"
+              @click="onWipeAsk"
+            >
+              删除全部记忆
+            </button>
+          </div>
+          <div v-if="wipeConfirmOpen" class="wipe-confirm">
+            <p class="wipe-warn">会忘掉往事，钥匙还在。此操作不可恢复。</p>
+            <div class="btn-row">
+              <button
+                type="button"
+                class="danger solid"
+                :disabled="memoryWiping"
+                @click="onWipeConfirm"
+              >
+                {{ memoryWiping ? "清空中…" : "确认删除" }}
+              </button>
+              <button
+                type="button"
+                class="open-folder"
+                :disabled="memoryWiping"
+                @click="onWipeCancel"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+          <p
+            v-if="memoryMessage"
+            class="hint"
+            :class="memoryOk ? 'ok' : 'err'"
+          >
+            {{ memoryMessage }}
+          </p>
         </div>
       </div>
     </div>
@@ -310,7 +396,8 @@ input::placeholder {
   color: #c45a4a;
 }
 
-.data-dir {
+.data-dir,
+.memory-life {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -328,6 +415,31 @@ input::placeholder {
   word-break: break-all;
 }
 
+.life-note {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+  line-height: 1.45;
+}
+
+.wipe-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.55rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, #c45a4a 35%, transparent);
+  background: color-mix(in srgb, #c45a4a 8%, transparent);
+}
+
+.wipe-warn {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #c45a4a;
+  line-height: 1.4;
+}
+
 .open-folder {
   font-family: var(--serif);
   font-size: 0.85rem;
@@ -340,8 +452,36 @@ input::placeholder {
   background: transparent;
 }
 
-.open-folder:hover {
+.open-folder:hover:not(:disabled) {
   color: var(--ink);
   border-color: color-mix(in srgb, var(--ember) 40%, transparent);
+}
+
+.open-folder:disabled,
+.danger:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.danger {
+  font-family: var(--serif);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, #c45a4a 45%, transparent);
+  cursor: pointer;
+  color: #c45a4a;
+  background: transparent;
+}
+
+.danger:hover:not(:disabled) {
+  border-color: #c45a4a;
+}
+
+.danger.solid {
+  color: #fff8f6;
+  background: color-mix(in srgb, #c45a4a 88%, #2a2118);
+  border-color: transparent;
 }
 </style>
