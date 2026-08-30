@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import type { SystemNoticePayload } from "../types";
+import {
+  offlineStatusCopy,
+  type OfflineKind,
+} from "../connectionStatus";
 
-defineProps<{
+const props = defineProps<{
   mode: string;
   season: string;
   connected: boolean;
+  /** 离线档：从未接上 / 断线重连中 */
+  offlineKind?: OfflineKind | null;
   /** 自然语言情绪描述，如「有点安静，感到安稳」 */
   mood?: string;
   /** 栖正在生成回复 */
@@ -33,13 +39,20 @@ const modeLabel: Record<string, string> = {
   interacting: "在听你",
   stasis: "已封存休息",
 };
+
+function offlineCopy() {
+  const kind = props.offlineKind ?? "never";
+  return offlineStatusCopy(kind);
+}
 </script>
 
 <template>
   <div class="status" :class="{ replying, hasNotice: !!notice }">
     <div class="row">
       <span class="dot" :class="{ on: connected, pulse: connected && replying }" />
-      <span v-if="!connected" class="offline">未连上</span>
+      <template v-if="!connected">
+        <span class="offline">{{ offlineCopy().title }}</span>
+      </template>
       <template v-else-if="replying">
         <span class="replying-label" aria-live="polite">在回你</span>
         <span class="sep">·</span>
@@ -69,6 +82,14 @@ const modeLabel: Record<string, string> = {
       <button type="button" class="notice-x" aria-label="关闭提示" @click="emit('dismissNotice')">
         ×
       </button>
+    </p>
+    <p
+      v-else-if="!connected"
+      class="mood offline-next"
+      role="status"
+      aria-live="polite"
+    >
+      {{ offlineCopy().next }}
     </p>
     <p
       v-else-if="connected && mood && !replying"
@@ -158,6 +179,11 @@ const modeLabel: Record<string, string> = {
   color: var(--ink-faint);
   letter-spacing: 0.02em;
   text-align: right;
+}
+
+.mood.offline-next {
+  white-space: normal;
+  line-height: 1.35;
 }
 
 .mood.hint {

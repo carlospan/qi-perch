@@ -17,6 +17,7 @@ import { useQi } from "./composables/useQi";
 const {
   view,
   connected,
+  offlineKind,
   typing,
   season,
   mode,
@@ -111,6 +112,7 @@ onUnmounted(() => disconnect());
             :mode="mode"
             :season="season"
             :connected="connected"
+            :offline-kind="offlineKind"
             :mood="moodText"
             :replying="typing"
             :notice="systemNotice"
@@ -266,7 +268,11 @@ onUnmounted(() => disconnect());
               </div>
 
               <div v-else-if="view === 'state'" key="state" class="page">
-                <StateView :emotion="emotion" :connected="connected" />
+                <StateView
+                  :emotion="emotion"
+                  :connected="connected"
+                  :offline-kind="offlineKind"
+                />
               </div>
             </Transition>
           </div>

@@ -34,6 +34,7 @@ import type {
   SettingsLlmProbePayload,
   TurnInterruptedPayload,
 } from "../types";
+import { offlineKindFromFlags } from "../connectionStatus";
 import { qiWs } from "../ws";
 
 /** 与 HITL：busy 约 60s 强制解锁 */
@@ -133,6 +134,8 @@ function createQi() {
 
   const view = ref<QiView>("presence");
   const connected = ref(false);
+  /** 本会话是否曾成功接上通道（用于区分「从未接上」与「断线重连」） */
+  const everConnected = ref(false);
   const typing = ref(false);
   const speech = ref("");
   const speaking = ref(false);
@@ -188,6 +191,11 @@ function createQi() {
       settingsLlm.value != null &&
       !hasLlmKey.value &&
       !keyTipDismissed.value
+  );
+
+  /** 离线档：null=已连上；never=从未接上；reconnecting=曾连上后断线 */
+  const offlineKind = computed(() =>
+    offlineKindFromFlags(connected.value, everConnected.value)
   );
 
   const mode = computed(() => {
@@ -766,6 +774,7 @@ function createQi() {
       wired = true;
       qiWs.on("open", () => {
         connected.value = true;
+        everConnected.value = true;
         requestEmotionSnapshot();
         requestHistory();
         requestJournal();
@@ -1025,6 +1034,7 @@ function createQi() {
   return {
     view,
     connected,
+    offlineKind,
     typing,
     speech,
     speaking,

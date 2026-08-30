@@ -1,11 +1,22 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { EmotionSnapshot } from "../types";
+import {
+  offlineStatusCopy,
+  type OfflineKind,
+} from "../connectionStatus";
 
 const props = defineProps<{
   emotion: EmotionSnapshot;
   connected: boolean;
+  offlineKind?: OfflineKind | null;
 }>();
+
+const offlineNote = computed(() => {
+  if (props.connected) return "";
+  const c = offlineStatusCopy(props.offlineKind ?? "never");
+  return `${c.title} · ${c.next}`;
+});
 
 type DimRow = {
   key: string;
@@ -139,7 +150,7 @@ const summary = computed(() => (props.emotion.description || "").trim());
         <p class="page-hero-sub">
           栖此刻的六维心境。上面是她的话，下面是结构里的量。
         </p>
-        <p v-if="!connected" class="status-note empty">未连上，还读不到她。</p>
+        <p v-if="!connected" class="status-note empty">{{ offlineNote }}</p>
         <p v-else-if="summary" class="status-note summary">{{ summary }}</p>
         <p v-else class="status-note empty">尚无心境描述，等下一拍状态。</p>
       </header>
