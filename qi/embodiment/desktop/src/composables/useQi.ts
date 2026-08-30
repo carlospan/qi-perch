@@ -176,6 +176,17 @@ function createQi() {
   const settingsProbing = ref(false);
   const settingsProbeMessage = ref("");
   const settingsProbeOk = ref(false);
+  /** 无钥匙轻提示：本会话关掉后不再出 */
+  const keyTipDismissed = ref(false);
+
+  const hasLlmKey = computed(() => Boolean(settingsLlm.value?.has_key));
+  const showKeyTip = computed(
+    () =>
+      connected.value &&
+      settingsLlm.value != null &&
+      !hasLlmKey.value &&
+      !keyTipDismissed.value
+  );
 
   const mode = computed(() => {
     if (emotion.value.stasis || emotion.value.mode === "stasis") {
@@ -616,6 +627,15 @@ function createQi() {
     if (!connected.value) return;
     const value = text.trim();
     if (!value) return;
+    // 无钥匙：前端先拦，不发出、不进谈区当已送达
+    if (settingsLlm.value != null && !settingsLlm.value.has_key) {
+      applySystemNotice({
+        kind: "missing_key",
+        message: "还没有模型钥匙。先去设置里粘贴 API 密钥，再来跟她说话。",
+        action: "open_settings",
+      });
+      return;
+    }
     touchConsideredForTurn = false;
     systemNotice.value = null;
     setTyping(true);
@@ -625,6 +645,10 @@ function createQi() {
     const clientId = uid("msg");
     armAckTimeout(clientId);
     qiWs.sendUserMessage(value, clientId);
+  }
+
+  function dismissKeyTip() {
+    keyTipDismissed.value = true;
   }
 
   function requestHistory() {
@@ -732,6 +756,7 @@ function createQi() {
         requestTimeTraces();
         requestReviewMemories();
         requestActivityGlance();
+        requestSettingsLlm();
       });
       qiWs.on("close", () => {
         connected.value = false;
@@ -768,6 +793,9 @@ function createQi() {
           settingsSaveOk.value = true;
           settingsSaveError.value = "";
           dismissSystemNotice();
+          if (payload?.has_key) {
+            keyTipDismissed.value = false;
+          }
         } else {
           settingsSaveOk.value = false;
           settingsSaveError.value =
@@ -1004,6 +1032,9 @@ function createQi() {
     settingsProbing,
     settingsProbeMessage,
     settingsProbeOk,
+    hasLlmKey,
+    showKeyTip,
+    dismissKeyTip,
     openSettings,
     closeSettings,
     requestSettingsLlm,

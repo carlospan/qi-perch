@@ -45,6 +45,8 @@ const {
   settingsProbing,
   settingsProbeMessage,
   settingsProbeOk,
+  showKeyTip,
+  dismissKeyTip,
   openSettings,
   closeSettings,
   requestSettingsLlm,
@@ -139,6 +141,28 @@ onUnmounted(() => disconnect());
             @probe="probeSettingsLlm"
           />
           <div v-show="!settingsOpen" class="stage">
+            <div
+              v-if="showKeyTip && view === 'presence'"
+              class="key-tip"
+              role="status"
+            >
+              <p class="key-tip-text">
+                她已经在这儿了。想说话时，先给她一把模型钥匙。
+              </p>
+              <div class="key-tip-actions">
+                <button type="button" class="key-tip-go" @click="openSettings">
+                  去设置
+                </button>
+                <button
+                  type="button"
+                  class="key-tip-x"
+                  aria-label="关闭提示"
+                  @click="dismissKeyTip"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
             <!-- 相处页常驻 DOM：切走时仅隐藏，避免 VRM 每次重载 -->
             <div
               class="presence-layout"
@@ -446,6 +470,73 @@ h1 {
   position: relative;
   flex: 1;
   min-height: 0;
+}
+
+.key-tip {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  right: 0.35rem;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--ember) 32%, transparent);
+  background: color-mix(in srgb, var(--ember) 14%, #121820);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+}
+
+.key-tip-text {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-family: var(--serif, "Noto Serif SC", "Songti SC", serif);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--ink) 90%, var(--ember) 10%);
+}
+
+.key-tip-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.key-tip-go {
+  border: 1px solid color-mix(in srgb, var(--ember) 45%, transparent);
+  background: color-mix(in srgb, var(--ember) 22%, transparent);
+  color: color-mix(in srgb, var(--ember) 78%, #fff 22%);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding: 0.28rem 0.55rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.key-tip-go:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ember) 65%, transparent);
+}
+
+.key-tip-x {
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0.15rem 0.25rem;
+}
+
+.key-tip-x:hover {
+  color: var(--ink-dim);
 }
 
 .presence-layout {
