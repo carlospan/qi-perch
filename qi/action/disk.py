@@ -28,13 +28,60 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("qi.action.disk")
 
-# 允许根：仅 D:\（测试可 monkeypatch DEFAULT_ALLOWED_ROOT）
+# 允许根：见 qi.action.allowed_roots；测试可 monkeypatch DEFAULT_ALLOWED_ROOT
 DEFAULT_ALLOWED_ROOT = Path("D:/")
 LIST_CAP = 40
 DEBOUNCE_KEY = "disk_open_debounce"
 LIST_DEBOUNCE_KEY = "disk_list_debounce"
 DEBOUNCE_SECONDS = 8.0
 LISTING_STICKY_MINUTES = 5.0
+
+
+def _roots() -> list[Path]:
+    """测试若 patch 了 DEFAULT_ALLOWED_ROOT，则视为单根覆盖。"""
+    patched = Path(DEFAULT_ALLOWED_ROOT)
+    try:
+        if patched.resolve() != Path("D:/").resolve():
+            return [patched.resolve()]
+    except OSError:
+        return [patched]
+    from qi.action.allowed_roots import allowed_roots
+
+    return allowed_roots()
+
+
+def allowed_root() -> Path:
+    roots = _roots()
+    if roots:
+        return roots[0]
+    return Path(DEFAULT_ALLOWED_ROOT)
+
+
+def normalize_under_root(raw: str, *, root: Path | None = None) -> Path | None:
+    if root is not None:
+        root = root.resolve()
+        text = (raw or "").strip().strip('"').strip("'")
+        if not text:
+            return None
+        if re.fullmatch(r"[Dd]\s*盘", text):
+            return root
+        try:
+            p = Path(text).expanduser()
+            if not p.is_absolute():
+                p = root / p
+            resolved = p.resolve()
+        except Exception:
+            return None
+        try:
+            resolved.relative_to(root)
+        except ValueError:
+            if resolved != root:
+                return None
+        return resolved
+    from qi.action.allowed_roots import normalize_under_roots
+
+    return normalize_under_roots(raw, roots=_roots())
+
 
 # 拒 https:// 等（scheme 的 ://）；只认盘符路径
 _WIN_PATH_RE = re.compile(
@@ -69,32 +116,6 @@ class DiskRequest:
     intent: str  # list_dir | open_file | offer_list
     path: str
     listed_entries: list[dict[str, Any]] = field(default_factory=list)
-
-
-def allowed_root() -> Path:
-    return Path(DEFAULT_ALLOWED_ROOT)
-
-
-def normalize_under_root(raw: str, *, root: Path | None = None) -> Path | None:
-    root = (root or allowed_root()).resolve()
-    text = (raw or "").strip().strip('"').strip("'")
-    if not text:
-        return None
-    if re.fullmatch(r"[Dd]\s*盘", text):
-        return root
-    try:
-        p = Path(text).expanduser()
-        if not p.is_absolute():
-            p = root / p
-        resolved = p.resolve()
-    except Exception:
-        return None
-    try:
-        resolved.relative_to(root)
-    except ValueError:
-        if resolved != root:
-            return None
-    return resolved
 
 
 def extract_win_path(text: str) -> str | None:

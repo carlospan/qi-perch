@@ -218,7 +218,9 @@ export type ServerMessage =
   | { type: "settings_llm_probe"; payload: SettingsLlmProbePayload }
   | { type: "open_data_dir_result"; payload: OpenDataDirResultPayload }
   | { type: "export_memory_result"; payload: MemoryLifecycleResultPayload }
-  | { type: "wipe_memory_result"; payload: MemoryLifecycleResultPayload };
+  | { type: "wipe_memory_result"; payload: MemoryLifecycleResultPayload }
+  | { type: "pick_allowed_root_result"; payload: PickAllowedRootResultPayload }
+  | { type: "allowed_roots_saved"; payload: AllowedRootsSavedPayload };
 
 /** 设置页 · LLM 钥匙快照（不回传完整 key） */
 export type SettingsLlmPayload = {
@@ -228,6 +230,13 @@ export type SettingsLlmPayload = {
   model: string;
   /** 当前数据根（本机路径） */
   data_dir?: string;
+  allowed_roots?: AllowedRootsPayload;
+};
+
+export type AllowedRootsPayload = {
+  roots: string[];
+  empty: boolean;
+  default_had_d?: boolean;
 };
 
 export type OpenDataDirResultPayload = {
@@ -241,6 +250,17 @@ export type MemoryLifecycleResultPayload = {
   message?: string | null;
   path?: string | null;
   backups_dir?: string | null;
+};
+
+export type PickAllowedRootResultPayload = {
+  ok: boolean;
+  path?: string | null;
+  message?: string | null;
+};
+
+export type AllowedRootsSavedPayload = AllowedRootsPayload & {
+  ok: boolean;
+  message?: string | null;
 };
 
 export type SettingsLlmSavedPayload = SettingsLlmPayload & {

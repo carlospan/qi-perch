@@ -439,6 +439,10 @@ class EmbodimentServer:
                 await self._export_memory(websocket)
             elif cmd == "/wipe_memory":
                 await self._wipe_memory(websocket)
+            elif cmd == "/pick_allowed_root":
+                await self._pick_allowed_root(websocket)
+            elif cmd == "/allowed_roots_save":
+                await self._save_allowed_roots(websocket, payload)
             elif cmd == "/wake":
                 result = await self.brain.resume_from_stasis()
                 await self.broadcast(
@@ -751,11 +755,13 @@ class EmbodimentServer:
         await self.broadcast(await self._activity_glance_packet())
 
     async def _send_settings_llm(self, websocket: Any | None) -> None:
+        from qi.action.allowed_roots import snapshot_for_settings
         from qi.config.secrets import settings_llm_snapshot
         from qi.paths import resolve_data_root
 
         snap = settings_llm_snapshot()
         snap["data_dir"] = str(resolve_data_root())
+        snap["allowed_roots"] = snapshot_for_settings()
         packet = {
             "type": "settings_llm",
             "payload": snap,
@@ -768,6 +774,94 @@ class EmbodimentServer:
             except Exception:
                 logger.debug("向请求方发送 settings_llm 失败", exc_info=True)
         await self.broadcast(packet)
+
+    async def _pick_allowed_root(self, websocket: Any | None) -> None:
+        from qi.action.allowed_roots import pick_directory_dialog
+
+        path = await asyncio.to_thread(pick_directory_dialog)
+        await self._reply_settings_op(
+            websocket,
+            "pick_allowed_root_result",
+            {
+                "ok": bool(path),
+                "path": path,
+                "message": None if path else "没有选到文件夹（或本机无法弹出选目录）",
+            },
+        )
+
+    async def _save_allowed_roots(
+        self, websocket: Any | None, payload: dict
+    ) -> None:
+        from qi.action.allowed_roots import save_allowed_roots, snapshot_for_settings
+
+        raw_roots = payload.get("roots")
+        if not isinstance(raw_roots, list):
+            await self._reply_settings_op(
+                websocket,
+                "allowed_roots_saved",
+                {
+                    "ok": False,
+                    "message": "格式不对",
+                    **snapshot_for_settings(),
+                },
+            )
+            return
+        try:
+            cleaned = [
+                str(x).strip()
+                for x in raw_roots
+                if isinstance(x, str) and str(x).strip()
+            ]
+            # 校验：须已存在的目录
+            from pathlib import Path
+
+            bad: list[str] = []
+            ok_paths: list[str] = []
+            for c in cleaned:
+                p = Path(c).expanduser()
+                try:
+                    p = p.resolve()
+                except OSError:
+                    bad.append(c)
+                    continue
+                if not p.is_dir():
+                    bad.append(str(p))
+                else:
+                    ok_paths.append(str(p))
+            if bad and not ok_paths and cleaned:
+                await self._reply_settings_op(
+                    websocket,
+                    "allowed_roots_saved",
+                    {
+                        "ok": False,
+                        "message": "这些路径不是已有文件夹：" + "；".join(bad[:3]),
+                        **snapshot_for_settings(),
+                    },
+                )
+                return
+            save_allowed_roots(ok_paths)
+            snap = snapshot_for_settings()
+            msg = "已保存允许的文件夹。"
+            if bad:
+                msg += " 有几条无效已跳过。"
+            if snap["empty"]:
+                msg += " 当前为空：她还不能碰盘，请再添加。"
+            await self._reply_settings_op(
+                websocket,
+                "allowed_roots_saved",
+                {"ok": True, "message": msg, **snap},
+            )
+        except Exception as e:
+            logger.exception("保存允许根失败")
+            await self._reply_settings_op(
+                websocket,
+                "allowed_roots_saved",
+                {
+                    "ok": False,
+                    "message": f"保存失败：{e}",
+                    **snapshot_for_settings(),
+                },
+            )
 
     async def _open_data_dir(self, websocket: Any | None) -> None:
         from qi.paths import open_data_folder, resolve_data_root

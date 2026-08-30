@@ -52,6 +52,10 @@ const {
   memoryWiping,
   memoryLifecycleMessage,
   memoryLifecycleOk,
+  allowedRootsSaving,
+  allowedRootsPicking,
+  allowedRootsMessage,
+  allowedRootsOk,
   showKeyTip,
   dismissKeyTip,
   openSettings,
@@ -64,6 +68,8 @@ const {
   openDataDir,
   exportMemory,
   wipeMemory,
+  pickAllowedRoot,
+  saveAllowedRoots,
   composerPrefill,
   requestRephrase,
   requestStopSpeaking,
@@ -158,6 +164,10 @@ onUnmounted(() => disconnect());
             :memory-wiping="memoryWiping"
             :memory-message="memoryLifecycleMessage"
             :memory-ok="memoryLifecycleOk"
+            :allowed-roots-saving="allowedRootsSaving"
+            :allowed-roots-picking="allowedRootsPicking"
+            :allowed-roots-message="allowedRootsMessage"
+            :allowed-roots-ok="allowedRootsOk"
             @close="closeSettings"
             @save="saveSettingsLlm"
             @refresh="requestSettingsLlm"
@@ -165,6 +175,8 @@ onUnmounted(() => disconnect());
             @open-data-dir="openDataDir"
             @export-memory="exportMemory"
             @wipe-memory="wipeMemory"
+            @pick-allowed-root="pickAllowedRoot"
+            @save-allowed-roots="saveAllowedRoots"
           />
           <div v-show="!settingsOpen && !guideOpen" class="stage">
             <div

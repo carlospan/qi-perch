@@ -33,6 +33,8 @@ import type {
   SettingsLlmSavedPayload,
   SettingsLlmProbePayload,
   MemoryLifecycleResultPayload,
+  PickAllowedRootResultPayload,
+  AllowedRootsSavedPayload,
   TurnInterruptedPayload,
 } from "../types";
 import { offlineKindFromFlags } from "../connectionStatus";
@@ -186,6 +188,10 @@ function createQi() {
   const memoryWiping = ref(false);
   const memoryLifecycleMessage = ref("");
   const memoryLifecycleOk = ref(false);
+  const allowedRootsSaving = ref(false);
+  const allowedRootsPicking = ref(false);
+  const allowedRootsMessage = ref("");
+  const allowedRootsOk = ref(false);
   /** 无钥匙轻提示：本会话关掉后不再出 */
   const keyTipDismissed = ref(false);
 
@@ -707,6 +713,10 @@ function createQi() {
     memoryLifecycleOk.value = false;
     memoryExporting.value = false;
     memoryWiping.value = false;
+    allowedRootsMessage.value = "";
+    allowedRootsOk.value = false;
+    allowedRootsSaving.value = false;
+    allowedRootsPicking.value = false;
   }
 
   function openGuide() {
@@ -772,6 +782,24 @@ function createQi() {
     memoryLifecycleMessage.value = "";
     memoryLifecycleOk.value = false;
     qiWs.send({ type: "command", payload: { text: "/wipe_memory" } });
+  }
+
+  function pickAllowedRoot() {
+    if (!connected.value || allowedRootsPicking.value) return;
+    allowedRootsPicking.value = true;
+    allowedRootsMessage.value = "";
+    qiWs.send({ type: "command", payload: { text: "/pick_allowed_root" } });
+  }
+
+  function saveAllowedRoots(roots: string[]) {
+    if (!connected.value || allowedRootsSaving.value) return;
+    allowedRootsSaving.value = true;
+    allowedRootsMessage.value = "";
+    allowedRootsOk.value = false;
+    qiWs.send({
+      type: "command",
+      payload: { text: "/allowed_roots_save", roots },
+    });
   }
 
   function requestWake() {
@@ -874,6 +902,39 @@ function createQi() {
         memoryLifecycleMessage.value =
           String(payload?.message || "").trim() ||
           (payload?.ok ? "记忆已清空。" : "清空失败。");
+      });
+      qiWs.on("pick_allowed_root_result", (payload: PickAllowedRootResultPayload) => {
+        allowedRootsPicking.value = false;
+        if (payload?.ok && payload.path) {
+          const cur = settingsLlm.value?.allowed_roots?.roots || [];
+          if (!cur.includes(payload.path)) {
+            saveAllowedRoots([...cur, payload.path]);
+          } else {
+            allowedRootsOk.value = true;
+            allowedRootsMessage.value = "这个文件夹已经在列表里了。";
+          }
+        } else {
+          allowedRootsOk.value = false;
+          allowedRootsMessage.value =
+            String(payload?.message || "").trim() || "没有选到文件夹。";
+        }
+      });
+      qiWs.on("allowed_roots_saved", (payload: AllowedRootsSavedPayload) => {
+        allowedRootsSaving.value = false;
+        allowedRootsOk.value = Boolean(payload?.ok);
+        allowedRootsMessage.value =
+          String(payload?.message || "").trim() ||
+          (payload?.ok ? "已保存。" : "保存失败。");
+        if (payload?.ok && settingsLlm.value) {
+          settingsLlm.value = {
+            ...settingsLlm.value,
+            allowed_roots: {
+              roots: Array.isArray(payload.roots) ? payload.roots : [],
+              empty: Boolean(payload.empty),
+              default_had_d: payload.default_had_d,
+            },
+          };
+        }
       });
       qiWs.on("review_memories", (payload: ReviewMemoriesPayload) => {
         const rows = Array.isArray(payload?.items) ? payload.items : [];
@@ -1104,6 +1165,10 @@ function createQi() {
     memoryWiping,
     memoryLifecycleMessage,
     memoryLifecycleOk,
+    allowedRootsSaving,
+    allowedRootsPicking,
+    allowedRootsMessage,
+    allowedRootsOk,
     hasLlmKey,
     showKeyTip,
     dismissKeyTip,
@@ -1117,6 +1182,8 @@ function createQi() {
     openDataDir,
     exportMemory,
     wipeMemory,
+    pickAllowedRoot,
+    saveAllowedRoots,
     reviewMemories,
     talk,
     talkByDay,

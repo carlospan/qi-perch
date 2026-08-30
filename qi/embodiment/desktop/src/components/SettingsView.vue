@@ -14,6 +14,10 @@ const props = defineProps<{
   memoryWiping?: boolean;
   memoryMessage?: string;
   memoryOk?: boolean;
+  allowedRootsSaving?: boolean;
+  allowedRootsPicking?: boolean;
+  allowedRootsMessage?: string;
+  allowedRootsOk?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -30,6 +34,8 @@ const emit = defineEmits<{
   openDataDir: [];
   exportMemory: [];
   wipeMemory: [];
+  pickAllowedRoot: [];
+  saveAllowedRoots: [roots: string[]];
 }>();
 
 const apiKey = ref("");
@@ -39,6 +45,10 @@ const keyDirty = ref(false);
 const localProbeHint = ref("");
 /** 删除两步确认：展开后需再点确认 */
 const wipeConfirmOpen = ref(false);
+const localRoots = ref<string[]>([]);
+const devPasteRoot = ref("");
+/** Vite 开发壳：允许粘贴路径（产品主路径仍是系统选目录） */
+const isDevShell = !("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
 
 watch(
   () => props.snapshot,
@@ -49,6 +59,7 @@ watch(
     if (!keyDirty.value) apiKey.value = "";
     keyDirty.value = false;
     localProbeHint.value = "";
+    localRoots.value = [...(s.allowed_roots?.roots || [])];
   },
   { immediate: true }
 );
@@ -116,6 +127,29 @@ function onWipeCancel() {
 
 function onWipeConfirm() {
   emit("wipeMemory");
+}
+
+function onPickRoot() {
+  emit("pickAllowedRoot");
+}
+
+function onRemoveRoot(path: string) {
+  const next = localRoots.value.filter((r) => r !== path);
+  localRoots.value = next;
+  emit("saveAllowedRoots", next);
+}
+
+function onDevPasteAdd() {
+  const p = devPasteRoot.value.trim();
+  if (!p) return;
+  if (localRoots.value.includes(p)) {
+    devPasteRoot.value = "";
+    return;
+  }
+  const next = [...localRoots.value, p];
+  localRoots.value = next;
+  devPasteRoot.value = "";
+  emit("saveAllowedRoots", next);
 }
 </script>
 
@@ -200,6 +234,64 @@ function onWipeConfirm() {
           <button type="button" class="open-folder" @click="emit('openDataDir')">
             打开数据文件夹
           </button>
+        </div>
+
+        <div class="allowed-roots">
+          <p class="label">她能碰的文件夹</p>
+          <p class="life-note">
+            列盘、读文件、写日记只能在这些顶层目录下。空着就不能碰盘——请先添加。
+          </p>
+          <ul v-if="localRoots.length" class="root-list">
+            <li v-for="r in localRoots" :key="r" class="root-item">
+              <span class="root-path" :title="r">{{ r }}</span>
+              <button
+                type="button"
+                class="root-remove"
+                :disabled="allowedRootsSaving || allowedRootsPicking"
+                @click="onRemoveRoot(r)"
+              >
+                移除
+              </button>
+            </li>
+          </ul>
+          <p v-else class="hint">还没有允许的文件夹。</p>
+          <div class="btn-row">
+            <button
+              type="button"
+              class="open-folder"
+              :disabled="allowedRootsSaving || allowedRootsPicking"
+              @click="onPickRoot"
+            >
+              {{ allowedRootsPicking ? "选目录中…" : "添加文件夹" }}
+            </button>
+          </div>
+          <div v-if="isDevShell" class="dev-paste">
+            <p class="life-note">开发壳：也可粘贴路径添加（产品主路径仍是上面的选目录）。</p>
+            <div class="btn-row">
+              <input
+                v-model="devPasteRoot"
+                type="text"
+                class="dev-input"
+                placeholder="例如 D:\Notes"
+                @keydown.enter.prevent="onDevPasteAdd"
+              />
+              <button
+                type="button"
+                class="open-folder"
+                :disabled="allowedRootsSaving || !devPasteRoot.trim()"
+                @click="onDevPasteAdd"
+              >
+                粘贴添加
+              </button>
+            </div>
+          </div>
+          <p
+            v-if="allowedRootsMessage"
+            class="hint"
+            :class="allowedRootsOk ? 'ok' : 'err'"
+          >
+            {{ allowedRootsMessage }}
+          </p>
         </div>
 
         <div class="memory-life">
@@ -397,13 +489,71 @@ input::placeholder {
 }
 
 .data-dir,
-.memory-life {
+.memory-life,
+.allowed-roots {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 0.4rem;
   padding-top: 0.6rem;
   border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.root-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.root-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.root-path {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+  word-break: break-all;
+}
+
+.root-remove {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: #c45a4a;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+}
+
+.dev-paste {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.dev-input {
+  flex: 1;
+  min-width: 8rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, var(--panel-veil, #121820) 80%, transparent);
+  color: var(--ink);
 }
 
 .data-dir .path {

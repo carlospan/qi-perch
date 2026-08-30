@@ -31,6 +31,52 @@ MAX_CHARS = 1500
 DEBOUNCE_KEY = "write_debounce"
 DEBOUNCE_SECONDS = 8.0
 
+
+def _roots() -> list[Path]:
+    patched = Path(DEFAULT_ALLOWED_ROOT)
+    try:
+        if patched.resolve() != Path("D:/").resolve():
+            return [patched.resolve()]
+    except OSError:
+        return [patched]
+    from qi.action.allowed_roots import allowed_roots
+
+    return allowed_roots()
+
+
+def allowed_root() -> Path:
+    roots = _roots()
+    if roots:
+        return roots[0]
+    return Path(DEFAULT_ALLOWED_ROOT)
+
+
+def normalize_under_root(raw: str, *, root: Path | None = None) -> Path | None:
+    if root is not None:
+        root = root.resolve()
+        text = (raw or "").strip().strip('"').strip("'")
+        if not text:
+            return None
+        if re.fullmatch(r"[Dd]\s*盘", text):
+            return root
+        try:
+            p = Path(text).expanduser()
+            if not p.is_absolute():
+                p = root / p
+            resolved = p.resolve()
+        except Exception:
+            return None
+        try:
+            resolved.relative_to(root)
+        except ValueError:
+            if resolved != root:
+                return None
+        return resolved
+    from qi.action.allowed_roots import normalize_under_roots
+
+    return normalize_under_roots(raw, roots=_roots())
+
+
 _WIN_PATH_RE = re.compile(
     r"(?<![A-Za-z])[A-Za-z]:[\\/](?!/)[^\s'\"<>|]*",
     re.UNICODE,
@@ -62,32 +108,6 @@ class WriteRequest:
     create_new: bool = False
     topic: str = ""  # 用户原话/主题，供起草
     meta: dict[str, Any] = field(default_factory=dict)
-
-
-def allowed_root() -> Path:
-    return Path(DEFAULT_ALLOWED_ROOT)
-
-
-def normalize_under_root(raw: str, *, root: Path | None = None) -> Path | None:
-    root = (root or allowed_root()).resolve()
-    text = (raw or "").strip().strip('"').strip("'")
-    if not text:
-        return None
-    if re.fullmatch(r"[Dd]\s*盘", text):
-        return root
-    try:
-        p = Path(text).expanduser()
-        if not p.is_absolute():
-            p = root / p
-        resolved = p.resolve()
-    except Exception:
-        return None
-    try:
-        resolved.relative_to(root)
-    except ValueError:
-        if resolved != root:
-            return None
-    return resolved
 
 
 def extract_win_path(text: str) -> str | None:
