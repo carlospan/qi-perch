@@ -85,6 +85,8 @@ async def test_embedding_mismatch_triggers_reindex_from_sqlite():
     """旧 collection 标识不符 → 删库 → 从 SQLite 回灌。"""
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         chroma = str(Path(tmp) / "chroma")
+        fake_bge = Path(tmp) / "fake-bge"
+        _plant_minimal_bge_files(fake_bge)
         db = Database(str(Path(tmp) / "qi.db"))
         await db.initialize()
 
@@ -98,10 +100,16 @@ async def test_embedding_mismatch_triggers_reindex_from_sqlite():
         assert vs1.embedding_id == EMBEDDING_ID_NGRAM
         vs1.close()
 
-        # 模拟升级到 BGE：加载「成功」但 EF 仍用 n-gram 实现（只测重建流程）
-        with patch(
-            "qi.memory.vector_store.BgeOnnxEmbeddingFunction",
-            side_effect=lambda model_dir=None: CharNgramEmbeddingFunction(),
+        # 模拟升级到 BGE：解析命中假目录；EF 仍用 n-gram 实现（只测重建流程）
+        with (
+            patch(
+                "qi.memory.vector_store.resolve_bge_model_dir",
+                return_value=fake_bge,
+            ),
+            patch(
+                "qi.memory.vector_store.BgeOnnxEmbeddingFunction",
+                side_effect=lambda model_dir=None: CharNgramEmbeddingFunction(),
+            ),
         ):
             vs2 = VectorStore(persist_dir=chroma, prefer_bge=True)
 
@@ -118,9 +126,15 @@ async def test_embedding_mismatch_triggers_reindex_from_sqlite():
 
         # 同标识再开：不应再次要求回灌
         vs2.close()
-        with patch(
-            "qi.memory.vector_store.BgeOnnxEmbeddingFunction",
-            side_effect=lambda model_dir=None: CharNgramEmbeddingFunction(),
+        with (
+            patch(
+                "qi.memory.vector_store.resolve_bge_model_dir",
+                return_value=fake_bge,
+            ),
+            patch(
+                "qi.memory.vector_store.BgeOnnxEmbeddingFunction",
+                side_effect=lambda model_dir=None: CharNgramEmbeddingFunction(),
+            ),
         ):
             vs3 = VectorStore(persist_dir=chroma, prefer_bge=True)
         assert vs3.needs_reindex is False
@@ -129,6 +143,85 @@ async def test_embedding_mismatch_triggers_reindex_from_sqlite():
 
         await db.close()
         gc.collect()
+
+
+def _plant_minimal_bge_files(root: Path) -> None:
+    (root / "onnx").mkdir(parents=True, exist_ok=True)
+    (root / "onnx" / "model.onnx").write_bytes(b"fake")
+    (root / "tokenizer.json").write_text("{}", encoding="utf-8")
+
+
+def test_resolve_prefers_env_then_explicit(monkeypatch, tmp_path):
+    from qi.memory.vector_store import ENV_BGE_DIR, resolve_bge_model_dir
+
+    env_dir = tmp_path / "env-bge"
+    dataish = tmp_path / "data-bge"
+    explicit = tmp_path / "explicit-bge"
+    _plant_minimal_bge_files(env_dir)
+    _plant_minimal_bge_files(dataish)
+    _plant_minimal_bge_files(explicit)
+
+    monkeypatch.setenv(ENV_BGE_DIR, str(env_dir))
+    assert resolve_bge_model_dir(explicit) == env_dir.resolve()
+
+    monkeypatch.delenv(ENV_BGE_DIR, raising=False)
+    assert resolve_bge_model_dir(explicit) == explicit.resolve()
+
+
+def test_resolve_explicit_missing_does_not_fall_through(monkeypatch, tmp_path):
+    """配置了路径但缺文件 → None，即使别处有模也不偷用（测隔离）。"""
+    from qi.memory.vector_store import ENV_BGE_DIR, resolve_bge_model_dir
+
+    monkeypatch.delenv(ENV_BGE_DIR, raising=False)
+    other = tmp_path / "other-good"
+    _plant_minimal_bge_files(other)
+    monkeypatch.setattr(
+        "qi.memory.vector_store.bundled_bge_candidates",
+        lambda: [other],
+    )
+    monkeypatch.setattr(
+        "qi.memory.vector_store.under_data",
+        lambda *parts: tmp_path / "nope" / Path(*[str(p) for p in parts]),
+    )
+    assert resolve_bge_model_dir(tmp_path / "missing") is None
+
+
+def test_resolve_data_then_bundled(monkeypatch, tmp_path):
+    from qi.memory.vector_store import ENV_BGE_DIR, resolve_bge_model_dir
+
+    monkeypatch.delenv(ENV_BGE_DIR, raising=False)
+    data_dir = tmp_path / "models" / "bge-small-zh-v1.5"
+    bundled = tmp_path / "resources" / "bge-small-zh-v1.5"
+    _plant_minimal_bge_files(bundled)
+
+    monkeypatch.setattr(
+        "qi.memory.vector_store.under_data",
+        lambda *parts: tmp_path.joinpath(*[str(p) for p in parts]),
+    )
+    monkeypatch.setattr(
+        "qi.memory.vector_store.bundled_bge_candidates",
+        lambda: [bundled],
+    )
+    # 数据根无 → 用资源
+    assert resolve_bge_model_dir(None) == bundled.resolve()
+
+    _plant_minimal_bge_files(data_dir)
+    assert resolve_bge_model_dir(None) == data_dir.resolve()
+
+
+def test_resolve_none_when_empty(monkeypatch, tmp_path):
+    from qi.memory.vector_store import ENV_BGE_DIR, resolve_bge_model_dir
+
+    monkeypatch.delenv(ENV_BGE_DIR, raising=False)
+    monkeypatch.setattr(
+        "qi.memory.vector_store.under_data",
+        lambda *parts: tmp_path / "empty" / Path(*[str(p) for p in parts]),
+    )
+    monkeypatch.setattr(
+        "qi.memory.vector_store.bundled_bge_candidates",
+        lambda: [tmp_path / "nope"],
+    )
+    assert resolve_bge_model_dir(None) is None
 
 
 def test_bge_load_error_message():

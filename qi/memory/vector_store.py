@@ -5,12 +5,15 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+import os
 import re
+import sys
 from pathlib import Path
 
 import chromadb
 from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 
+from qi import PROJECT_ROOT
 from qi.paths import under_data
 
 logger = logging.getLogger("qi.memory.vector")
@@ -19,7 +22,9 @@ logger = logging.getLogger("qi.memory.vector")
 EMBEDDING_ID_NGRAM = "char_ngram-384"
 EMBEDDING_ID_BGE = "bge-small-zh-v1.5-onnx-v1"
 
-DEFAULT_BGE_DIR = under_data("models", "bge-small-zh-v1.5")
+BGE_DIR_NAME = "bge-small-zh-v1.5"
+ENV_BGE_DIR = "QI_BGE_DIR"
+DEFAULT_BGE_DIR = under_data("models", BGE_DIR_NAME)
 # BAAI 主库无 onnx/；实测改用 onnx-community（见换机搭建.md）
 BGE_HF_REPO = "onnx-community/bge-small-zh-v1.5-ONNX"
 BGE_HF_FILES = (
@@ -84,6 +89,73 @@ def bge_model_files_present(model_dir: Path | str | None = None) -> bool:
     return (root / "onnx" / "model.onnx").is_file() and (
         root / "tokenizer.json"
     ).is_file()
+
+
+def bundled_bge_candidates() -> list[Path]:
+    """安装/开发布局下可能的只读 BGE 资源目录（不保证存在）。"""
+    name = BGE_DIR_NAME
+    out: list[Path] = []
+    # 仓库开发：src-tauri/resources/…
+    out.append(
+        PROJECT_ROOT
+        / "qi"
+        / "embodiment"
+        / "desktop"
+        / "src-tauri"
+        / "resources"
+        / name
+    )
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).resolve().parent
+        out.append(exe_dir / "resources" / name)
+        out.append(exe_dir / name)
+        # onedir 旁若把资源与 qi-brain 同级
+        out.append(exe_dir.parent / "resources" / name)
+    else:
+        exe = Path(sys.executable).resolve().parent
+        out.append(exe / "resources" / name)
+    # 去重保序
+    seen: set[Path] = set()
+    uniq: list[Path] = []
+    for p in out:
+        try:
+            key = p.resolve()
+        except OSError:
+            key = p
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(p)
+    return uniq
+
+
+def resolve_bge_model_dir(explicit: Path | str | None = None) -> Path | None:
+    """
+    解析 BGE 目录。顺序：
+    1. QI_BGE_DIR（文件齐全）
+    2. 显式路径（配置 bge_model_path）；若给出但不齐全 → 直接放弃（不落到数据根，免测串扰）
+    3. 数据根 models/bge-small-zh-v1.5
+    4. 资源离线目录（bundled）
+    皆无 → None（调用方回退 n-gram；不自动 HF）
+    """
+    env = (os.environ.get(ENV_BGE_DIR) or "").strip()
+    if env and bge_model_files_present(env):
+        return Path(env).expanduser().resolve()
+
+    if explicit is not None and str(explicit).strip():
+        p = Path(str(explicit)).expanduser()
+        if bge_model_files_present(p):
+            return p.resolve()
+        return None
+
+    data_dir = under_data("models", BGE_DIR_NAME)
+    if bge_model_files_present(data_dir):
+        return data_dir.resolve()
+
+    for cand in bundled_bge_candidates():
+        if bge_model_files_present(cand):
+            return cand.resolve()
+    return None
 
 
 def ensure_bge_model(model_dir: Path | str | None = None) -> Path:
@@ -222,13 +294,17 @@ class VectorStore:
         self._ef: EmbeddingFunction = CharNgramEmbeddingFunction()
 
         if prefer_bge:
-            try:
-                self._ef = BgeOnnxEmbeddingFunction(model_dir=model_dir)
-                self.embedding_id = EMBEDDING_ID_BGE
-            except BgeLoadError as e:
-                logger.warning("BGE 不可用，回退字符 n-gram：%s", e)
-                self._ef = CharNgramEmbeddingFunction()
-                self.embedding_id = EMBEDDING_ID_NGRAM
+            resolved = resolve_bge_model_dir(model_dir)
+            if resolved is not None:
+                try:
+                    self._ef = BgeOnnxEmbeddingFunction(model_dir=resolved)
+                    self.embedding_id = EMBEDDING_ID_BGE
+                except BgeLoadError as e:
+                    logger.warning("BGE 不可用，回退字符 n-gram：%s", e)
+                    self._ef = CharNgramEmbeddingFunction()
+                    self.embedding_id = EMBEDDING_ID_NGRAM
+            else:
+                logger.info("未找到离线 BGE，使用字符 n-gram（不自动下载）")
 
         self.collection = self._open_or_migrate_collection()
 

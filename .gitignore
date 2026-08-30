@@ -39,6 +39,9 @@ qi/embodiment/desktop/src-tauri/target/
 # P3：PyInstaller 大脑 onedir（由 tools/build_qi_brain.py 生成）
 qi/embodiment/desktop/src-tauri/resources/qi-brain/**
 !qi/embodiment/desktop/src-tauri/resources/qi-brain/README.md
+# P3：BGE 离线资源（由 tools/fetch_bge_resource.py 生成）
+qi/embodiment/desktop/src-tauri/resources/bge-small-zh-v1.5/**
+!qi/embodiment/desktop/src-tauri/resources/bge-small-zh-v1.5/README.md
 # 兼容旧路径（若本地残留）
 embodiment/desktop/dist/
 embodiment/desktop/.vite/
