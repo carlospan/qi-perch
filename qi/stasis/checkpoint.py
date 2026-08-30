@@ -13,19 +13,25 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from qi import PROJECT_ROOT
+from qi.paths import under_data
 from qi.core.emotion import EmotionState
 from qi.stasis.pressure import STASIS_INTENTS_KEY
 
 logger = logging.getLogger("qi.stasis.checkpoint")
 
 CHECKPOINT_VERSION = 1
-DEFAULT_CHECKPOINT_DIR = PROJECT_ROOT / "data" / "checkpoint"
 _CHECKPOINT_RE = re.compile(r"^checkpoint_\d{8}T\d{6}\.json$")
 
 
 def default_checkpoint_dir() -> Path:
-    return DEFAULT_CHECKPOINT_DIR
+    return under_data("checkpoint")
+
+
+# 兼容旧导入名（解析时再算，避免 import 时钉死）
+def __getattr__(name: str):
+    if name == "DEFAULT_CHECKPOINT_DIR":
+        return default_checkpoint_dir()
+    raise AttributeError(name)
 
 
 async def serialize_checkpoint(brain: Any) -> dict[str, Any]:

@@ -215,7 +215,8 @@ export type ServerMessage =
   | { type: "action"; payload: ActionPayload }
   | { type: "settings_llm"; payload: SettingsLlmPayload }
   | { type: "settings_llm_saved"; payload: SettingsLlmSavedPayload }
-  | { type: "settings_llm_probe"; payload: SettingsLlmProbePayload };
+  | { type: "settings_llm_probe"; payload: SettingsLlmProbePayload }
+  | { type: "open_data_dir_result"; payload: OpenDataDirResultPayload };
 
 /** 设置页 · LLM 钥匙快照（不回传完整 key） */
 export type SettingsLlmPayload = {
@@ -223,6 +224,14 @@ export type SettingsLlmPayload = {
   api_key_masked: string;
   base_url: string;
   model: string;
+  /** 当前数据根（本机路径） */
+  data_dir?: string;
+};
+
+export type OpenDataDirResultPayload = {
+  ok: boolean;
+  path: string;
+  message?: string | null;
 };
 
 export type SettingsLlmSavedPayload = SettingsLlmPayload & {

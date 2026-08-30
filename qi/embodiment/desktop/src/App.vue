@@ -56,6 +56,7 @@ const {
   requestSettingsLlm,
   saveSettingsLlm,
   probeSettingsLlm,
+  openDataDir,
   composerPrefill,
   requestRephrase,
   requestStopSpeaking,
@@ -149,6 +150,7 @@ onUnmounted(() => disconnect());
             @save="saveSettingsLlm"
             @refresh="requestSettingsLlm"
             @probe="probeSettingsLlm"
+            @open-data-dir="openDataDir"
           />
           <div v-show="!settingsOpen && !guideOpen" class="stage">
             <div

@@ -433,6 +433,8 @@ class EmbodimentServer:
                 await self._save_settings_llm(websocket, payload)
             elif cmd == "/settings_llm_probe":
                 await self._probe_settings_llm(websocket)
+            elif cmd == "/open_data_dir":
+                await self._open_data_dir(websocket)
             elif cmd == "/wake":
                 result = await self.brain.resume_from_stasis()
                 await self.broadcast(
@@ -746,10 +748,13 @@ class EmbodimentServer:
 
     async def _send_settings_llm(self, websocket: Any | None) -> None:
         from qi.config.secrets import settings_llm_snapshot
+        from qi.paths import resolve_data_root
 
+        snap = settings_llm_snapshot()
+        snap["data_dir"] = str(resolve_data_root())
         packet = {
             "type": "settings_llm",
-            "payload": settings_llm_snapshot(),
+            "payload": snap,
         }
         raw = json.dumps(packet, ensure_ascii=False)
         if websocket is not None:
@@ -758,6 +763,27 @@ class EmbodimentServer:
                 return
             except Exception:
                 logger.debug("向请求方发送 settings_llm 失败", exc_info=True)
+        await self.broadcast(packet)
+
+    async def _open_data_dir(self, websocket: Any | None) -> None:
+        from qi.paths import open_data_folder, resolve_data_root
+
+        ok, detail = open_data_folder()
+        packet = {
+            "type": "open_data_dir_result",
+            "payload": {
+                "ok": ok,
+                "path": str(resolve_data_root()),
+                "message": None if ok else detail,
+            },
+        }
+        raw = json.dumps(packet, ensure_ascii=False)
+        if websocket is not None:
+            try:
+                await websocket.send(raw)
+                return
+            except Exception:
+                logger.debug("向请求方发送 open_data_dir_result 失败", exc_info=True)
         await self.broadcast(packet)
 
     async def _save_settings_llm(self, websocket: Any | None, payload: dict) -> None:
@@ -783,6 +809,9 @@ class EmbodimentServer:
                 write_secrets_file(**kwargs)
                 apply_secrets_to_environ()
             result = {"ok": True, **settings_llm_snapshot()}
+            from qi.paths import resolve_data_root
+
+            result["data_dir"] = str(resolve_data_root())
             if hasattr(self.brain, "reload_llm_settings"):
                 reloaded = self.brain.reload_llm_settings()
                 result["ok"] = bool(reloaded.get("ok", True))

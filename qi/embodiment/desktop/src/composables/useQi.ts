@@ -737,6 +737,10 @@ function createQi() {
     qiWs.send({ type: "command", payload: { text: "/settings_llm_probe" } });
   }
 
+  function openDataDir() {
+    qiWs.send({ type: "command", payload: { text: "/open_data_dir" } });
+  }
+
   function requestWake() {
     if (!connected.value) return;
     qiWs.send({ type: "command", payload: { text: "/wake" } });
@@ -791,6 +795,7 @@ function createQi() {
           api_key_masked: String(payload?.api_key_masked || ""),
           base_url: String(payload?.base_url || ""),
           model: String(payload?.model || ""),
+          data_dir: String(payload?.data_dir || ""),
         };
       });
       qiWs.on("settings_llm_saved", (payload: SettingsLlmSavedPayload) => {
@@ -800,6 +805,7 @@ function createQi() {
           api_key_masked: String(payload?.api_key_masked || ""),
           base_url: String(payload?.base_url || ""),
           model: String(payload?.model || ""),
+          data_dir: String(payload?.data_dir || settingsLlm.value?.data_dir || ""),
         };
         if (payload?.ok) {
           settingsSaveOk.value = true;
@@ -1055,6 +1061,7 @@ function createQi() {
     requestSettingsLlm,
     saveSettingsLlm,
     probeSettingsLlm,
+    openDataDir,
     reviewMemories,
     talk,
     talkByDay,

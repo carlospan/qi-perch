@@ -23,6 +23,7 @@ const emit = defineEmits<{
   ];
   refresh: [];
   probe: [];
+  openDataDir: [];
 }>();
 
 const apiKey = ref("");
@@ -157,6 +158,16 @@ function onProbe() {
           >
             {{ probeMessage }}
           </p>
+        </div>
+
+        <div class="data-dir">
+          <p class="label">数据文件夹</p>
+          <p class="path" :title="snapshot?.data_dir || ''">
+            {{ snapshot?.data_dir || "连接后显示路径" }}
+          </p>
+          <button type="button" class="open-folder" @click="emit('openDataDir')">
+            打开数据文件夹
+          </button>
         </div>
       </div>
     </div>
@@ -297,5 +308,40 @@ input::placeholder {
 
 .hint.err {
   color: #c45a4a;
+}
+
+.data-dir {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.data-dir .path {
+  margin: 0;
+  max-width: 100%;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+  word-break: break-all;
+}
+
+.open-folder {
+  font-family: var(--serif);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  cursor: pointer;
+  color: var(--ink-dim);
+  background: transparent;
+}
+
+.open-folder:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ember) 40%, transparent);
 }
 </style>

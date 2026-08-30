@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 from qi import PROJECT_ROOT
+from qi.paths import under_data
 
 # 与 settings.yaml 里 ${ZHIPU_API_KEY} 兼容；同时认 QI_API_KEY
 SECRET_API_KEY = "QI_API_KEY"
@@ -18,8 +19,8 @@ _LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 
 
 def user_secrets_path() -> Path:
-    """仓库 data/ 下（已被 gitignore）；与库同迁。"""
-    return PROJECT_ROOT / "data" / "user_secrets.env"
+    """数据根下（gitignore / 用户目录）；与库同迁。"""
+    return under_data("user_secrets.env")
 
 
 def read_secrets_file(path: Path | None = None) -> dict[str, str]:
@@ -155,6 +156,8 @@ def mask_api_key(key: str) -> str:
 
 def settings_llm_snapshot() -> dict:
     """给前端：不回传完整 key。"""
+    from qi.paths import resolve_data_root
+
     data = read_secrets_file()
     key = (data.get(SECRET_API_KEY) or data.get(SECRET_API_KEY_ALIAS) or "").strip()
     # 也认进程环境（仅 .env、尚未写入 secrets 时）
@@ -171,6 +174,7 @@ def settings_llm_snapshot() -> dict:
         "api_key_masked": mask_api_key(key) if key else "",
         "base_url": base,
         "model": model,
+        "data_dir": str(resolve_data_root()),
     }
 
 

@@ -161,12 +161,13 @@ async def _cli_main() -> None:
     import argparse
     from pathlib import Path
 
+    from qi.paths import under_data
     from qi.storage.database import Database
 
     parser = argparse.ArgumentParser(description="经验回放资源预估（默认 dry_run）")
     parser.add_argument(
         "--db",
-        default=str(Path("data") / "qi.db"),
+        default=str(under_data("qi.db")),
         help="SQLite 路径",
     )
     args = parser.parse_args()

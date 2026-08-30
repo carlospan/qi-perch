@@ -9,9 +9,14 @@ from pathlib import Path
 import yaml
 
 from qi import PROJECT_ROOT
+from qi.paths import resolve_data_root, resolve_under_data
 
 _ENV_PATTERN = re.compile(r"\$\{([^}]+)\}")
 _CONFIG_DIR = Path(__file__).resolve().parent
+_RUNTIME_PATH_KEYS = (
+    ("database", "path"),
+    ("memory", "chroma_path"),
+)
 
 
 def _load_dotenv(path: Path | None = None) -> None:
@@ -56,19 +61,32 @@ def _walk_resolve(obj):
 def user_config_candidates() -> list[Path]:
     """
     用户可改配置的查找顺序（先命中先生效）：
-    1. 仓库 data/settings.yaml（推荐，与 data/ 一起迁移）
-    2. ~/.qi/settings.yaml（机器级）
+    1. 数据根 settings.yaml（与 qi.db 等同迁）
+    2. ~/.qi/settings.yaml（机器级兼容）
     3. qi/config/settings.yaml（兼容旧布局）
     4. 仓库根 config/settings.yaml（更旧兼容）
     最后回退包内 settings.example.yaml（只读默认）。
     """
     return [
-        PROJECT_ROOT / "data" / "settings.yaml",
+        resolve_data_root() / "settings.yaml",
         Path.home() / ".qi" / "settings.yaml",
         _CONFIG_DIR / "settings.yaml",
         PROJECT_ROOT / "config" / "settings.yaml",
         _CONFIG_DIR / "settings.example.yaml",
     ]
+
+
+def _anchor_runtime_paths(config: dict) -> dict:
+    """把配置里相对的 database/chroma 等锚定到当前数据根。"""
+    for section, key in _RUNTIME_PATH_KEYS:
+        bag = config.get(section)
+        if not isinstance(bag, dict):
+            continue
+        raw = bag.get(key)
+        if raw is None or raw == "":
+            continue
+        bag[key] = str(resolve_under_data(str(raw)))
+    return config
 
 
 def load_config(path: str | Path | None = None) -> dict:
@@ -94,4 +112,5 @@ def load_config(path: str | Path | None = None) -> dict:
     with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
 
-    return apply_user_llm_overrides(_walk_resolve(raw))
+    resolved = apply_user_llm_overrides(_walk_resolve(raw))
+    return _anchor_runtime_paths(resolved)

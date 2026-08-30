@@ -8,9 +8,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from qi import PROJECT_ROOT
+from qi.paths import under_data
 
-_DEFAULT_ROOT = PROJECT_ROOT / "data" / "corpus"
+_DEFAULT_ROOT = None  # 懒解析；见 CorpusStore
 _VERSION_RE = re.compile(r"^corpus_.+_\d{8}-\d{6}\.jsonl$")
 
 
@@ -18,7 +18,7 @@ class CorpusStore:
     """jsonl 语料版本：可 save / load / list，便于异时 diff。"""
 
     def __init__(self, root: str | Path | None = None) -> None:
-        self.root = Path(root) if root is not None else _DEFAULT_ROOT
+        self.root = Path(root) if root is not None else under_data("corpus")
 
     def save_version(self, samples: list[dict], *, tag: str) -> str:
         """写入 corpus_{tag}_{YYYYMMDD-HHMMSS}.jsonl，返回绝对路径字符串。"""

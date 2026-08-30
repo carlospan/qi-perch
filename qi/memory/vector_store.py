@@ -11,13 +11,15 @@ from pathlib import Path
 import chromadb
 from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 
+from qi.paths import under_data
+
 logger = logging.getLogger("qi.memory.vector")
 
 # collection metadata 中的 embedding 标识——维数/算法变了必须重建
 EMBEDDING_ID_NGRAM = "char_ngram-384"
 EMBEDDING_ID_BGE = "bge-small-zh-v1.5-onnx-v1"
 
-DEFAULT_BGE_DIR = Path("data/models/bge-small-zh-v1.5")
+DEFAULT_BGE_DIR = under_data("models", "bge-small-zh-v1.5")
 # BAAI 主库无 onnx/；实测改用 onnx-community（见换机搭建.md）
 BGE_HF_REPO = "onnx-community/bge-small-zh-v1.5-ONNX"
 BGE_HF_FILES = (

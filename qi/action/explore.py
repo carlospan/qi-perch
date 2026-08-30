@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from qi.action.permission import OUTCOME_FAILED_CAPABILITY, OUTCOME_SUCCESS
+from qi.paths import resolve_data_root
 
 if TYPE_CHECKING:
     from qi.action.explore_web import WebSearchClient
@@ -57,7 +58,7 @@ def resolve_sandbox_root(
     db_path = getattr(db, "db_path", None)
     if db_path:
         return Path(str(db_path)).expanduser().resolve().parent
-    return Path("data").resolve()
+    return resolve_data_root()
 
 
 def _clip_entry(s: str, limit: int = 40) -> str:
