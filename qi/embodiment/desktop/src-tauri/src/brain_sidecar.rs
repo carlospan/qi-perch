@@ -1,5 +1,8 @@
 //! 开发期把 Python 大脑（`python -m qi`）当作子进程拉起。
 //! 正式打包 sidecar 另议；可用环境变量覆盖路径或跳过。
+//!
+//! 退出策略（P2 托盘）：仅在壳 **自己拉起** 大脑时，于 `RunEvent::Exit`（「退出栖」）结束子进程；
+//! 沿用已在听的后端（borrowed）不杀。关主窗藏托盘不会走到 Exit。
 
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};

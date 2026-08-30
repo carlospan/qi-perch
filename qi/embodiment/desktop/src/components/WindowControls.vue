@@ -178,8 +178,8 @@ async function closeWin() {
     <button
       type="button"
       class="ctrl close"
-      aria-label="关闭"
-      title="关闭"
+      aria-label="关闭到托盘"
+      title="关闭到托盘"
       @click="closeWin"
     >
       <svg class="ico" viewBox="0 0 10 10" aria-hidden="true">
