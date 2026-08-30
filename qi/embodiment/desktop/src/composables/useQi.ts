@@ -169,6 +169,8 @@ function createQi() {
   const activityGlanceLine = ref("");
   /** P2：设置页（整页，非 tab） */
   const settingsOpen = ref(false);
+  /** P2：领养指引页（整页，非 tab） */
+  const guideOpen = ref(false);
   const settingsLlm = ref<SettingsLlmPayload | null>(null);
   const settingsSaving = ref(false);
   const settingsSaveError = ref("");
@@ -672,6 +674,7 @@ function createQi() {
   }
 
   function openSettings() {
+    guideOpen.value = false;
     settingsOpen.value = true;
     settingsSaveOk.value = false;
     settingsSaveError.value = "";
@@ -687,6 +690,15 @@ function createQi() {
     settingsProbeMessage.value = "";
     settingsProbeOk.value = false;
     settingsProbing.value = false;
+  }
+
+  function openGuide() {
+    settingsOpen.value = false;
+    guideOpen.value = true;
+  }
+
+  function closeGuide() {
+    guideOpen.value = false;
   }
 
   function requestSettingsLlm() {
@@ -1025,6 +1037,7 @@ function createQi() {
     timeTraceLine,
     activityGlanceLine,
     settingsOpen,
+    guideOpen,
     settingsLlm,
     settingsSaving,
     settingsSaveError,
@@ -1037,6 +1050,8 @@ function createQi() {
     dismissKeyTip,
     openSettings,
     closeSettings,
+    openGuide,
+    closeGuide,
     requestSettingsLlm,
     saveSettingsLlm,
     probeSettingsLlm,

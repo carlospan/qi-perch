@@ -12,6 +12,7 @@ withDefaults(
 const emit = defineEmits<{
   "update:modelValue": [v: QiView];
   openSettings: [];
+  openGuide: [];
 }>();
 
 const tabs: { id: QiView; label: string }[] = [
@@ -35,21 +36,31 @@ const tabs: { id: QiView; label: string }[] = [
         {{ t.label }}
       </button>
     </div>
-    <button
-      v-if="layout === 'vertical'"
-      type="button"
-      class="gear"
-      aria-label="设置"
-      title="设置"
-      @click="emit('openSettings')"
-    >
-      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-        <path
-          fill="currentColor"
-          d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.6-.22l-2.39.96a7.1 7.1 0 00-1.63-.94l-.36-2.54a.5.5 0 00-.49-.42h-3.84a.5.5 0 00-.49.42l-.36 2.54c-.59.24-1.13.55-1.63.94l-2.39-.96a.5.5 0 00-.6.22L2.77 8.84a.5.5 0 00.12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.89 14.5a.5.5 0 00-.12.64l1.92 3.32c.13.22.4.31.64.22l2.39-.96c.5.39 1.04.71 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .44-.18.49-.42l.36-2.54c.59-.24 1.13-.55 1.63-.94l2.39.96c.24.09.51 0 .64-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1112 8a3.5 3.5 0 010 7.5z"
-        />
-      </svg>
-    </button>
+    <div v-if="layout === 'vertical'" class="rail-footer">
+      <button
+        type="button"
+        class="guide"
+        aria-label="领养指引"
+        title="领养指引"
+        @click="emit('openGuide')"
+      >
+        指引
+      </button>
+      <button
+        type="button"
+        class="gear"
+        aria-label="设置"
+        title="设置"
+        @click="emit('openSettings')"
+      >
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.6-.22l-2.39.96a7.1 7.1 0 00-1.63-.94l-.36-2.54a.5.5 0 00-.49-.42h-3.84a.5.5 0 00-.49.42l-.36 2.54c-.59.24-1.13.55-1.63.94l-2.39-.96a.5.5 0 00-.6.22L2.77 8.84a.5.5 0 00.12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.89 14.5a.5.5 0 00-.12.64l1.92 3.32c.13.22.4.31.64.22l2.39-.96c.5.39 1.04.71 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .44-.18.49-.42l.36-2.54c.59-.24 1.13-.55 1.63-.94l2.39.96c.24.09.51 0 .64-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1112 8a3.5 3.5 0 010 7.5z"
+          />
+        </svg>
+      </button>
+    </div>
   </nav>
 </template>
 
@@ -87,8 +98,38 @@ const tabs: { id: QiView; label: string }[] = [
   flex: 0;
 }
 
-.gear {
+.rail-footer {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+}
+
+.guide {
+  align-self: stretch;
+  text-align: left;
+  padding: 8px 14px;
+  border-radius: 11px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--serif);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
+  transition:
+    color 0.25s ease,
+    background 0.25s ease;
+}
+
+.guide:hover {
+  color: var(--ink-dim);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.gear {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;

@@ -5,6 +5,7 @@ import JournalView from "./components/JournalView.vue";
 import PresenceVrm from "./components/PresenceVrm.vue";
 import ReviewView from "./components/ReviewView.vue";
 import SceneView from "./components/SceneView.vue";
+import GuideView from "./components/GuideView.vue";
 import SettingsView from "./components/SettingsView.vue";
 import StateView from "./components/StateView.vue";
 import StatusBar from "./components/StatusBar.vue";
@@ -38,6 +39,7 @@ const {
   systemNotice,
   dismissSystemNotice,
   settingsOpen,
+  guideOpen,
   settingsLlm,
   settingsSaving,
   settingsSaveError,
@@ -49,6 +51,8 @@ const {
   dismissKeyTip,
   openSettings,
   closeSettings,
+  openGuide,
+  closeGuide,
   requestSettingsLlm,
   saveSettingsLlm,
   probeSettingsLlm,
@@ -122,12 +126,18 @@ onUnmounted(() => disconnect());
             v-model="view"
             layout="vertical"
             @open-settings="openSettings"
+            @open-guide="openGuide"
           />
         </aside>
 
         <main class="main">
+          <GuideView
+            v-if="guideOpen"
+            @close="closeGuide"
+            @open-settings="openSettings"
+          />
           <SettingsView
-            v-if="settingsOpen"
+            v-else-if="settingsOpen"
             :snapshot="settingsLlm"
             :saving="settingsSaving"
             :save-error="settingsSaveError"
@@ -140,7 +150,7 @@ onUnmounted(() => disconnect());
             @refresh="requestSettingsLlm"
             @probe="probeSettingsLlm"
           />
-          <div v-show="!settingsOpen" class="stage">
+          <div v-show="!settingsOpen && !guideOpen" class="stage">
             <div
               v-if="showKeyTip && view === 'presence'"
               class="key-tip"
@@ -259,7 +269,7 @@ onUnmounted(() => disconnect());
             </Transition>
           </div>
 
-          <footer v-if="!settingsOpen && view !== 'presence'" class="composer-bar">
+          <footer v-if="!settingsOpen && !guideOpen && view !== 'presence'" class="composer-bar">
             <div class="composer-dock">
               <button
                 v-if="inStasis"
