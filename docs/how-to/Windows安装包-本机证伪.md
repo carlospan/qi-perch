@@ -98,7 +98,7 @@ Test-Path "<你的安装目录>\resources\bge-small-zh-v1.5\onnx\model.onnx"
 | 现象 | 处理 |
 |------|------|
 | `pack_windows` 报没有 qi-brain / zip | 先 `python tools/build_qi_brain.py`（仅缺 zip：`--zip-only`） |
-| `pack_windows` 因 BGE fetch 失败退出 | 设 `HF_ENDPOINT=https://hf-mirror.com` 重试；或显式 `--skip-bge`（正式发版勿用） |
+| `pack_windows` 因 BGE fetch 失败退出 | 直连 HuggingFace 重试；若设了 `HF_ENDPOINT` 镜像异常可先取消该环境变量；或显式 `--skip-bge`（正式发版勿用） |
 | `tauri build` 找不到 cargo | 装 [rustup](https://rustup.rs)，**新开**终端 |
 | WebView2 / 编译报错 | 装 MSVC 桌面开发工具、WebView2 Runtime |
 | 装上后形象全白 / 白模 | 请装含 TextureLoader + `base: './'` 修复的包 |
