@@ -217,6 +217,7 @@ export type ServerMessage =
   | { type: "settings_llm_saved"; payload: SettingsLlmSavedPayload }
   | { type: "settings_llm_probe"; payload: SettingsLlmProbePayload }
   | { type: "open_data_dir_result"; payload: OpenDataDirResultPayload }
+  | { type: "open_logs_dir_result"; payload: OpenDataDirResultPayload }
   | { type: "export_memory_result"; payload: MemoryLifecycleResultPayload }
   | { type: "wipe_memory_result"; payload: MemoryLifecycleResultPayload }
   | { type: "pick_allowed_root_result"; payload: PickAllowedRootResultPayload }

@@ -435,6 +435,8 @@ class EmbodimentServer:
                 await self._probe_settings_llm(websocket)
             elif cmd == "/open_data_dir":
                 await self._open_data_dir(websocket)
+            elif cmd == "/open_logs_dir":
+                await self._open_logs_dir(websocket)
             elif cmd == "/export_memory":
                 await self._export_memory(websocket)
             elif cmd == "/wipe_memory":
@@ -882,6 +884,27 @@ class EmbodimentServer:
                 return
             except Exception:
                 logger.debug("向请求方发送 open_data_dir_result 失败", exc_info=True)
+        await self.broadcast(packet)
+
+    async def _open_logs_dir(self, websocket: Any | None) -> None:
+        from qi.logging_setup import logs_dir, open_logs_folder
+
+        ok, detail = open_logs_folder()
+        packet = {
+            "type": "open_logs_dir_result",
+            "payload": {
+                "ok": ok,
+                "path": str(logs_dir()),
+                "message": None if ok else detail,
+            },
+        }
+        raw = json.dumps(packet, ensure_ascii=False)
+        if websocket is not None:
+            try:
+                await websocket.send(raw)
+                return
+            except Exception:
+                logger.debug("向请求方发送 open_logs_dir_result 失败", exc_info=True)
         await self.broadcast(packet)
 
     async def _reply_settings_op(

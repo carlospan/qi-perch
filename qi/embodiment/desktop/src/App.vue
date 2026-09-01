@@ -66,6 +66,7 @@ const {
   saveSettingsLlm,
   probeSettingsLlm,
   openDataDir,
+  openLogsDir,
   exportMemory,
   wipeMemory,
   pickAllowedRoot,
@@ -173,6 +174,7 @@ onUnmounted(() => disconnect());
             @refresh="requestSettingsLlm"
             @probe="probeSettingsLlm"
             @open-data-dir="openDataDir"
+            @open-logs-dir="openLogsDir"
             @export-memory="exportMemory"
             @wipe-memory="wipeMemory"
             @pick-allowed-root="pickAllowedRoot"

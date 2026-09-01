@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import logging
 
 from rich.console import Console
 from rich.panel import Panel
@@ -79,10 +78,9 @@ async def run_desktop() -> None:
 
 def main_desktop() -> None:
     """入口：具身后端（console script: qi）。"""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-    )
+    from qi.logging_setup import configure_app_logging
+
+    configure_app_logging()
     try:
         asyncio.run(run_desktop())
     except KeyboardInterrupt:

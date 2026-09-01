@@ -33,6 +33,7 @@ const emit = defineEmits<{
   refresh: [];
   probe: [];
   openDataDir: [];
+  openLogsDir: [];
   exportMemory: [];
   wipeMemory: [];
   pickAllowedRoot: [];
@@ -234,9 +235,17 @@ function onDevPasteAdd() {
           <p class="path" :title="snapshot?.data_dir || ''">
             {{ snapshot?.data_dir || "连接后显示路径" }}
           </p>
-          <button type="button" class="open-folder" @click="emit('openDataDir')">
-            打开数据文件夹
-          </button>
+          <div class="btn-row">
+            <button type="button" class="open-folder" @click="emit('openDataDir')">
+              打开数据文件夹
+            </button>
+            <button type="button" class="open-folder secondary" @click="emit('openLogsDir')">
+              打开日志文件夹
+            </button>
+          </div>
+          <p class="life-note">
+            出问题报 bug 时，可把日志夹里的文件贴出去；若刚改过钥匙，请留意别把含密钥的内容随意外传。
+          </p>
         </div>
 
         <div class="allowed-roots">
@@ -651,6 +660,12 @@ input::placeholder {
 .open-folder:hover:not(:disabled) {
   color: var(--ink);
   border-color: color-mix(in srgb, var(--ember) 40%, transparent);
+}
+
+.open-folder.secondary {
+  opacity: 0.92;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
 }
 
 .open-folder:disabled,

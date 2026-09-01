@@ -93,12 +93,12 @@ def resolve_under_data(configured: str | Path) -> Path:
 
 
 def open_data_folder(path: Path | None = None) -> tuple[bool, str]:
-    """在本机文件管理器中打开数据根。返回 (ok, message)。"""
+    """在本机文件管理器中打开目录（默认数据根）。返回 (ok, message)。"""
     root = path or resolve_data_root()
     try:
         root.mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        return False, f"无法创建数据目录：{e}"
+        return False, f"无法创建目录：{e}"
     target = str(root)
     try:
         if sys.platform == "win32":
@@ -109,4 +109,4 @@ def open_data_folder(path: Path | None = None) -> tuple[bool, str]:
             subprocess.run(["xdg-open", target], check=False)
         return True, target
     except OSError as e:
-        return False, f"打不开数据文件夹：{e}"
+        return False, f"打不开文件夹：{e}"

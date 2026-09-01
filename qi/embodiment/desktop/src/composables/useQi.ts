@@ -768,6 +768,10 @@ function createQi() {
     qiWs.send({ type: "command", payload: { text: "/open_data_dir" } });
   }
 
+  function openLogsDir() {
+    qiWs.send({ type: "command", payload: { text: "/open_logs_dir" } });
+  }
+
   function exportMemory() {
     if (!connected.value || memoryExporting.value || memoryWiping.value) return;
     memoryExporting.value = true;
@@ -1180,6 +1184,7 @@ function createQi() {
     saveSettingsLlm,
     probeSettingsLlm,
     openDataDir,
+    openLogsDir,
     exportMemory,
     wipeMemory,
     pickAllowedRoot,
