@@ -1,12 +1,15 @@
 """数据库初始化与情绪持久化测试。"""
 
+import sqlite3
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from qi.core.emotion import ConsciousnessMode, EmotionState
-from qi.storage.database import Database
+from qi.storage.database import Database, _sql_is_write
+from qi.storage.errors import StorageWriteError
 
 
 @pytest.mark.asyncio
@@ -178,4 +181,41 @@ async def test_user_facts_body_memory_actions_traces_roundtrip():
         assert traces[0]["winner_kind"] == "respond"
         assert traces[0]["beat"] == 1
 
+        await db.close()
+
+
+def test_sql_is_write_detects_dml():
+    assert _sql_is_write("INSERT INTO x VALUES (1)")
+    assert _sql_is_write("  update foo set bar=1")
+    assert not _sql_is_write("SELECT * FROM foo")
+    assert not _sql_is_write("PRAGMA table_info(foo)")
+
+
+@pytest.mark.asyncio
+async def test_commit_failure_raises_storage_write_error():
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        conn = db._require_conn()
+        conn.commit = AsyncMock(side_effect=sqlite3.OperationalError("disk full"))
+        with pytest.raises(StorageWriteError, match="记忆库写入失败"):
+            await db._commit(conn)
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_write_execute_failure_raises_storage_write_error():
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Database(str(Path(tmp) / "qi.db"))
+        await db.initialize()
+        conn = db._require_conn()
+        conn.execute = AsyncMock(
+            side_effect=sqlite3.OperationalError("database is locked")
+        )
+        with pytest.raises(StorageWriteError, match="记忆库写入失败"):
+            await db._execute(
+                conn,
+                "INSERT INTO messages (timestamp, role, content) VALUES (?, ?, ?)",
+                ("t", "user", "hi"),
+            )
         await db.close()

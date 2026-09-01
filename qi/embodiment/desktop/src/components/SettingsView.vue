@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { QI_RELEASES_URL, isTauriShell, resolveAppVersionLabel } from "../about";
+import {
+  QI_RELEASES_URL,
+  checkForUpdate,
+  isTauriShell,
+  resolveAppVersionLabel,
+  type UpdateCheckResult,
+} from "../about";
 import type { SettingsLlmPayload } from "../types";
 
 const props = defineProps<{
@@ -52,6 +58,8 @@ const devPasteRoot = ref("");
 /** Vite 开发壳：允许粘贴路径（产品主路径仍是系统选目录） */
 const isDevShell = !isTauriShell();
 const appVersionLabel = ref("…");
+const updateChecking = ref(false);
+const updateResult = ref<UpdateCheckResult | null>(null);
 
 watch(
   () => props.snapshot,
@@ -127,6 +135,17 @@ function onWipeAsk() {
 
 function onWipeCancel() {
   wipeConfirmOpen.value = false;
+}
+
+async function onCheckUpdate() {
+  if (updateChecking.value) return;
+  updateChecking.value = true;
+  updateResult.value = null;
+  try {
+    updateResult.value = await checkForUpdate(appVersionLabel.value);
+  } finally {
+    updateChecking.value = false;
+  }
 }
 
 function onWipeConfirm() {
@@ -364,13 +383,43 @@ function onDevPasteAdd() {
           <p class="label">关于</p>
           <p class="about-name">栖</p>
           <p class="about-ver">版本 {{ appVersionLabel }}</p>
+          <div class="btn-row">
+            <button
+              type="button"
+              class="open-folder"
+              :disabled="updateChecking"
+              @click="onCheckUpdate"
+            >
+              {{ updateChecking ? "检查中…" : "检查更新" }}
+            </button>
+            <a
+              class="about-link"
+              :href="QI_RELEASES_URL"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              在 GitHub 看更新（Releases）
+            </a>
+          </div>
+          <p
+            v-if="updateResult"
+            class="hint"
+            :class="{
+              ok: updateResult.status === 'latest',
+              err: updateResult.status === 'error',
+              newer: updateResult.status === 'newer',
+            }"
+          >
+            {{ updateResult.message }}
+          </p>
           <a
+            v-if="updateResult?.status === 'newer'"
             class="about-link"
             :href="QI_RELEASES_URL"
             target="_blank"
             rel="noopener noreferrer"
           >
-            在 GitHub 看更新（Releases）
+            打开 Releases 下载
           </a>
         </div>
       </div>
@@ -512,6 +561,10 @@ input::placeholder {
 
 .hint.err {
   color: #c45a4a;
+}
+
+.hint.newer {
+  color: color-mix(in srgb, var(--ember) 70%, var(--ink-dim));
 }
 
 .data-dir,

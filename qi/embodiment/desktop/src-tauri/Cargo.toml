@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.1.1"
+version = "0.1.2"
 description = "栖 · 桌面具身壳"
 authors = ["qi"]
 edition = "2021"

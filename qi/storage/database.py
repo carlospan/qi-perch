@@ -3,11 +3,26 @@
 from __future__ import annotations
 
 import json
+import logging
+import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import aiosqlite
+
+from qi.storage.errors import StorageWriteError
+
+logger = logging.getLogger("qi.storage.database")
+
+_WRITE_SQL_HEADS = frozenset(
+    {"INSERT", "UPDATE", "DELETE", "ALTER", "CREATE", "DROP", "REPLACE"}
+)
+
+
+def _sql_is_write(sql: str) -> bool:
+    head = sql.lstrip().split(None, 1)[0].upper()
+    return head in _WRITE_SQL_HEADS
 
 if TYPE_CHECKING:
     from qi.core.emotion import EmotionState
@@ -276,30 +291,30 @@ class Database:
 
         self._conn = await aiosqlite.connect(str(path))
         self._conn.row_factory = aiosqlite.Row
-        await self._conn.execute(_CREATE_EMOTION_STATES)
-        await self._conn.execute(_CREATE_MESSAGES)
-        await self._conn.execute(_CREATE_RAW_EVENTS)
-        await self._conn.execute(_CREATE_NARRATIVE_MEMORIES)
-        await self._conn.execute(_CREATE_BODY_MEMORY)
-        await self._conn.execute(_CREATE_CONSCIOUSNESS_STREAM)
-        await self._conn.execute(_CREATE_DREAMS)
-        await self._conn.execute(_CREATE_EPISODES)
-        await self._conn.execute(_CREATE_CREATIONS)
-        await self._conn.execute(_CREATE_SELF_MODEL)
-        await self._conn.execute(_CREATE_RELATIONSHIP)
-        await self._conn.execute(_CREATE_FIRST_TIMES)
-        await self._conn.execute(_CREATE_SCARS)
-        await self._conn.execute(_CREATE_USER_MODEL)
-        await self._conn.execute(_CREATE_USER_FACTS)
-        await self._conn.execute(_CREATE_ACTIONS)
-        await self._conn.execute(_CREATE_BROADCAST_TRACES)
+        await self._execute(self._conn, _CREATE_EMOTION_STATES)
+        await self._execute(self._conn, _CREATE_MESSAGES)
+        await self._execute(self._conn, _CREATE_RAW_EVENTS)
+        await self._execute(self._conn, _CREATE_NARRATIVE_MEMORIES)
+        await self._execute(self._conn, _CREATE_BODY_MEMORY)
+        await self._execute(self._conn, _CREATE_CONSCIOUSNESS_STREAM)
+        await self._execute(self._conn, _CREATE_DREAMS)
+        await self._execute(self._conn, _CREATE_EPISODES)
+        await self._execute(self._conn, _CREATE_CREATIONS)
+        await self._execute(self._conn, _CREATE_SELF_MODEL)
+        await self._execute(self._conn, _CREATE_RELATIONSHIP)
+        await self._execute(self._conn, _CREATE_FIRST_TIMES)
+        await self._execute(self._conn, _CREATE_SCARS)
+        await self._execute(self._conn, _CREATE_USER_MODEL)
+        await self._execute(self._conn, _CREATE_USER_FACTS)
+        await self._execute(self._conn, _CREATE_ACTIONS)
+        await self._execute(self._conn, _CREATE_BROADCAST_TRACES)
         await self._migrate_creations_mentioned_at()
         await self._migrate_broadcast_traces_gws()
         await self._migrate_narrative_archived()
         await self._migrate_actions_detail_json()
         for ddl in _CREATE_INDEXES:
-            await self._conn.execute(ddl)
-        await self._conn.execute(
+            await self._execute(self._conn,ddl)
+        await self._execute(self._conn,
             """
             INSERT OR IGNORE INTO relationship
                 (id, stage, depth, temperature, trust, season, last_updated)
@@ -307,7 +322,7 @@ class Database:
             """,
             (datetime.now().isoformat(timespec="seconds"),),
         )
-        await self._conn.commit()
+        await self._commit(self._conn)
 
     async def _migrate_creations_mentioned_at(self) -> None:
         """旧库补 mentioned_at（提起 vs 递出拆分，L7）。"""
@@ -315,7 +330,7 @@ class Database:
         async with conn.execute("PRAGMA table_info(creations)") as cursor:
             cols = {str(row[1]) for row in await cursor.fetchall()}
         if "mentioned_at" not in cols:
-            await conn.execute(
+            await self._execute(conn,
                 "ALTER TABLE creations ADD COLUMN mentioned_at DATETIME"
             )
 
@@ -325,15 +340,15 @@ class Database:
         async with conn.execute("PRAGMA table_info(broadcast_traces)") as cursor:
             cols = {str(row[1]) for row in await cursor.fetchall()}
         if "winner_arb" not in cols:
-            await conn.execute(
+            await self._execute(conn,
                 "ALTER TABLE broadcast_traces ADD COLUMN winner_arb TEXT"
             )
         if "winner_arb_salience" not in cols:
-            await conn.execute(
+            await self._execute(conn,
                 "ALTER TABLE broadcast_traces ADD COLUMN winner_arb_salience REAL"
             )
         if "arb_matches_legacy" not in cols:
-            await conn.execute(
+            await self._execute(conn,
                 "ALTER TABLE broadcast_traces ADD COLUMN arb_matches_legacy INTEGER"
             )
 
@@ -343,7 +358,7 @@ class Database:
         async with conn.execute("PRAGMA table_info(narrative_memories)") as cursor:
             cols = {str(row[1]) for row in await cursor.fetchall()}
         if "archived" not in cols:
-            await conn.execute(
+            await self._execute(conn,
                 "ALTER TABLE narrative_memories "
                 "ADD COLUMN archived INTEGER NOT NULL DEFAULT 0"
             )
@@ -354,19 +369,40 @@ class Database:
         async with conn.execute("PRAGMA table_info(actions)") as cursor:
             cols = {str(row[1]) for row in await cursor.fetchall()}
         if "detail_json" not in cols:
-            await conn.execute("ALTER TABLE actions ADD COLUMN detail_json TEXT")
+            await self._execute(conn,"ALTER TABLE actions ADD COLUMN detail_json TEXT")
 
     def _require_conn(self) -> aiosqlite.Connection:
         if self._conn is None:
             raise RuntimeError("数据库尚未初始化，请先调用 initialize()")
         return self._conn
 
+    async def _execute(
+        self,
+        conn: aiosqlite.Connection,
+        sql: str,
+        parameters: Any = (),
+    ) -> aiosqlite.Cursor:
+        try:
+            return await conn.execute(sql, parameters)
+        except (aiosqlite.Error, sqlite3.Error) as e:
+            if _sql_is_write(sql):
+                logger.error("SQLite 写入失败", exc_info=True)
+                raise StorageWriteError("记忆库写入失败，请稍后再试。") from e
+            raise
+
+    async def _commit(self, conn: aiosqlite.Connection) -> None:
+        try:
+            await conn.commit()
+        except (aiosqlite.Error, sqlite3.Error) as e:
+            logger.error("SQLite commit 失败", exc_info=True)
+            raise StorageWriteError("记忆库写入失败，请稍后再试。") from e
+
     # ----- 情绪 -----
 
     async def save_emotion(self, emotion: EmotionState) -> None:
         conn = self._require_conn()
         mode = emotion.mode.value if hasattr(emotion.mode, "value") else str(emotion.mode)
-        await conn.execute(
+        await self._execute(conn,
             """
             INSERT INTO emotion_states
                 (timestamp, energy, valence, arousal, security, curiosity, attachment, mode)
@@ -383,7 +419,7 @@ class Database:
                 mode,
             ),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     async def load_emotion(self) -> EmotionState | None:
         from qi.core.emotion import ConsciousnessMode, EmotionState
@@ -422,7 +458,7 @@ class Database:
         tone: str | None = None,
     ) -> None:
         conn = self._require_conn()
-        await conn.execute(
+        await self._execute(conn,
             """
             INSERT INTO messages (timestamp, role, content, emotion_context, tone)
             VALUES (?, ?, ?, ?, ?)
@@ -435,7 +471,7 @@ class Database:
                 tone,
             ),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     async def load_recent_messages(self, limit: int = 20) -> list[dict]:
         """最近 N 条（旧→新），供 prompt / 工作记忆。"""
@@ -541,7 +577,7 @@ class Database:
     ) -> int:
         conn = self._require_conn()
         ts = (timestamp or datetime.now()).isoformat(timespec="seconds")
-        cursor = await conn.execute(
+        cursor = await self._execute(conn,
             """
             INSERT INTO raw_events
                 (timestamp, type, content, emotional_impact, attention_weight, processed)
@@ -549,7 +585,7 @@ class Database:
             """,
             (ts, event_type, content, emotional_impact, attention_weight),
         )
-        await conn.commit()
+        await self._commit(conn)
         return int(cursor.lastrowid)
 
     async def load_unprocessed_events(self) -> list[dict]:
@@ -578,11 +614,11 @@ class Database:
             return
         conn = self._require_conn()
         placeholders = ",".join("?" * len(event_ids))
-        await conn.execute(
+        await self._execute(conn,
             f"UPDATE raw_events SET processed = 1 WHERE id IN ({placeholders})",
             event_ids,
         )
-        await conn.commit()
+        await self._commit(conn)
 
     # ----- 叙事记忆 -----
 
@@ -598,7 +634,7 @@ class Database:
         period_end: str | None = None,
     ) -> int:
         conn = self._require_conn()
-        cursor = await conn.execute(
+        cursor = await self._execute(conn,
             """
             INSERT INTO narrative_memories
                 (created_at, content, period_start, period_end, importance,
@@ -617,7 +653,7 @@ class Database:
                 json.dumps(tags or [], ensure_ascii=False),
             ),
         )
-        await conn.commit()
+        await self._commit(conn)
         return int(cursor.lastrowid)
 
     async def get_narrative_memory(self, memory_id: int) -> dict | None:
@@ -630,11 +666,11 @@ class Database:
 
     async def decay_narrative_strengths(self, factor: float = 0.999) -> None:
         conn = self._require_conn()
-        await conn.execute(
+        await self._execute(conn,
             "UPDATE narrative_memories SET strength = strength * ?",
             (factor,),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     async def list_forgotten_narrative_ids(self, below: float = 0.1) -> list[int]:
         """强度低到像忘了——准备从库里轻轻拿掉。"""
@@ -710,12 +746,12 @@ class Database:
 
     async def delete_narrative_memory(self, memory_id: int) -> None:
         conn = self._require_conn()
-        await conn.execute("DELETE FROM narrative_memories WHERE id = ?", (memory_id,))
-        await conn.commit()
+        await self._execute(conn,"DELETE FROM narrative_memories WHERE id = ?", (memory_id,))
+        await self._commit(conn)
 
     async def recall_narrative_memory(self, memory_id: int) -> None:
         conn = self._require_conn()
-        await conn.execute(
+        await self._execute(conn,
             """
             UPDATE narrative_memories
             SET recall_count = recall_count + 1,
@@ -724,20 +760,20 @@ class Database:
             """,
             (memory_id,),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     async def archive_narrative_memory(self, memory_id: int) -> bool:
         """标记归档；已归档或不存在返回 False。"""
         conn = self._require_conn()
-        cur = await conn.execute(
+        cursor = await self._execute(conn,
             """
             UPDATE narrative_memories SET archived = 1
             WHERE id = ? AND COALESCE(archived, 0) = 0
             """,
             (memory_id,),
         )
-        await conn.commit()
-        return int(cur.rowcount or 0) > 0
+        await self._commit(conn)
+        return int(cursor.rowcount or 0) > 0
 
     async def list_archivable_narratives(
         self,
@@ -780,14 +816,14 @@ class Database:
     async def set_body_memory(self, key: str, value: Any) -> None:
         conn = self._require_conn()
         payload = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-        await conn.execute(
+        await self._execute(conn,
             """
             INSERT OR REPLACE INTO body_memory (key, value, updated_at)
             VALUES (?, ?, ?)
             """,
             (key, payload, datetime.now().isoformat(timespec="seconds")),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     async def list_recent_narratives(self, limit: int = 5) -> list[dict]:
         conn = self._require_conn()
@@ -832,7 +868,7 @@ class Database:
         emotion_snapshot: str | None = None,
     ) -> int:
         conn = self._require_conn()
-        cursor = await conn.execute(
+        cursor = await self._execute(conn,
             """
             INSERT INTO consciousness_stream
                 (timestamp, type, content, trigger, emotion_snapshot)
@@ -846,7 +882,7 @@ class Database:
                 emotion_snapshot,
             ),
         )
-        await conn.commit()
+        await self._commit(conn)
         return int(cursor.lastrowid)
 
     async def load_recent_consciousness(
@@ -888,7 +924,7 @@ class Database:
         retention: float = 1.0,
     ) -> int:
         conn = self._require_conn()
-        cursor = await conn.execute(
+        cursor = await self._execute(conn,
             """
             INSERT INTO dreams
                 (created_at, content, emotion_tag, emotional_intensity, retention, shared_with_user)
@@ -902,7 +938,7 @@ class Database:
                 retention,
             ),
         )
-        await conn.commit()
+        await self._commit(conn)
         return int(cursor.lastrowid)
 
     async def load_latest_dream(self, min_retention: float = 0.0) -> dict | None:
@@ -920,19 +956,19 @@ class Database:
 
     async def update_dream_retention(self, dream_id: int, retention: float) -> None:
         conn = self._require_conn()
-        await conn.execute(
+        await self._execute(conn,
             "UPDATE dreams SET retention = ? WHERE id = ?",
             (retention, dream_id),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     async def mark_dream_shared(self, dream_id: int) -> None:
         conn = self._require_conn()
-        await conn.execute(
+        await self._execute(conn,
             "UPDATE dreams SET shared_with_user = 1 WHERE id = ?",
             (dream_id,),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     async def list_dreams(self) -> list[dict]:
         conn = self._require_conn()
@@ -959,7 +995,7 @@ class Database:
         source_event_ids: list[int] | None = None,
     ) -> int:
         conn = self._require_conn()
-        cursor = await conn.execute(
+        cursor = await self._execute(conn,
             """
             INSERT INTO episodes
                 (start_ts, end_ts, topic, summary, key_facts_json, role_map_json,
@@ -983,7 +1019,7 @@ class Database:
                 datetime.now().isoformat(timespec="seconds"),
             ),
         )
-        await conn.commit()
+        await self._commit(conn)
         return int(cursor.lastrowid)
 
     async def get_episode(self, episode_id: int) -> dict | None:
@@ -1022,16 +1058,16 @@ class Database:
     ) -> None:
         conn = self._require_conn()
         if importance is None:
-            await conn.execute(
+            await self._execute(conn,
                 "UPDATE episodes SET dreamed = 1 WHERE id = ?",
                 (episode_id,),
             )
         else:
-            await conn.execute(
+            await self._execute(conn,
                 "UPDATE episodes SET dreamed = 1, importance = ? WHERE id = ?",
                 (float(importance), episode_id),
             )
-        await conn.commit()
+        await self._commit(conn)
 
     @staticmethod
     def _episode_row(row: aiosqlite.Row) -> dict:
@@ -1067,7 +1103,7 @@ class Database:
         emotion_context: str | None = None,
     ) -> int:
         conn = self._require_conn()
-        cursor = await conn.execute(
+        cursor = await self._execute(conn,
             """
             INSERT INTO creations
                 (created_at, type, content, emotion_context, shared)
@@ -1080,7 +1116,7 @@ class Database:
                 emotion_context,
             ),
         )
-        await conn.commit()
+        await self._commit(conn)
         return int(cursor.lastrowid)
 
     async def load_unshared_creation(self) -> dict | None:
@@ -1100,13 +1136,13 @@ class Database:
         """真正递出（L7 share.deliver）：写 shared=1 与 shared_at。"""
         when = now or datetime.now()
         conn = self._require_conn()
-        await conn.execute(
+        await self._execute(conn,
             """
             UPDATE creations SET shared = 1, shared_at = ? WHERE id = ?
             """,
             (when.isoformat(timespec="seconds"), creation_id),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     async def list_recent_shared_creations(self, limit: int = 40) -> list[dict]:
         """最近真正递出的创作（shared=1），新→旧；供桌面 /history 回灌卡片。"""
@@ -1129,13 +1165,13 @@ class Database:
         """对话中提起（L4 maybe_share_hint）：只写 mentioned_at，不动 shared。"""
         conn = self._require_conn()
         when = now or datetime.now()
-        await conn.execute(
+        await self._execute(conn,
             """
             UPDATE creations SET mentioned_at = ? WHERE id = ?
             """,
             (when.isoformat(timespec="seconds"), creation_id),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     async def last_creation_share_time(self) -> datetime | None:
         """最近一次真正递出的时间（shared_at）。"""
@@ -1206,7 +1242,7 @@ class Database:
             else (json.loads(existing["existential_questions"]) if existing and existing.get("existential_questions") else []),
             ensure_ascii=False,
         )
-        await conn.execute(
+        await self._execute(conn,
             """
             INSERT INTO self_model
                 (id, identity_narrative, "values", aesthetic_preferences, existential_questions, last_updated)
@@ -1226,7 +1262,7 @@ class Database:
                 datetime.now().isoformat(timespec="seconds"),
             ),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     # ----- 关系 -----
 
@@ -1247,7 +1283,7 @@ class Database:
         shared_culture: list | None = None,
     ) -> None:
         conn = self._require_conn()
-        await conn.execute(
+        await self._execute(conn,
             """
             INSERT INTO relationship
                 (id, stage, depth, temperature, trust, season, last_updated, narrative, shared_culture)
@@ -1273,7 +1309,7 @@ class Database:
                 json.dumps(shared_culture or [], ensure_ascii=False),
             ),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     async def has_first_time(self, event_type: str) -> bool:
         conn = self._require_conn()
@@ -1291,7 +1327,7 @@ class Database:
         emotional_imprint: str = "",
     ) -> int:
         conn = self._require_conn()
-        cursor = await conn.execute(
+        cursor = await self._execute(conn,
             """
             INSERT INTO first_times
                 (event_type, timestamp, content, inner_experience, emotional_imprint, recall_count)
@@ -1305,7 +1341,7 @@ class Database:
                 emotional_imprint,
             ),
         )
-        await conn.commit()
+        await self._commit(conn)
         return int(cursor.lastrowid)
 
     async def list_first_times(self) -> list[dict]:
@@ -1321,7 +1357,7 @@ class Database:
     ) -> None:
         when = now or datetime.now()
         conn = self._require_conn()
-        await conn.execute(
+        await self._execute(conn,
             """
             UPDATE first_times
             SET recall_count = recall_count + 1,
@@ -1330,7 +1366,7 @@ class Database:
             """,
             (when.isoformat(timespec="seconds"), first_id),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     async def save_scar(
         self,
@@ -1339,7 +1375,7 @@ class Database:
         trust_before: float,
     ) -> int:
         conn = self._require_conn()
-        cursor = await conn.execute(
+        cursor = await self._execute(conn,
             """
             INSERT INTO scars
                 (origin_event, timestamp, severity, trust_before, healed)
@@ -1352,7 +1388,7 @@ class Database:
                 trust_before,
             ),
         )
-        await conn.commit()
+        await self._commit(conn)
         return int(cursor.lastrowid)
 
     async def list_scars(self, unhealed_only: bool = False) -> list[dict]:
@@ -1382,11 +1418,11 @@ class Database:
         h = int(healed) if healed is not None else row["healed"]
         w = wisdom if wisdom is not None else (row["wisdom"] or "")
         b = behavioral_mark if behavioral_mark is not None else (row["behavioral_mark"] or "")
-        await conn.execute(
+        await self._execute(conn,
             "UPDATE scars SET healed = ?, wisdom = ?, behavioral_mark = ? WHERE id = ?",
             (h, w, b, scar_id),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     async def load_user_model(self) -> dict | None:
         conn = self._require_conn()
@@ -1404,7 +1440,7 @@ class Database:
         drift_signals: list | None = None,
     ) -> None:
         conn = self._require_conn()
-        await conn.execute(
+        await self._execute(conn,
             """
             INSERT INTO user_model
                 (id, topics, emotional_baseline, rhythm, linguistic_profile,
@@ -1429,7 +1465,7 @@ class Database:
                 json.dumps(drift_signals or [], ensure_ascii=False),
             ),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     async def load_recent_emotions(
         self,
@@ -1476,7 +1512,7 @@ class Database:
         when = now or datetime.now()
         ts = when.isoformat(timespec="seconds")
         conn = self._require_conn()
-        cursor = await conn.execute(
+        cursor = await self._execute(conn,
             """
             INSERT INTO user_facts
                 (fact_type, content, confidence, stability, source,
@@ -1494,7 +1530,7 @@ class Database:
                 emotional_weight,
             ),
         )
-        await conn.commit()
+        await self._commit(conn)
         return int(cursor.lastrowid)
 
     async def list_active_user_facts(
@@ -1532,19 +1568,19 @@ class Database:
     ) -> None:
         when = now or datetime.now()
         conn = self._require_conn()
-        await conn.execute(
+        await self._execute(conn,
             "UPDATE user_facts SET last_confirmed = ? WHERE id = ?",
             (when.isoformat(timespec="seconds"), fact_id),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     async def supersede_user_fact(self, old_id: int, new_id: int) -> None:
         conn = self._require_conn()
-        await conn.execute(
+        await self._execute(conn,
             "UPDATE user_facts SET superseded_by = ? WHERE id = ?",
             (new_id, old_id),
         )
-        await conn.commit()
+        await self._commit(conn)
 
     # ----- 行动留痕（L7） -----
 
@@ -1563,7 +1599,7 @@ class Database:
     ) -> int:
         conn = self._require_conn()
         when = now or datetime.now()
-        cursor = await conn.execute(
+        cursor = await self._execute(conn,
             """
             INSERT INTO actions
                 (timestamp, kind, target, summary, outcome,
@@ -1582,7 +1618,7 @@ class Database:
                 detail_json,
             ),
         )
-        await conn.commit()
+        await self._commit(conn)
         return int(cursor.lastrowid)
 
     async def list_recent_actions(self, limit: int = 10) -> list[dict]:
@@ -1737,7 +1773,7 @@ class Database:
     ) -> int:
         conn = self._require_conn()
         match_i = None if arb_matches_legacy is None else (1 if arb_matches_legacy else 0)
-        cur = await conn.execute(
+        cursor = await self._execute(conn,
             """
             INSERT INTO broadcast_traces
                 (beat, timestamp, winner_kind, winner_salience,
@@ -1760,8 +1796,8 @@ class Database:
                 match_i,
             ),
         )
-        await conn.commit()
-        return int(cur.lastrowid or 0)
+        await self._commit(conn)
+        return int(cursor.lastrowid or 0)
 
     async def list_recent_broadcast_traces(self, limit: int = 20) -> list[dict]:
         conn = self._require_conn()
