@@ -33,6 +33,7 @@ async def test_enrich_look_applies_impact_and_rewrites_line():
     brain.expression = MagicMock()
     brain.expression.express = AsyncMock(return_value="好像有点晃……你在看文档？")
     brain.llm = MagicMock()
+    brain.memory = None
 
     result = {
         "type": "look_glance",
@@ -75,6 +76,7 @@ async def test_enrich_look_autonomous_scales_impact():
     brain.expression = MagicMock()
     brain.expression.express = AsyncMock(return_value="嗯……亮了一下。")
     brain.llm = MagicMock()
+    brain.memory = None
 
     result = {
         "type": "look_glance",
@@ -105,6 +107,7 @@ async def test_enrich_preserves_first_notice_prefix():
     brain.expression = MagicMock()
     brain.expression.express = AsyncMock(return_value="有点安静的编辑器。")
     brain.llm = MagicMock()
+    brain.memory = None
 
     result = {
         "type": "look_glance",
@@ -148,3 +151,73 @@ async def test_glance_stores_impression_as_material(tmp_path):
     assert result is not None
     assert result["found"]["impression"] == "白底上密密的字。"
     assert result.get("speak") is True
+
+
+@pytest.mark.asyncio
+async def test_enrich_look_passes_filtered_memories():
+    brain = MagicMock()
+    brain.relationship_stage = "friend"
+    brain.emotion = EmotionState()
+    brain.perception = MagicMock()
+    brain.perception.assess_impact_async = AsyncMock(return_value=0.2)
+    brain.perception.apply_security_hint = MagicMock(side_effect=lambda e, _i: e)
+    brain._maybe_save_emotion = AsyncMock()
+    brain.expression = MagicMock()
+    brain.expression.express = AsyncMock(return_value="白底文档……上次也这样。")
+    brain.llm = MagicMock()
+    brain.memory = MagicMock()
+    brain.memory.retrieve_for_prompt = AsyncMock(
+        return_value=[{"content": "上次也在看白底文档"}]
+    )
+
+    result = {
+        "type": "look_glance",
+        "outcome": "success",
+        "reactive": True,
+        "user_question": "你能看到屏幕吗",
+        "season": "spring",
+        "first_notice": False,
+        "qi_line": "白底文档。",
+        "summary": "白底文档。",
+        "found": {"impression": "白底文档。"},
+        "speak": True,
+    }
+    await enrich_look_glance(brain, result, datetime.now())
+
+    kwargs = brain.expression.express.await_args.kwargs
+    assert kwargs["memories"] == [{"content": "上次也在看白底文档"}]
+    brain.memory.retrieve_for_prompt.assert_awaited_once()
+    call_query = brain.memory.retrieve_for_prompt.await_args.args[0]
+    assert "白底文档" in call_query
+    assert "屏幕" in call_query
+
+
+@pytest.mark.asyncio
+async def test_enrich_look_memory_retrieval_failure_uses_empty():
+    brain = MagicMock()
+    brain.relationship_stage = "friend"
+    brain.emotion = EmotionState()
+    brain.perception = MagicMock()
+    brain.perception.assess_impact_async = AsyncMock(return_value=0.1)
+    brain.perception.apply_security_hint = MagicMock(side_effect=lambda e, _i: e)
+    brain._maybe_save_emotion = AsyncMock()
+    brain.expression = MagicMock()
+    brain.expression.express = AsyncMock(return_value="嗯。")
+    brain.llm = MagicMock()
+    brain.memory = MagicMock()
+    brain.memory.retrieve_for_prompt = AsyncMock(side_effect=RuntimeError("chroma down"))
+
+    result = {
+        "type": "look_glance",
+        "outcome": "success",
+        "reactive": False,
+        "season": "spring",
+        "first_notice": False,
+        "qi_line": "一片亮。",
+        "summary": "一片亮。",
+        "found": {"impression": "一片亮。"},
+        "speak": True,
+    }
+    await enrich_look_glance(brain, result, datetime.now())
+    kwargs = brain.expression.express.await_args.kwargs
+    assert kwargs["memories"] == []

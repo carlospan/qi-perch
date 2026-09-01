@@ -109,6 +109,26 @@ def _filter_by_topic_relevance(
     return kept
 
 
+async def retrieve_filtered_memories(
+    brain: Brain,
+    query: str,
+    *,
+    recent_messages: list[dict] | None = None,
+    top_k: int = 3,
+) -> list[dict]:
+    """对话/look 共用：retrieve_for_prompt + 话题相关过滤；失败或空则 []。"""
+    if brain.memory is None:
+        return []
+    recent = recent_messages if recent_messages is not None else []
+    q = (query or "").strip() or "此刻的心情"
+    try:
+        memories = await brain.memory.retrieve_for_prompt(q, top_k=top_k)
+        return _filter_by_topic_relevance(memories, q, recent)
+    except Exception:
+        logger.exception("记忆检索失败")
+        return []
+
+
 async def gather_prompt_context(
     brain: Brain,
     pending: str | None,
@@ -128,8 +148,9 @@ async def gather_prompt_context(
         ):
             recent = recent[:-1]
         query = pending or "此刻的心情"
-        memories = await brain.memory.retrieve_for_prompt(query, top_k=3)
-        memories = _filter_by_topic_relevance(memories, query, recent)
+        memories = await retrieve_filtered_memories(
+            brain, query, recent_messages=recent, top_k=3
+        )
         try:
             facts = await brain.memory.active_facts()
             extras["user_facts"] = format_facts_for_prompt(facts, brain.relationship_stage)

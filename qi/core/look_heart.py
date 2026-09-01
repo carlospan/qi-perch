@@ -92,13 +92,21 @@ async def _rewrite_look_qi_line(
     if brain.expression is None or brain.llm is None:
         return
 
+    from qi.core.brain_context import retrieve_filtered_memories
+
     first_notice = bool(result.get("first_notice"))
     reactive = bool(result.get("reactive"))
     user_q = str(result.get("user_question") or "").strip()
     if reactive and user_q:
         user_message = f"对方问：「{user_q}」\n你刚瞥了一眼屏幕；结合所见短答。"
+        query = f"{user_q} {impression}".strip()
     else:
         user_message = "（你刚瞥了一眼对方的屏幕）"
+        query = impression
+
+    memories = await retrieve_filtered_memories(
+        brain, query, recent_messages=[], top_k=3
+    )
 
     card = IntentionCard(
         act="acknowledge",
@@ -119,7 +127,7 @@ async def _rewrite_look_qi_line(
                 now=now,
                 intention=card,
                 recent_messages=[],
-                memories=[],
+                memories=memories,
                 relationship_stage=brain.relationship_stage,
                 season=str(result.get("season") or "spring"),
                 proactive_kind=None,
