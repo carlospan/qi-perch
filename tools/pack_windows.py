@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Windows 本机包装入口：检查资源 →（可选）打脑/拉 BGE → tauri build。
+"""Windows 本机包装入口：检查资源 → 打脑（若缺）→ 默认拉 BGE → tauri build。
 
 用法（仓库根）：
-    python tools/pack_windows.py
+    python tools/pack_windows.py              # 正式推荐：默认带 BGE
+    python tools/pack_windows.py --skip-bge   # 无网/证伪可跳过
     python tools/pack_windows.py --build-brain
-    python tools/pack_windows.py --with-bge
-    python tools/pack_windows.py --build-brain --with-bge
+    python tools/pack_windows.py --with-bge   # 兼容旧旗标（默认已带，等同无操作）
 
 详见 docs/how-to/Windows安装包-本机证伪.md
 """
@@ -56,7 +56,12 @@ def main() -> int:
     parser.add_argument(
         "--with-bge",
         action="store_true",
-        help="包装前运行 tools/fetch_bge_resource.py（需网络）",
+        help="兼容旧用法：正式包默认已带 BGE，此旗标可省略",
+    )
+    parser.add_argument(
+        "--skip-bge",
+        action="store_true",
+        help="跳过 BGE（无网/快速证伪）；正式发版勿用",
     )
     parser.add_argument(
         "--skip-tauri",
@@ -102,17 +107,37 @@ def main() -> int:
     print(f"OK 安装 zip：{BRAIN_ZIP}（{BRAIN_ZIP.stat().st_size / 1e6:.1f} MB）", flush=True)
     print(f"OK numpy：{pyds[0].name}", flush=True)
 
-    if args.with_bge:
-        _run([sys.executable, str(ROOT / "tools" / "fetch_bge_resource.py")])
-
-    if BGE_ONNX.is_file():
-        print(f"OK BGE：{BGE_ONNX.parent.parent}", flush=True)
+    if args.skip_bge:
+        if BGE_ONNX.is_file():
+            print(f"OK BGE（已有，--skip-bge 未删除）：{BGE_ONNX.parent.parent}", flush=True)
+        else:
+            print(
+                "已 --skip-bge：无离线 BGE，记忆检索将偏 n-gram（正式发版勿用此旗标）。",
+                flush=True,
+            )
     else:
-        print(
-            "提示：未找到离线 BGE（正式包建议 python tools/fetch_bge_resource.py）。"
-            "本刀证伪可不带，记忆检索将偏 n-gram。",
-            flush=True,
-        )
+        if not BGE_ONNX.is_file():
+            print("未找到离线 BGE，开始 fetch（需网络；国内可设 HF_ENDPOINT）…", flush=True)
+            try:
+                _run([sys.executable, str(ROOT / "tools" / "fetch_bge_resource.py")])
+            except subprocess.CalledProcessError as e:
+                print(
+                    "BGE fetch 失败。正式包默认须带 BGE。\n"
+                    "  · 检查网络 / 设 HF_ENDPOINT=https://hf-mirror.com 后重试\n"
+                    "  · 或显式：python tools/pack_windows.py --skip-bge",
+                    file=sys.stderr,
+                )
+                return e.returncode or 1
+        if not BGE_ONNX.is_file():
+            print(
+                f"fetch 后仍缺少 {BGE_ONNX}。\n"
+                "正式包默认须带 BGE；或加 --skip-bge。",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"OK BGE：{BGE_ONNX.parent.parent}", flush=True)
+        if args.with_bge:
+            print("（--with-bge 已兼容；默认行为即带 BGE）", flush=True)
 
     if args.skip_tauri:
         print("已跳过 tauri build（--skip-tauri）。", flush=True)

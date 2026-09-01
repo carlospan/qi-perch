@@ -1,7 +1,9 @@
 # Windows 安装包 · 本机证伪
 
-> how-to。对应任务包 `docs/specs/tasks/2026-08-31-P3-本机安装包证伪.md`（§〇.27）。  
-> **本机证伪**：在你这台 Windows 上打出安装包并装一趟。不做 CI、不强制发 GitHub Release。
+> how-to。对应任务包：  
+> - `docs/specs/tasks/2026-08-31-P3-本机安装包证伪.md`（§〇.27）  
+> - `docs/specs/tasks/2026-09-01-P3-正式包默认带BGE.md`（§〇.29）  
+> **本机证伪 / 正式包装**：在你这台 Windows 上打出安装包。不做 CI。发 Release 另见 §〇.28 / §〇.29。
 
 ---
 
@@ -9,30 +11,32 @@
 
 - Windows 10/11  
 - 已能跑 `npm run tauri:dev` 的环境（Node、Rust、MSVC 桌面工具）  
-- 仓库根目录的 Python（打 `qi-brain` 用）
+- 仓库根目录的 Python（打 `qi-brain` / 拉 BGE 用）  
+- **正式包**：能访问 HuggingFace 或镜像（拉 BGE，约 91MB）
 
 ---
 
-## 一键（推荐）
+## 一键（正式推荐）
 
 在**仓库根**：
 
 ```powershell
-# 若还没有 bundled 大脑（约数分钟～十几分钟）
+# 国内拉 BGE 建议镜像
+$env:HF_ENDPOINT="https://hf-mirror.com"
+
+# 若还没有大脑（约数分钟～十几分钟）
 python tools/build_qi_brain.py
 
-# 正式领养包建议带 BGE（约 91MB，需网络；国内可设镜像）
-$env:HF_ENDPOINT="https://hf-mirror.com"
-python tools/fetch_bge_resource.py
-
-# 包装：检查资源 → tauri build
+# 包装：检查资源 → 无 BGE 则自动 fetch → tauri build
 python tools/pack_windows.py
 ```
 
-只要打包装、脑已有、BGE 可跳过：
+`pack_windows` **默认须带 BGE**：缺模会自动 `fetch_bge_resource`；fetch 失败则**退出非 0**（不产出假装正式的包）。
+
+无网 / 只要快速编过壳时：
 
 ```powershell
-python tools/pack_windows.py
+python tools/pack_windows.py --skip-bge
 ```
 
 强制先打脑再包装：
@@ -41,11 +45,7 @@ python tools/pack_windows.py
 python tools/pack_windows.py --build-brain
 ```
 
-包装前拉 BGE：
-
-```powershell
-python tools/pack_windows.py --with-bge
-```
+`--with-bge` 仍可用（兼容旧用法；默认已带，可省略）。
 
 ---
 
@@ -53,10 +53,11 @@ python tools/pack_windows.py --with-bge
 
 1. `python tools/build_qi_brain.py`  
    → `…/resources/qi-brain/`（本机 smoke / tauri:dev）  
-   → `…/resources/qi-brain.zip`（**安装包只带这一份**，避免 NSIS 逐文件拷半套）  
-2. （建议）`python tools/fetch_bge_resource.py`  
+   → `…/resources/qi-brain.zip`（**安装包只带这一份**）  
+2. （正式包）`python tools/fetch_bge_resource.py`  
    → `…/resources/bge-small-zh-v1.5/`（有 `onnx/model.onnx` 等）  
-3. `cd qi/embodiment/desktop` → `npm install`（若未装）→ `npm run tauri:build`  
+   或交给 `pack_windows` 自动拉  
+3. `python tools/pack_windows.py`（或 `cd qi/embodiment/desktop` → `npm run tauri:build`）  
 
 产物一般在：
 
@@ -64,28 +65,31 @@ python tools/pack_windows.py --with-bge
 qi/embodiment/desktop/src-tauri/target/release/bundle/nsis/
 ```
 
-或 `bundle/msi/`（视 Tauri 目标而定）。以目录里最新的安装包为准。
+以目录里最新的安装包为准（如 `qi_0.1.1_x64-setup.exe`）。
 
 ---
 
-## 安装后怎么验（关门勾选）
+## 安装后怎么验
 
 1. 关掉本机已在跑的 `python -m qi` / 旧壳（避免端口抢车）  
-2. **托盘退出栖**，任务管理器确认无 `qi.exe` / `qi-brain.exe` 后再装（安装程序也会 taskkill）  
+2. **托盘退出栖**，确认无 `qi.exe` / `qi-brain.exe` 后再装  
 3. 双击安装包安装  
 4. 打开「栖」：主窗出现；**首次**可能解压大脑到 `%LOCALAPPDATA%\Qi\runtime\qi-brain\`（数十秒属正常）  
-5. 关 × 后**托盘还在**；能连上大脑；设置 → 关于 能见版本  
-6. （可选）右键托盘「退出栖」后退壳；若壳自拉起的脑应被收掉  
+5. 关 × 后**托盘还在**；能连上大脑；设置 → 关于 能见版本（正式包应为 0.1.1+）  
+6. （可选）右键托盘「退出栖」  
 
-核对大脑是否落全（装完后）：
+核对大脑：
 
 ```powershell
 Get-Item "$env:LOCALAPPDATA\Qi\runtime\qi-brain\_internal\numpy\_core\_multiarray_umath*.pyd"
-# 安装目录应有单文件 zip，而不是整棵 _internal：
 Test-Path "<你的安装目录>\resources\qi-brain.zip"
 ```
 
-BGE：有则语义检索更像样；没有也能起，记忆检索偏 n-gram——**本刀不因此判失败**。
+核对 BGE（正式包应有）：
+
+```powershell
+Test-Path "<你的安装目录>\resources\bge-small-zh-v1.5\onnx\model.onnx"
+```
 
 ---
 
@@ -94,20 +98,17 @@ BGE：有则语义检索更像样；没有也能起，记忆检索偏 n-gram—�
 | 现象 | 处理 |
 |------|------|
 | `pack_windows` 报没有 qi-brain / zip | 先 `python tools/build_qi_brain.py`（仅缺 zip：`--zip-only`） |
+| `pack_windows` 因 BGE fetch 失败退出 | 设 `HF_ENDPOINT=https://hf-mirror.com` 重试；或显式 `--skip-bge`（正式发版勿用） |
 | `tauri build` 找不到 cargo | 装 [rustup](https://rustup.rs)，**新开**终端 |
 | WebView2 / 编译报错 | 装 MSVC 桌面开发工具、WebView2 Runtime |
-| 装上后形象全白 / 白模 | 旧包绝对路径 + WebView2 ImageBitmap 贴图问题；请装含本修复的包（`base: './'` + TextureLoader） |
-| 装上后 numpy / `_core` 找不到 | 旧包曾逐文件落半套；请卸干净后装**本版**（zip）；并删 `%LOCALAPPDATA%\Qi\runtime\qi-brain` 再开 |
-| 装上后无脑 | 看壳日志是否「发现大脑 zip / 解压」；或 `QI_BRAIN_EXE` |
-| 9527 已被占用 | 先退出旧大脑/旧壳再开安装版 |
-| 重装仍半套 | 先杀进程再装；本版 hooks 会 taskkill |
-| 退出栖闪黑控制台 / 等一会才退 | 退出路径曾**同步**跑裸 `taskkill`（又慢又闪窗）；现改为先 `kill` 主进程、taskkill 后台清树 + CREATE_NO_WINDOW（需重装含此修复的包才验） |
-| 卸载/安装闪黑控制台 | NSIS hooks 曾 `ExecWait taskkill`；已改 `ExecShellWait … SW_HIDE`（需重打包安装器才验） |
+| 装上后形象全白 / 白模 | 请装含 TextureLoader + `base: './'` 修复的包 |
+| 装上后 numpy / `_core` 找不到 | 卸干净；删 `%LOCALAPPDATA%\Qi\runtime\qi-brain` 再开（须 zip 布局包） |
+| 退出栖 / 卸载闪黑控制台 | 须含 CREATE_NO_WINDOW / NSIS `SW_HIDE` 的包 |
+| 9527 已被占用 | 先退出旧大脑/旧壳 |
 
 ---
 
-## 不做（本刀）
+## 不做
 
 - GitHub Actions CI  
-- 自动上传 Releases（关于页链接可先指着空页或日后有产物再传）  
 - macOS / Linux 安装包  
