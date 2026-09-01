@@ -54,7 +54,52 @@ async def enrich_look_glance(brain: Brain, result: dict, now: datetime) -> None:
 
     await _apply_look_impact(brain, result, impression, now)
     await _rewrite_look_qi_line(brain, result, impression, now)
+    if result.get("reactive"):
+        await _enqueue_look_loop(brain, impression)
+        await _notice_look_facts(brain, impression, now)
     result["_look_heart_done"] = True
+
+
+async def _load_look_loops(brain: Brain) -> list[dict]:
+    try:
+        if hasattr(brain, "_load_open_loops"):
+            loops = await brain._load_open_loops()
+            return list(loops) if loops else []
+    except Exception:
+        logger.debug("look 读 open_loops 失败", exc_info=True)
+    return []
+
+
+async def _enqueue_look_loop(brain: Brain, impression: str) -> None:
+    db = getattr(brain, "_db", None)
+    if db is None:
+        return
+    try:
+        from qi.memory.open_loops import OpenLoopQueue
+
+        q = OpenLoopQueue(db)
+        await q.load()
+        seed = (impression or "").strip()[:40]
+        await q.enqueue("look_glance", seed=seed)
+    except Exception:
+        logger.debug("look 写 open_loops 失败", exc_info=True)
+
+
+async def _notice_look_facts(
+    brain: Brain, impression: str, now: datetime
+) -> None:
+    memory = getattr(brain, "memory", None)
+    if memory is None or not hasattr(memory, "notice_facts"):
+        return
+    try:
+        await memory.notice_facts(
+            impression,
+            brain.emotion,
+            brain.relationship_stage,
+            now,
+        )
+    except Exception:
+        logger.debug("look notice_facts 失败", exc_info=True)
 
 
 async def _apply_look_impact(
@@ -108,10 +153,17 @@ async def _rewrite_look_qi_line(
         brain, query, recent_messages=[], top_k=3
     )
 
+    materials = [Material(tag="cue", text=impression)]
+    loops = await _load_look_loops(brain)
+    if loops:
+        concern = str(loops[0].get("concern") or "").strip()
+        if concern:
+            materials.append(Material(tag="loop", text=concern[:80]))
+
     card = IntentionCard(
         act="acknowledge",
         topic="瞥见屏幕",
-        materials=[Material(tag="cue", text=impression)],
+        materials=materials,
         stance="诚实的主观：有依据的印象或联想可以，虚构事实不行",
         must=list(_LOOK_MUST),
         length="short",

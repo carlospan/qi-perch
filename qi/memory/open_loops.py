@@ -19,6 +19,7 @@ _KIND_EVICT_PRIORITY = {
     "silence": 3,
     "emotion_surge": 2,
     "user_drift": 2,
+    "look_glance": 2,
     "season_change": 1,
     "waking": 0,
     "first_time": 0,
@@ -50,6 +51,9 @@ def build_concern(kind: str, seed: str = "") -> str:
     if kind == "user_drift":
         bit = seed or "有些不一样"
         return f"我注意到他最近不一样了：{bit}。不是不好——还没想完。"
+    if kind == "look_glance":
+        bit = seed or "那一眼"
+        return f"刚才瞥见：{bit}——还没想完。"
     return seed or "有一件事还没想完。"
 
 
