@@ -13,7 +13,7 @@
 
 开发期：`npm run tauri:dev` 会按优先级拉起大脑——① 9527 已在听则沿用；② 若已打过 bundled `qi-brain`（见下）则起它；③ 否则 `python -m qi`。设 `QI_SKIP_BRAIN=1` 可关掉自动拉起。
 
-**正式 sidecar（Windows）**：仓库根执行 `python tools/build_qi_brain.py`，产物进 `src-tauri/resources/qi-brain/`；再 `npm run tauri:dev` / `tauri:build`。安装布局下用户不必自装 Python。
+**正式 sidecar（Windows）**：仓库根 `python tools/build_qi_brain.py` → onedir（dev/smoke）+ `qi-brain.zip`（安装包）。`tauri:build` 只打 zip；壳首次解压到 `%LOCALAPPDATA%\Qi\runtime\qi-brain\`。安装布局下用户不必自装 Python。
 
 **BGE 离线**：`python tools/fetch_bge_resource.py` → `src-tauri/resources/bge-small-zh-v1.5/`（权重不入库）。运行时数据根有模优先，否则读该资源，皆无则 n-gram。
 

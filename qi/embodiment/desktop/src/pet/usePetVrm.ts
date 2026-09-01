@@ -3,9 +3,10 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM } from "@pixiv/three-vrm";
 import { loadMixamoAnimation } from "./loadMixamoAnimation";
 
-const MODEL_URL = "/avatars/qi-avatar.vrm";
-const IDLE_URL = "/animations/idle.fbx";
-const WALK_URL = "/animations/walk.fbx";
+/** 相对路径：Tauri 安装壳 frontendDist 下绝对 `/…` 偶发贴图协议不一致 */
+const MODEL_URL = "./avatars/qi-avatar.vrm";
+const IDLE_URL = "./animations/idle.fbx";
+const WALK_URL = "./animations/walk.fbx";
 /** 去掉头颈动画，避免 VRoid 脸被带出张嘴感 */
 const FACE_LOCK_BONES = ["head", "neck", "jaw"];
 const MOUTH_EXPR = ["aa", "ih", "ou", "ee", "oh"] as const;
@@ -359,7 +360,13 @@ export function createPetVrm(
     window.addEventListener("qi-layout-settled", onLayoutSettled);
 
     const loader = new GLTFLoader();
-    loader.register((parser) => new VRMLoaderPlugin(parser));
+    // 安装壳 WebView2：ImageBitmapLoader 易出空白贴图（白模）；强制 HTML Image 路径
+    loader.register((parser) => {
+      const textureLoader = new THREE.TextureLoader(parser.options.manager);
+      textureLoader.setCrossOrigin(parser.options.crossOrigin);
+      parser.textureLoader = textureLoader;
+      return new VRMLoaderPlugin(parser);
+    });
 
     const gltf = await loader.loadAsync(MODEL_URL);
     if (destroyed) return;
@@ -371,6 +378,21 @@ export function createPetVrm(
 
     loaded.scene.traverse((obj) => {
       obj.frustumCulled = false;
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const mat of mats) {
+        if (!mat) continue;
+        const anyMat = mat as THREE.MeshStandardMaterial & {
+          map?: THREE.Texture | null;
+          needsUpdate?: boolean;
+        };
+        if (anyMat.map) {
+          anyMat.map.colorSpace = THREE.SRGBColorSpace;
+          anyMat.map.needsUpdate = true;
+        }
+        anyMat.needsUpdate = true;
+      }
     });
 
     scene.add(loaded.scene);

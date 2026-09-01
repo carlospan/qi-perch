@@ -2,13 +2,16 @@
 //!
 //! 选脑优先级（P3 sidecar）：
 //! 1. 9527 已在听 → 沿用（borrowed，退出不杀）
-//! 2. 旁有 bundled `qi-brain` → 起它
+//! 2. 完整 onedir / 已解压 runtime / `qi-brain.zip` 解压 → 起它
 //! 3. 否则仓库根 `python -m qi`
 //! 4. 失败 → 日志提示（前端走既有连接失败可见路径）
 //!
 //! 退出策略（P2 托盘）：仅在壳 **自己拉起** 大脑时，于 `RunEvent::Exit`（「退出栖」）结束子进程；
 //! 沿用已在听的后端（borrowed）不杀。关主窗藏托盘不会走到 Exit。
+//!
+//! 安装包只带 `qi-brain.zip`（避免 NSIS 数千文件落半套）；解压到 `%LOCALAPPDATA%/Qi/runtime/qi-brain`。
 
+use std::fs;
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -21,6 +24,8 @@ use tauri::{AppHandle, Manager, RunEvent, State};
 const WS_PROBE: &str = "127.0.0.1:9527";
 /// 冷启动含向量库时可能较慢；超时后仍继续，前端会重连
 const WS_READY_TIMEOUT: Duration = Duration::from_secs(45);
+const STAMP_NAME: &str = ".qi-brain-stamp";
+const NUMPY_CORE_REL: &[&str] = &["_internal", "numpy", "_core"];
 
 pub struct BrainSidecar {
   child: Mutex<Option<Child>>,
@@ -187,7 +192,7 @@ fn wait_for_ws_or_exit(child: &mut Child, timeout: Duration) -> WaitOutcome {
 }
 
 fn spawn_brain(app: &AppHandle) -> Result<Child, String> {
-  if let Some(exe) = find_bundled_brain(app) {
+  if let Some(exe) = resolve_bundled_brain(app)? {
     return spawn_bundled(&exe);
   }
   spawn_repo_python()
@@ -199,8 +204,9 @@ fn spawn_bundled(exe: &Path) -> Result<Child, String> {
   cmd.current_dir(cwd)
     .env("PYTHONUNBUFFERED", "1")
     .stdin(Stdio::null())
-    .stdout(Stdio::inherit())
-    .stderr(Stdio::inherit());
+    .stdout(Stdio::null())
+    .stderr(Stdio::null());
+  apply_no_console(&mut cmd);
 
   eprintln!(
     "[qi] 启动 bundled 大脑：{}（cwd={}）",
@@ -227,8 +233,9 @@ fn spawn_repo_python() -> Result<Child, String> {
     .current_dir(&root)
     .env("PYTHONUNBUFFERED", "1")
     .stdin(Stdio::null())
-    .stdout(Stdio::inherit())
-    .stderr(Stdio::inherit());
+    .stdout(Stdio::null())
+    .stderr(Stdio::null());
+  apply_no_console(&mut cmd);
 
   eprintln!(
     "[qi] 启动大脑：{} {:?} -m qi（cwd={}）",
@@ -241,6 +248,17 @@ fn spawn_repo_python() -> Result<Child, String> {
     .map_err(|e| format!("{}：{e}", python.display()))
 }
 
+/// Windows：子进程不弹控制台黑窗（安装壳体验）。
+fn apply_no_console(cmd: &mut Command) {
+  #[cfg(windows)]
+  {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+  }
+  let _ = cmd;
+}
+
 fn brain_exe_name() -> &'static str {
   if cfg!(windows) {
     "qi-brain.exe"
@@ -249,45 +267,255 @@ fn brain_exe_name() -> &'static str {
   }
 }
 
-fn find_bundled_brain(app: &AppHandle) -> Option<PathBuf> {
+/// 解析可用的 bundled 大脑 exe；缺完整性则拒绝半套树。
+fn resolve_bundled_brain(app: &AppHandle) -> Result<Option<PathBuf>, String> {
   if let Ok(custom) = std::env::var("QI_BRAIN_EXE") {
     let p = PathBuf::from(&custom);
     if p.is_file() {
-      return Some(p);
+      let dir = p.parent().unwrap_or(Path::new("."));
+      if brain_tree_complete(dir) {
+        return Ok(Some(p));
+      }
+      return Err(format!(
+        "QI_BRAIN_EXE 指向的大脑不完整（缺 numpy._core 扩展）：{}",
+        dir.display()
+      ));
     }
     eprintln!("[qi] QI_BRAIN_EXE 不存在：{custom}");
   }
 
   let name = brain_exe_name();
-  let mut candidates: Vec<PathBuf> = Vec::new();
 
-  if let Ok(resource_dir) = app.path().resource_dir() {
-    candidates.push(resource_dir.join("qi-brain").join(name));
-    candidates.push(resource_dir.join(name));
-  }
-
-  if let Ok(exe) = std::env::current_exe() {
-    if let Some(dir) = exe.parent() {
-      candidates.push(dir.join("qi-brain").join(name));
-      candidates.push(dir.join("resources").join("qi-brain").join(name));
+  // 1) 现成完整 onedir（开发 resources / 旧安装布局）
+  for dir in candidate_brain_dirs(app) {
+    let exe = dir.join(name);
+    if exe.is_file() {
+      if brain_tree_complete(&dir) {
+        eprintln!("[qi] 发现完整 bundled 大脑：{}", exe.display());
+        return Ok(Some(exe));
+      }
+      eprintln!(
+        "[qi] 跳过不完整大脑树（缺 numpy 扩展）：{}",
+        dir.display()
+      );
     }
   }
 
+  // 2) zip → %LOCALAPPDATA%/Qi/runtime/qi-brain
+  let Some(zip_path) = find_brain_zip(app) else {
+    return Ok(None);
+  };
+  let dest = runtime_brain_dir()?;
+  ensure_extracted_brain(&zip_path, &dest)?;
+  let exe = dest.join(name);
+  if !exe.is_file() {
+    return Err(format!("解压后仍无 {}", exe.display()));
+  }
+  if !brain_tree_complete(&dest) {
+    return Err(format!(
+      "解压后大脑仍缺 numpy._core 扩展：{}",
+      dest.display()
+    ));
+  }
+  eprintln!("[qi] 使用解压后的大脑：{}", exe.display());
+  Ok(Some(exe))
+}
+
+fn candidate_brain_dirs(app: &AppHandle) -> Vec<PathBuf> {
+  let mut dirs = Vec::new();
+  if let Ok(resource_dir) = app.path().resource_dir() {
+    dirs.push(resource_dir.join("qi-brain"));
+    dirs.push(resource_dir);
+  }
+  if let Ok(exe) = std::env::current_exe() {
+    if let Some(dir) = exe.parent() {
+      dirs.push(dir.join("qi-brain"));
+      dirs.push(dir.join("resources").join("qi-brain"));
+    }
+  }
   // tauri:dev：资源尚未拷到 target 时，直接读 src-tauri/resources
+  dirs.push(
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("resources")
+      .join("qi-brain"),
+  );
+  // runtime 解压目录不走这里：须经 zip stamp 校验后再用
+  dirs
+}
+
+fn find_brain_zip(app: &AppHandle) -> Option<PathBuf> {
+  let mut candidates = Vec::new();
+  if let Ok(resource_dir) = app.path().resource_dir() {
+    candidates.push(resource_dir.join("qi-brain.zip"));
+  }
+  if let Ok(exe) = std::env::current_exe() {
+    if let Some(dir) = exe.parent() {
+      candidates.push(dir.join("resources").join("qi-brain.zip"));
+      candidates.push(dir.join("qi-brain.zip"));
+    }
+  }
   candidates.push(
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
       .join("resources")
-      .join("qi-brain")
-      .join(name),
+      .join("qi-brain.zip"),
   );
-
   for path in candidates {
     if path.is_file() {
-      eprintln!("[qi] 发现 bundled 大脑：{}", path.display());
+      eprintln!("[qi] 发现大脑 zip：{}", path.display());
       return Some(path);
     }
   }
   None
+}
+
+fn runtime_brain_dir() -> Result<PathBuf, String> {
+  let base = platform_qi_data_root()?;
+  Ok(base.join("runtime").join("qi-brain"))
+}
+
+fn platform_qi_data_root() -> Result<PathBuf, String> {
+  #[cfg(windows)]
+  {
+    let local = std::env::var("LOCALAPPDATA").map_err(|_| {
+      String::from("缺少 LOCALAPPDATA，无法解压 qi-brain")
+    })?;
+    return Ok(PathBuf::from(local).join("Qi"));
+  }
+  #[cfg(target_os = "macos")]
+  {
+    let home = dirs_home()?;
+    return Ok(home.join("Library").join("Application Support").join("Qi"));
+  }
+  #[cfg(all(unix, not(target_os = "macos")))]
+  {
+    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+      if !xdg.trim().is_empty() {
+        return Ok(PathBuf::from(xdg).join("Qi"));
+      }
+    }
+    let home = dirs_home()?;
+    return Ok(home.join(".local").join("share").join("Qi"));
+  }
+  #[cfg(not(any(windows, unix)))]
+  {
+    Err(String::from("当前平台不支持解压 bundled qi-brain"))
+  }
+}
+
+#[cfg(unix)]
+fn dirs_home() -> Result<PathBuf, String> {
+  std::env::var_os("HOME")
+    .map(PathBuf::from)
+    .ok_or_else(|| String::from("缺少 HOME"))
+}
+
+fn brain_tree_complete(dir: &Path) -> bool {
+  let exe = dir.join(brain_exe_name());
+  if !exe.is_file() {
+    return false;
+  }
+  let mut core = dir.to_path_buf();
+  for part in NUMPY_CORE_REL {
+    core.push(part);
+  }
+  if !core.is_dir() {
+    return false;
+  }
+  match fs::read_dir(&core) {
+    Ok(entries) => entries.filter_map(|e| e.ok()).any(|e| {
+      let name = e.file_name();
+      let s = name.to_string_lossy();
+      let s = s.as_ref();
+      s.starts_with("_multiarray_umath")
+        && (s.ends_with(".pyd") || s.ends_with(".so") || s.ends_with(".dylib"))
+    }),
+    Err(_) => false,
+  }
+}
+
+fn zip_stamp(zip_path: &Path) -> Result<String, String> {
+  let meta = fs::metadata(zip_path).map_err(|e| format!("读 zip 元数据失败：{e}"))?;
+  let modified = meta
+    .modified()
+    .ok()
+    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+    .map(|d| d.as_secs())
+    .unwrap_or(0);
+  Ok(format!("{}:{}", meta.len(), modified))
+}
+
+fn ensure_extracted_brain(zip_path: &Path, dest: &Path) -> Result<(), String> {
+  let stamp = zip_stamp(zip_path)?;
+  let stamp_file = dest.join(STAMP_NAME);
+  if brain_tree_complete(dest) {
+    if let Ok(existing) = fs::read_to_string(&stamp_file) {
+      if existing.trim() == stamp {
+        eprintln!("[qi] runtime 大脑已是最新：{}", dest.display());
+        return Ok(());
+      }
+    }
+  }
+
+  eprintln!(
+    "[qi] 解压大脑 zip → {} （首次或更新，可能需数十秒）…",
+    dest.display()
+  );
+  if dest.exists() {
+    fs::remove_dir_all(dest).map_err(|e| format!("清理旧 runtime 失败：{e}"))?;
+  }
+  fs::create_dir_all(dest).map_err(|e| format!("创建 runtime 目录失败：{e}"))?;
+  extract_zip(zip_path, dest)?;
+  if !brain_tree_complete(dest) {
+    let _ = fs::remove_dir_all(dest);
+    return Err(format!(
+      "解压结果不完整（缺 numpy._core._multiarray_umath*.pyd）：{}",
+      dest.display()
+    ));
+  }
+  fs::write(&stamp_file, format!("{stamp}\n")).map_err(|e| format!("写 stamp 失败：{e}"))?;
+  eprintln!("[qi] 大脑解压完成");
+  Ok(())
+}
+
+fn extract_zip(zip_path: &Path, dest: &Path) -> Result<(), String> {
+  // Windows：用系统 Expand-Archive，避免再引 zip crate（离线/代理环境友好）
+  #[cfg(windows)]
+  {
+    let mut cmd = Command::new("powershell.exe");
+    cmd.args([
+      "-NoProfile",
+      "-NonInteractive",
+      "-WindowStyle",
+      "Hidden",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      "Expand-Archive -LiteralPath $env:QI_BRAIN_ZIP -DestinationPath $env:QI_BRAIN_DEST -Force",
+    ])
+    .env("QI_BRAIN_ZIP", zip_path)
+    .env("QI_BRAIN_DEST", dest)
+    .stdin(Stdio::null())
+    .stdout(Stdio::null())
+    .stderr(Stdio::piped());
+    apply_no_console(&mut cmd);
+    let output = cmd
+      .output()
+      .map_err(|e| format!("启动 PowerShell 解压失败：{e}"))?;
+    if !output.status.success() {
+      let err = String::from_utf8_lossy(&output.stderr);
+      return Err(format!(
+        "Expand-Archive 失败：{} {}",
+        output.status,
+        err.trim()
+      ));
+    }
+    return Ok(());
+  }
+  #[cfg(not(windows))]
+  {
+    let _ = (zip_path, dest);
+    Err(String::from("非 Windows 暂不支持从 zip 解压 qi-brain"))
+  }
 }
 
 fn find_repo_root() -> Option<PathBuf> {
@@ -359,24 +587,30 @@ fn find_python(repo: &Path) -> Result<(PathBuf, Vec<String>), String> {
 }
 
 fn which_ok(name: &str) -> bool {
-  Command::new(name)
-    .arg("--version")
+  let mut cmd = Command::new(name);
+  cmd.arg("--version")
+    .stdin(Stdio::null())
     .stdout(Stdio::null())
-    .stderr(Stdio::null())
-    .status()
-    .map(|s| s.success())
-    .unwrap_or(false)
+    .stderr(Stdio::null());
+  apply_no_console(&mut cmd);
+  cmd.status().map(|s| s.success()).unwrap_or(false)
 }
 
 fn kill_child(child: &mut Child) {
   #[cfg(windows)]
   {
     let pid = child.id();
-    let _ = Command::new("taskkill")
-      .args(["/PID", &pid.to_string(), "/T", "/F"])
+    // 先立刻杀主进程，避免壳卡在 taskkill 上「等好一会儿才闪一下再退」
+    let _ = child.kill();
+    // 进程树清扫：后台跑、不阻塞 Exit；CREATE_NO_WINDOW 防黑控制台
+    let mut cmd = Command::new("taskkill");
+    cmd.args(["/PID", &pid.to_string(), "/T", "/F"])
+      .stdin(Stdio::null())
       .stdout(Stdio::null())
-      .stderr(Stdio::null())
-      .status();
+      .stderr(Stdio::null());
+    apply_no_console(&mut cmd);
+    let _ = cmd.spawn();
+    // 主进程已被 kill，wait 应很快返回；勿再同步等 taskkill
     let _ = child.wait();
     return;
   }

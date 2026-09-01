@@ -19,17 +19,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DESKTOP = ROOT / "qi" / "embodiment" / "desktop"
-BRAIN_EXE = (
-    DESKTOP / "src-tauri" / "resources" / "qi-brain" / "qi-brain.exe"
-)
+RESOURCES = DESKTOP / "src-tauri" / "resources"
+BRAIN_EXE = RESOURCES / "qi-brain" / "qi-brain.exe"
+BRAIN_ZIP = RESOURCES / "qi-brain.zip"
+NUMPY_CORE = RESOURCES / "qi-brain" / "_internal" / "numpy" / "_core"
 BGE_ONNX = (
-    DESKTOP
-    / "src-tauri"
-    / "resources"
+    RESOURCES
     / "bge-small-zh-v1.5"
     / "onnx"
     / "model.onnx"
 )
+
+
+def _npm_cmd() -> list[str]:
+    if sys.platform == "win32":
+        return ["npm.cmd"]
+    return ["npm"]
 
 
 def _run(cmd: list[str], *, cwd: Path | None = None) -> None:
@@ -63,18 +68,39 @@ def main() -> int:
     if args.build_brain or not BRAIN_EXE.is_file():
         if not BRAIN_EXE.is_file() and not args.build_brain:
             print(
-                f"缺少 {BRAIN_EXE}\n请先：python tools/build_qi_brain.py\n"
+                "缺少大脑 onedir\n请先：python tools/build_qi_brain.py\n"
                 "或加 --build-brain",
                 file=sys.stderr,
             )
             return 1
-        if args.build_brain or not BRAIN_EXE.is_file():
-            _run([sys.executable, str(ROOT / "tools" / "build_qi_brain.py")])
+        _run([sys.executable, str(ROOT / "tools" / "build_qi_brain.py")])
+    elif not BRAIN_ZIP.is_file():
+        _run(
+            [
+                sys.executable,
+                str(ROOT / "tools" / "build_qi_brain.py"),
+                "--zip-only",
+            ]
+        )
 
     if not BRAIN_EXE.is_file():
         print(f"打脑后仍缺少：{BRAIN_EXE}", file=sys.stderr)
         return 1
+    if not BRAIN_ZIP.is_file():
+        print(f"打脑后仍缺少安装用 zip：{BRAIN_ZIP}", file=sys.stderr)
+        return 1
+
+    pyds = list(NUMPY_CORE.glob("_multiarray_umath*.pyd")) if NUMPY_CORE.is_dir() else []
+    if not pyds:
+        print(
+            f"大脑 onedir 缺 numpy 扩展（{NUMPY_CORE}）。请重跑 build_qi_brain。",
+            file=sys.stderr,
+        )
+        return 1
+
     print(f"OK 大脑：{BRAIN_EXE}", flush=True)
+    print(f"OK 安装 zip：{BRAIN_ZIP}（{BRAIN_ZIP.stat().st_size / 1e6:.1f} MB）", flush=True)
+    print(f"OK numpy：{pyds[0].name}", flush=True)
 
     if args.with_bge:
         _run([sys.executable, str(ROOT / "tools" / "fetch_bge_resource.py")])
@@ -93,9 +119,9 @@ def main() -> int:
         return 0
 
     if not (DESKTOP / "node_modules").is_dir():
-        _run(["npm", "install"], cwd=DESKTOP)
+        _run([*_npm_cmd(), "install"], cwd=DESKTOP)
 
-    _run(["npm", "run", "tauri:build"], cwd=DESKTOP)
+    _run([*_npm_cmd(), "run", "tauri:build"], cwd=DESKTOP)
 
     bundle = DESKTOP / "src-tauri" / "target" / "release" / "bundle"
     print(f"\n打包结束。请到目录找安装包：\n  {bundle}", flush=True)

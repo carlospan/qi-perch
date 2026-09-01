@@ -12,6 +12,8 @@ const pkgVersion = JSON.parse(
 
 export default defineConfig({
   plugins: [vue()],
+  // Tauri 安装壳：相对 base，避免绝对 `/assets` `/avatars` 在自定义协议下贴图异常
+  base: "./",
   clearScreen: false,
   define: {
     "import.meta.env.VITE_QI_VERSION": JSON.stringify(pkgVersion),

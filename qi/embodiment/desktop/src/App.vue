@@ -764,7 +764,7 @@ h1 {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: center 42% / cover no-repeat url("/qi-presence-glow.png");
+  background: center 42% / cover no-repeat url("./qi-presence-glow.png");
   opacity: 0.58;
   transform: scale(1.03);
 }

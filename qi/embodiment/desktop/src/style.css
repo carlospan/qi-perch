@@ -138,7 +138,7 @@ html.qi-resizing .composer-dock {
 .desk-aside-bg {
   position: absolute;
   inset: 0;
-  background: center 38% / cover no-repeat url("/qi-presence-glow.png");
+  background: center 38% / cover no-repeat url("./qi-presence-glow.png");
   opacity: 0.5;
   transform: scale(1.06);
 }
