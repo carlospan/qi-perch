@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import errno
 import json
 import logging
 import time
@@ -12,6 +13,8 @@ logger = logging.getLogger("qi.embodiment")
 
 WS_HOST = "127.0.0.1"
 WS_PORT = 9527
+# Windows: WSAEADDRINUSE
+_WSAEADDRINUSE = 10048
 # 桌面 /history 默认窗口（旧→新中的最近 N 条）；避免库长大后全表推送
 HISTORY_WINDOW = 200
 # 上翻加载更早：每页条数
@@ -198,6 +201,33 @@ def resolve_bind(
     return h, p
 
 
+def port_in_use_message(port: int) -> str:
+    return (
+        f"通道端口 {port} 已被占用。"
+        "请先退出旧的栖（托盘→退出栖），再重开。"
+    )
+
+
+def is_address_in_use(exc: BaseException) -> bool:
+    """判断是否为本机端口占用（含 Windows WSAEADDRINUSE）。"""
+    if not isinstance(exc, OSError):
+        return False
+    if exc.errno in (errno.EADDRINUSE, _WSAEADDRINUSE):
+        return True
+    if getattr(exc, "winerror", None) == _WSAEADDRINUSE:
+        return True
+    return False
+
+
+class PortInUseError(OSError):
+    """具身通道端口已被占用（可见退出用）。"""
+
+    def __init__(self, host: str, port: int):
+        self.host = host
+        self.port = port
+        super().__init__(port_in_use_message(port))
+
+
 if TYPE_CHECKING:
     from qi.core.brain import Brain
 
@@ -258,12 +288,20 @@ class EmbodimentServer:
         import websockets
 
         self.running = True
-        self._server = await websockets.serve(
-            self._handler,
-            self.host,
-            self.port,
-            origins=list(WS_ALLOWED_ORIGINS),
-        )
+        try:
+            self._server = await websockets.serve(
+                self._handler,
+                self.host,
+                self.port,
+                origins=list(WS_ALLOWED_ORIGINS),
+            )
+        except OSError as e:
+            self.running = False
+            if is_address_in_use(e):
+                msg = port_in_use_message(self.port)
+                logger.error("%s", msg)
+                raise PortInUseError(self.host, self.port) from e
+            raise
         self._ping_task = asyncio.create_task(self._ping_loop())
         logger.info("具身通道已打开 ws://%s:%s", self.host, self.port)
         # stop() 关闭 server 后这里返回，避免永久 Future 只能靠 cancel 收尾

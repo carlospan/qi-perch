@@ -10,7 +10,7 @@ from rich.panel import Panel
 
 from qi.config import load_config
 from qi.core.brain import Brain
-from qi.embodiment.server import EmbodimentServer, resolve_bind
+from qi.embodiment.server import EmbodimentServer, PortInUseError, resolve_bind
 from qi.llm.gateway import LLMGateway
 from qi.storage.database import Database
 
@@ -54,6 +54,9 @@ async def run_desktop() -> None:
 
     try:
         await asyncio.gather(brain_task, server_task)
+    except PortInUseError as e:
+        console.print(f"\n[red]{e}[/red]\n")
+        raise
     except (asyncio.CancelledError, KeyboardInterrupt):
         pass
     finally:
@@ -83,6 +86,8 @@ def main_desktop() -> None:
     configure_app_logging()
     try:
         asyncio.run(run_desktop())
+    except PortInUseError:
+        raise SystemExit(1) from None
     except KeyboardInterrupt:
         pass
 

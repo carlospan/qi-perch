@@ -104,7 +104,7 @@ Test-Path "<你的安装目录>\resources\bge-small-zh-v1.5\onnx\model.onnx"
 | 装上后形象全白 / 白模 | 请装含 TextureLoader + `base: './'` 修复的包 |
 | 装上后 numpy / `_core` 找不到 | 卸干净；删 `%LOCALAPPDATA%\Qi\runtime\qi-brain` 再开（须 zip 布局包） |
 | 退出栖 / 卸载闪黑控制台 | 须含 CREATE_NO_WINDOW / NSIS `SW_HIDE` 的包 |
-| 9527 已被占用 | 先退出旧大脑/旧壳 |
+| 9527 已被占用 | 先托盘「退出栖」再开；新版大脑会白话提示并退出，不再只甩堆栈 |
 
 ---
 

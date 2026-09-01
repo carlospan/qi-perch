@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+import pytest
+
 from qi.core.emotion import EmotionState
 from qi.embodiment.avatar.controller import AvatarController
 from qi.embodiment.avatar.states import Effect, Expression, Posture
@@ -9,6 +11,10 @@ from qi.embodiment.server import (
     WS_ALLOWED_ORIGINS,
     WS_HOST,
     WS_PORT,
+    EmbodimentServer,
+    PortInUseError,
+    is_address_in_use,
+    port_in_use_message,
     resolve_bind,
 )
 from qi.embodiment.voice.tts import emotion_to_voice_params
@@ -23,6 +29,43 @@ def test_resolve_bind_defaults_and_loopback():
 def test_resolve_bind_rejects_non_loopback():
     assert resolve_bind("0.0.0.0", 9527) == (WS_HOST, WS_PORT)
     assert resolve_bind("192.168.1.10", 80) == (WS_HOST, 80)
+
+
+def test_port_in_use_message_mentions_tray():
+    msg = port_in_use_message(9527)
+    assert "9527" in msg
+    assert "托盘" in msg
+    assert "退出栖" in msg
+
+
+def test_is_address_in_use_errno_and_winerror():
+    import errno
+
+    assert is_address_in_use(OSError(errno.EADDRINUSE, "busy"))
+    assert is_address_in_use(OSError(10048, "busy"))
+    win = OSError("busy")
+    win.winerror = 10048
+    assert is_address_in_use(win)
+    assert not is_address_in_use(OSError(errno.ECONNREFUSED, "no"))
+    assert not is_address_in_use(ValueError("x"))
+
+
+@pytest.mark.asyncio
+async def test_start_raises_port_in_use(monkeypatch):
+    import errno
+
+    import websockets
+
+    async def boom(*_a, **_k):
+        raise OSError(errno.EADDRINUSE, "Address already in use")
+
+    monkeypatch.setattr(websockets, "serve", boom)
+
+    server = EmbodimentServer(brain=None, host="127.0.0.1", port=9527)  # type: ignore[arg-type]
+    with pytest.raises(PortInUseError) as ei:
+        await server.start()
+    assert "9527" in str(ei.value)
+    assert server.running is False
 
 
 def test_ws_allowed_origins_cover_dev_and_tauri():
