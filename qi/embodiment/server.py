@@ -550,7 +550,9 @@ class EmbodimentServer:
         if notice:
             await self.send_system_notice(notice)
         elif not response:
-            logger.debug("用户轮次无 speech 且无 system_notice")
+            from qi.embodiment.system_notice import fallback_notice_for_silent_turn
+
+            await self.send_system_notice(fallback_notice_for_silent_turn(self.brain))
 
     async def _interrupt_active_turn(self, action: str) -> None:
         """取消进行中轮次；广播 turn_interrupted + 短应。"""

@@ -49,3 +49,74 @@ async def test_turn_control_rephrase_cancels_and_acks():
     payload = interrupted[0].args[0]["payload"]
     assert payload["action"] == "rephrase"
     assert payload["prefill"] == "你好呀这是原句"
+
+
+@pytest.mark.asyncio
+async def test_silent_turn_sends_fallback_notice():
+    brain = MagicMock()
+    brain.in_stasis = False
+    brain.take_pending_system_notice = MagicMock(return_value=None)
+    brain.receive_user_message = AsyncMock(return_value="")
+    brain.llm = MagicMock()
+    brain.llm.last_outcome = MagicMock(failure="unreachable")
+
+    server = EmbodimentServer(brain)
+    server.broadcast = AsyncMock()
+    server.send_speech = AsyncMock()
+    server.send_typing = AsyncMock()
+    server.send_system_notice = AsyncMock()
+
+    await server._run_user_turn("你好")
+    server.send_system_notice.assert_awaited_once()
+    payload = server.send_system_notice.await_args.args[0]
+    assert payload["kind"] == "unreachable"
+
+
+@pytest.mark.asyncio
+async def test_silent_turn_fallback_empty_when_no_failure():
+    brain = MagicMock()
+    brain.in_stasis = False
+    brain.take_pending_system_notice = MagicMock(return_value=None)
+    brain.receive_user_message = AsyncMock(return_value="")
+    brain.llm = MagicMock()
+    brain.llm.last_outcome = MagicMock(failure=None)
+
+    server = EmbodimentServer(brain)
+    server.send_system_notice = AsyncMock()
+
+    await server._run_user_turn("你好")
+    payload = server.send_system_notice.await_args.args[0]
+    assert payload["kind"] == "empty"
+
+
+@pytest.mark.asyncio
+async def test_pending_notice_skips_fallback():
+    from qi.embodiment.system_notice import notice_payload
+
+    brain = MagicMock()
+    brain.in_stasis = False
+    brain.take_pending_system_notice = MagicMock(
+        return_value=notice_payload("missing_key")
+    )
+    brain.receive_user_message = AsyncMock(return_value="")
+
+    server = EmbodimentServer(brain)
+    server.send_system_notice = AsyncMock()
+
+    await server._run_user_turn("你好")
+    server.send_system_notice.assert_awaited_once()
+    assert server.send_system_notice.await_args.args[0]["kind"] == "missing_key"
+
+
+@pytest.mark.asyncio
+async def test_speech_response_skips_fallback():
+    brain = MagicMock()
+    brain.in_stasis = False
+    brain.take_pending_system_notice = MagicMock(return_value=None)
+    brain.receive_user_message = AsyncMock(return_value="嗯，在呢。")
+
+    server = EmbodimentServer(brain)
+    server.send_system_notice = AsyncMock()
+
+    await server._run_user_turn("你好")
+    server.send_system_notice.assert_not_awaited()

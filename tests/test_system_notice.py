@@ -31,6 +31,24 @@ def test_kind_from_llm_failure():
     assert kind_from_llm_failure("other") is None
 
 
+def test_fallback_notice_uses_last_outcome_or_empty():
+    from types import SimpleNamespace
+
+    from qi.embodiment.system_notice import fallback_notice_for_silent_turn
+
+    brain = SimpleNamespace(
+        llm=SimpleNamespace(last_outcome=SimpleNamespace(failure="unreachable"))
+    )
+    p = fallback_notice_for_silent_turn(brain)
+    assert p["kind"] == "unreachable"
+
+    brain2 = SimpleNamespace(llm=SimpleNamespace(last_outcome=SimpleNamespace(failure=None)))
+    assert fallback_notice_for_silent_turn(brain2)["kind"] == "empty"
+
+    brain3 = SimpleNamespace(llm=None)
+    assert fallback_notice_for_silent_turn(brain3)["kind"] == "empty"
+
+
 def test_provider_key_missing():
     p = OpenAICompatProvider("t", "http://x", "", {"fast": "m"})
     assert p.key_missing()

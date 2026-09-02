@@ -842,6 +842,8 @@ function createQi() {
       });
       qiWs.on("close", () => {
         connected.value = false;
+        setTyping(false);
+        clearAllAckTimers();
       });
       qiWs.on("typing", () => {
         setTyping(true);

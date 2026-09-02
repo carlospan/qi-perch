@@ -42,3 +42,17 @@ def kind_from_llm_failure(failure: str | None) -> SystemNoticeKind | None:
     if failure == "empty":
         return "empty"
     return None
+
+
+def fallback_notice_for_silent_turn(brain) -> dict:
+    """轮次无 speech、无挂起 notice 时的兜底系统态。
+
+    有 last_outcome.failure → 对应 kind；否则 empty。
+    """
+    fail = None
+    llm = getattr(brain, "llm", None)
+    last = getattr(llm, "last_outcome", None) if llm is not None else None
+    if last is not None:
+        fail = getattr(last, "failure", None)
+    kind = kind_from_llm_failure(fail) or "empty"
+    return notice_payload(kind)
