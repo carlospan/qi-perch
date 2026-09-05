@@ -223,9 +223,11 @@ export type ServerMessage =
   | { type: "pick_allowed_root_result"; payload: PickAllowedRootResultPayload }
   | { type: "allowed_roots_saved"; payload: AllowedRootsSavedPayload };
 
-/** 设置页 · LLM 钥匙快照（不回传完整 key） */
+/** 设置页 · LLM 钥匙快照（本机可回传完整 key，供展开查看） */
 export type SettingsLlmPayload = {
   has_key: boolean;
+  /** 本机完整钥匙；无钥匙时为空串 */
+  api_key?: string;
   api_key_masked: string;
   base_url: string;
   model: string;

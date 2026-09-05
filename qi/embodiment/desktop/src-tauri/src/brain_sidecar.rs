@@ -2,9 +2,11 @@
 //!
 //! 选脑优先级（P3 sidecar）：
 //! 1. 9527 已在听 → 沿用（borrowed，退出不杀）
-//! 2. 完整 onedir / 已解压 runtime / `qi-brain.zip` 解压 → 起它
-//! 3. 否则仓库根 `python -m qi`
-//! 4. 失败 → 日志提示（前端走既有连接失败可见路径）
+//! 2. **debug（`tauri:dev`）**：优先仓库根 `python -m qi`（数据根走仓库 `data/`）；
+//!    失败再回退 bundled。要强制测 bundled 时设 `QI_PREFER_BUNDLED=1`。
+//! 3. **release / 安装壳**：完整 onedir / 已解压 runtime / `qi-brain.zip` 解压 → 起它
+//! 4. 否则仓库根 `python -m qi`
+//! 5. 失败 → 日志提示（前端走既有连接失败可见路径）
 //!
 //! 退出策略（P2 托盘）：仅在壳 **自己拉起** 大脑时，于 `RunEvent::Exit`（「退出栖」）结束子进程；
 //! 沿用已在听的后端（borrowed）不杀。关主窗藏托盘不会走到 Exit。
@@ -192,10 +194,34 @@ fn wait_for_ws_or_exit(child: &mut Child, timeout: Duration) -> WaitOutcome {
 }
 
 fn spawn_brain(app: &AppHandle) -> Result<Child, String> {
+  // tauri:dev：优先仓库 Python，这样 resolve_data_root → PROJECT_ROOT/data，
+  // 避免误连安装包留下的 %LOCALAPPDATA%/Qi。
+  if prefer_repo_brain() {
+    match spawn_repo_python() {
+      Ok(child) => return Ok(child),
+      Err(err) => {
+        eprintln!("[qi] 开发优先仓库大脑失败，回退 bundled：{err}");
+      }
+    }
+  }
   if let Some(exe) = resolve_bundled_brain(app)? {
     return spawn_bundled(&exe);
   }
   spawn_repo_python()
+}
+
+fn prefer_repo_brain() -> bool {
+  if prefer_bundled_requested() {
+    return false;
+  }
+  cfg!(debug_assertions)
+}
+
+fn prefer_bundled_requested() -> bool {
+  matches!(
+    std::env::var("QI_PREFER_BUNDLED").ok().as_deref(),
+    Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
+  )
 }
 
 fn spawn_bundled(exe: &Path) -> Result<Child, String> {

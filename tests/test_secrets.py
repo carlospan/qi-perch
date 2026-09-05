@@ -74,6 +74,7 @@ def test_apply_secrets_and_snapshot(tmp_path, monkeypatch):
     assert os.environ[SECRET_API_KEY] == "sk-snap-key-99999999"
     snap = settings_llm_snapshot()
     assert snap["has_key"] is True
+    assert snap["api_key"] == "sk-snap-key-99999999"
     assert "9999" in snap["api_key_masked"] or "••••" in snap["api_key_masked"]
     assert snap["base_url"] == "https://snap.test/v1"
     assert snap["model"] == "snap-m"

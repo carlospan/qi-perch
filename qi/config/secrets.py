@@ -159,7 +159,11 @@ def mask_api_key(key: str) -> str:
 
 
 def settings_llm_snapshot() -> dict:
-    """给前端：不回传完整 key。"""
+    """给前端设置页。
+
+    完整 key 仅经本机 WS 回传（钥匙本就在本机文件里），供展开查看 / 复制；
+    仍附带 api_key_masked 兼容旧 UI。
+    """
     from qi.paths import resolve_data_root
 
     data = read_secrets_file()
@@ -175,6 +179,7 @@ def settings_llm_snapshot() -> dict:
     model = (data.get(SECRET_MODEL) or os.environ.get(SECRET_MODEL) or "").strip()
     return {
         "has_key": bool(key),
+        "api_key": key,
         "api_key_masked": mask_api_key(key) if key else "",
         "base_url": base,
         "model": model,

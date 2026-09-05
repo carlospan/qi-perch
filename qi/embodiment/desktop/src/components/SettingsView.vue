@@ -50,6 +50,8 @@ const apiKey = ref("");
 const baseUrl = ref("");
 const model = ref("");
 const keyDirty = ref(false);
+const keyVisible = ref(false);
+const keyCopiedHint = ref("");
 const localProbeHint = ref("");
 /** 删除两步确认：展开后需再点确认 */
 const wipeConfirmOpen = ref(false);
@@ -67,8 +69,12 @@ watch(
     if (!s) return;
     baseUrl.value = s.base_url || "";
     model.value = s.model || "";
-    if (!keyDirty.value) apiKey.value = "";
+    if (!keyDirty.value) {
+      apiKey.value = s.api_key || "";
+      keyVisible.value = false;
+    }
     keyDirty.value = false;
+    keyCopiedHint.value = "";
     localProbeHint.value = "";
     localRoots.value = [...(s.allowed_roots?.roots || [])];
   },
@@ -122,6 +128,20 @@ function onProbe() {
   }
   localProbeHint.value = "";
   emit("probe");
+}
+
+async function copyApiKey() {
+  const v = apiKey.value.trim();
+  if (!v) return;
+  try {
+    await navigator.clipboard.writeText(v);
+    keyCopiedHint.value = "已复制";
+    window.setTimeout(() => {
+      if (keyCopiedHint.value === "已复制") keyCopiedHint.value = "";
+    }, 1600);
+  } catch {
+    keyCopiedHint.value = "复制失败，请手动选中";
+  }
 }
 
 function onExport() {
@@ -190,17 +210,40 @@ function onDevPasteAdd() {
       <div class="desk-scroll form-wrap">
         <label class="field">
           <span class="label">API 密钥</span>
-          <input
-            v-model="apiKey"
-            type="password"
-            autocomplete="off"
-            :placeholder="
-              snapshot?.has_key
-                ? `已保存 ${snapshot.api_key_masked}（不改请勿填写；清空并保存可清除）`
-                : '粘贴你的 API key'
-            "
-            @input="keyDirty = true"
-          />
+          <div class="key-row">
+            <input
+              v-model="apiKey"
+              class="key-input"
+              :type="keyVisible ? 'text' : 'password'"
+              autocomplete="off"
+              :placeholder="snapshot?.has_key ? '' : '粘贴你的 API key'"
+              @input="keyDirty = true"
+            />
+            <button
+              type="button"
+              class="key-btn"
+              :disabled="!apiKey"
+              :title="keyVisible ? '隐藏' : '显示'"
+              :aria-label="keyVisible ? '隐藏密钥' : '显示密钥'"
+              @click="keyVisible = !keyVisible"
+            >
+              {{ keyVisible ? "隐藏" : "显示" }}
+            </button>
+            <button
+              type="button"
+              class="key-btn"
+              :disabled="!apiKey.trim()"
+              title="复制"
+              aria-label="复制密钥"
+              @click="copyApiKey"
+            >
+              复制
+            </button>
+          </div>
+          <p class="life-note">
+            钥匙只在本机。可点「显示」查看全文；清空并保存可清除。展开后请勿随意外传截图。
+          </p>
+          <p v-if="keyCopiedHint" class="hint ok">{{ keyCopiedHint }}</p>
         </label>
 
         <label class="field">
@@ -493,6 +536,44 @@ input {
 input::placeholder {
   color: var(--ink-faint);
   opacity: 0.85;
+}
+
+.key-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.key-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+}
+
+.key-btn {
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: transparent;
+  color: var(--ink-dim);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding: 0 0.65rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.key-btn:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ember) 40%, transparent);
+}
+
+.key-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .actions {

@@ -11,7 +11,7 @@
 | 内在 | 梦 / 独白等日记（`/journal`） |
 | 状态 | 六维心境（自然语言 + 数值） |
 
-开发期：`npm run tauri:dev` 会按优先级拉起大脑——① 9527 已在听则沿用；② 若已打过 bundled `qi-brain`（见下）则起它；③ 否则 `python -m qi`。设 `QI_SKIP_BRAIN=1` 可关掉自动拉起。
+开发期：`npm run tauri:dev` 会按优先级拉起大脑——① 9527 已在听则沿用；② **优先**仓库 `python -m qi`（数据根为仓库 `data/`）；③ 失败再起 bundled `qi-brain`；④ 都没有则报错可见。设 `QI_SKIP_BRAIN=1` 可关掉自动拉起；要强制测安装布局大脑时设 `QI_PREFER_BUNDLED=1`。
 
 **正式 sidecar（Windows）**：仓库根 `python tools/build_qi_brain.py` → onedir（dev/smoke）+ `qi-brain.zip`（安装包）。`tauri:build` 只打 zip；壳首次解压到 `%LOCALAPPDATA%\Qi\runtime\qi-brain\`。安装布局下用户不必自装 Python。
 

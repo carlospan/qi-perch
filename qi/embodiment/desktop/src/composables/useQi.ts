@@ -860,20 +860,25 @@ function createQi() {
       qiWs.on("settings_llm", (payload: SettingsLlmPayload) => {
         settingsLlm.value = {
           has_key: Boolean(payload?.has_key),
+          api_key: String(payload?.api_key || ""),
           api_key_masked: String(payload?.api_key_masked || ""),
           base_url: String(payload?.base_url || ""),
           model: String(payload?.model || ""),
           data_dir: String(payload?.data_dir || ""),
+          allowed_roots: payload?.allowed_roots,
         };
       });
       qiWs.on("settings_llm_saved", (payload: SettingsLlmSavedPayload) => {
         settingsSaving.value = false;
         settingsLlm.value = {
           has_key: Boolean(payload?.has_key),
+          api_key: String(payload?.api_key || ""),
           api_key_masked: String(payload?.api_key_masked || ""),
           base_url: String(payload?.base_url || ""),
           model: String(payload?.model || ""),
           data_dir: String(payload?.data_dir || settingsLlm.value?.data_dir || ""),
+          allowed_roots:
+            payload?.allowed_roots || settingsLlm.value?.allowed_roots,
         };
         if (payload?.ok) {
           settingsSaveOk.value = true;
