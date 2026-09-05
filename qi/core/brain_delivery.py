@@ -49,13 +49,14 @@ async def sync_avatar(
         )
 
 
-async def emit_speech(brain: Brain, text: str) -> None:
+async def emit_speech(brain: Brain, text: str, *, proactive: bool = False) -> None:
     if brain.embodiment is None:
         return
     await brain.embodiment.send_speech(
         text,
         brain.emotion.description(),
         tone=brain.emotion.mode.value,
+        proactive=proactive,
     )
     if brain.tts is None:
         return
@@ -72,7 +73,7 @@ async def emit_speech(brain: Brain, text: str) -> None:
 
 async def push_proactive_text(brain: Brain, text: str) -> None:
     await brain.proactive_queue.put(text)
-    await brain._emit_speech(text)
+    await brain._emit_speech(text, proactive=True)
 
 
 async def deliver_qi_message(
@@ -116,6 +117,7 @@ async def deliver_qi_message(
             "qi",
             response,
             emotion_context=brain.emotion.model_dump_json(),
+            proactive=proactive,
         )
     if streamed:
         logger.debug("流式对话已 finish + 落记忆 len=%s", len(response or ""))

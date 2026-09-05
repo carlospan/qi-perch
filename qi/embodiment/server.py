@@ -612,6 +612,7 @@ class EmbodimentServer:
                     "text": text,
                     "at": at_ms,
                     "tone": r.get("tone") or "",
+                    "proactive": bool(r.get("proactive")),
                 }
             )
         return messages
@@ -1155,10 +1156,22 @@ class EmbodimentServer:
             return_exceptions=True,
         )
 
-    async def send_speech(self, text: str, emotion: str, tone: str = "") -> None:
-        await self.broadcast(
-            {"type": "speech", "payload": {"text": text, "emotion": emotion, "tone": tone}}
-        )
+    async def send_speech(
+        self,
+        text: str,
+        emotion: str,
+        tone: str = "",
+        *,
+        proactive: bool = False,
+    ) -> None:
+        payload: dict[str, Any] = {
+            "text": text,
+            "emotion": emotion,
+            "tone": tone,
+        }
+        if proactive:
+            payload["proactive"] = True
+        await self.broadcast({"type": "speech", "payload": payload})
 
     async def notify_journal_entry(self, entry: dict) -> None:
         """实时推送单条内在日记（独白/梦/第一次）到前端。"""

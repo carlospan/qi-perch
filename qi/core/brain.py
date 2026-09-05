@@ -379,8 +379,8 @@ class Brain:
     async def _sync_avatar(self, now: datetime | None = None, force: bool = False) -> None:
         await _brain_delivery.sync_avatar(self, now, force)
 
-    async def _emit_speech(self, text: str) -> None:
-        await _brain_delivery.emit_speech(self, text)
+    async def _emit_speech(self, text: str, *, proactive: bool = False) -> None:
+        await _brain_delivery.emit_speech(self, text, proactive=proactive)
 
     @property
     def relationship_stage(self) -> str:

@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS messages (
     role TEXT NOT NULL,
     content TEXT NOT NULL,
     emotion_context TEXT,
-    tone TEXT
+    tone TEXT,
+    proactive INTEGER NOT NULL DEFAULT 0
 )
 """
 
@@ -312,6 +313,7 @@ class Database:
         await self._migrate_broadcast_traces_gws()
         await self._migrate_narrative_archived()
         await self._migrate_actions_detail_json()
+        await self._migrate_messages_proactive()
         for ddl in _CREATE_INDEXES:
             await self._execute(self._conn,ddl)
         await self._execute(self._conn,
@@ -370,6 +372,17 @@ class Database:
             cols = {str(row[1]) for row in await cursor.fetchall()}
         if "detail_json" not in cols:
             await self._execute(conn,"ALTER TABLE actions ADD COLUMN detail_json TEXT")
+
+    async def _migrate_messages_proactive(self) -> None:
+        """P0 信笺：旧库补 proactive（主动开口标记；默认 0 不回填）。"""
+        conn = self._require_conn()
+        async with conn.execute("PRAGMA table_info(messages)") as cursor:
+            cols = {str(row[1]) for row in await cursor.fetchall()}
+        if "proactive" not in cols:
+            await self._execute(
+                conn,
+                "ALTER TABLE messages ADD COLUMN proactive INTEGER NOT NULL DEFAULT 0",
+            )
 
     def _require_conn(self) -> aiosqlite.Connection:
         if self._conn is None:
@@ -456,12 +469,15 @@ class Database:
         content: str,
         emotion_context: str | None = None,
         tone: str | None = None,
+        *,
+        proactive: bool = False,
     ) -> None:
         conn = self._require_conn()
         await self._execute(conn,
             """
-            INSERT INTO messages (timestamp, role, content, emotion_context, tone)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO messages
+                (timestamp, role, content, emotion_context, tone, proactive)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 datetime.now().isoformat(timespec="seconds"),
@@ -469,6 +485,7 @@ class Database:
                 content,
                 emotion_context,
                 tone,
+                1 if proactive else 0,
             ),
         )
         await self._commit(conn)
@@ -493,14 +510,14 @@ class Database:
         conn = self._require_conn()
         if limit is None:
             sql = """
-                SELECT id, role, content, timestamp, tone
+                SELECT id, role, content, timestamp, tone, proactive
                 FROM messages
                 ORDER BY timestamp ASC, id ASC
             """
             params: tuple = ()
         else:
             sql = """
-                SELECT id, role, content, timestamp, tone
+                SELECT id, role, content, timestamp, tone, proactive
                 FROM messages
                 ORDER BY timestamp DESC, id DESC
                 LIMIT ?
@@ -520,6 +537,7 @@ class Database:
                 "content": row["content"],
                 "timestamp": row["timestamp"],
                 "tone": row["tone"],
+                "proactive": bool(row["proactive"]),
             }
             for row in rows
         ]
@@ -543,7 +561,7 @@ class Database:
             return []
         async with conn.execute(
             """
-            SELECT id, role, content, timestamp, tone
+            SELECT id, role, content, timestamp, tone, proactive
             FROM messages
             WHERE timestamp < ?
                OR (timestamp = ? AND id < ?)
@@ -561,6 +579,7 @@ class Database:
                 "content": row["content"],
                 "timestamp": row["timestamp"],
                 "tone": row["tone"],
+                "proactive": bool(row["proactive"]),
             }
             for row in rows
         ]

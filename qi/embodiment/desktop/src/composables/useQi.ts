@@ -459,7 +459,12 @@ function createQi() {
     replyEpoch.value += 1;
   }
 
-  function appendTalk(role: "qi" | "me", text: string, tone?: string) {
+  function appendTalk(
+    role: "qi" | "me",
+    text: string,
+    tone?: string,
+    proactive?: boolean
+  ) {
     const t = text.trim();
     if (!t) return;
     const last = talk.value[talk.value.length - 1];
@@ -477,6 +482,7 @@ function createQi() {
       text: t,
       at: Date.now(),
       tone,
+      proactive: role === "qi" ? Boolean(proactive) : undefined,
     });
   }
 
@@ -571,6 +577,7 @@ function createQi() {
         text: m.text.trim(),
         at: typeof m.at === "number" ? m.at : Date.now(),
         tone: m.tone,
+        proactive: Boolean(m.proactive),
       }));
 
     historyLoaded.value = true;
@@ -603,6 +610,7 @@ function createQi() {
         text: m.text.trim(),
         at: typeof m.at === "number" ? m.at : Date.now(),
         tone: m.tone,
+        proactive: Boolean(m.proactive),
       }));
     if (!incoming.length) {
       if (!hasMore) historyExhausted.value = true;
@@ -1010,14 +1018,20 @@ function createQi() {
         applySpeechRetract(payload);
       });
       qiWs.on("speech", (payload: SpeechPayload) => {
-        noteReplyStart();
+        const isProactive = Boolean(payload?.proactive);
+        if (isProactive) {
+          // 每条主动开口都 notice；不走 turn 门闩（久未聊可连发）
+          replyEpoch.value += 1;
+        } else {
+          noteReplyStart();
+        }
         setTyping(false);
         // 非流式整段到达时，清掉可能残留的流式半截
         if (activeStreamTalkId) {
           retractActiveStreamBubble();
         }
         speech.value = payload.text;
-        appendTalk("qi", payload.text, payload.tone);
+        appendTalk("qi", payload.text, payload.tone, isProactive);
       });
       qiWs.on(
         "state",

@@ -21,6 +21,8 @@ export type SpeechPayload = {
   text: string;
   emotion: string;
   tone: string;
+  /** 主动开口：谈区信笺条（非普通回复气泡） */
+  proactive?: boolean;
 };
 
 /** share 递出的创作卡片（对齐 qi/action/share.py） */
@@ -312,6 +314,8 @@ export type TalkMessage = {
   text: string;
   at: number;
   tone?: string;
+  /** 主动开口信笺；无标记旧句按普通气泡 */
+  proactive?: boolean;
 };
 
 /** 「内在」日记条目（连上后经 /journal 从后端拉） */

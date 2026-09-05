@@ -174,8 +174,17 @@ watch(
             />
             <div class="when">{{ timeLabel(m.at) }}</div>
           </div>
-          <div v-else class="msg" :class="m.role">
-            <div class="who">{{ m.role === "qi" ? "栖" : "你" }}</div>
+          <div
+            v-else
+            class="msg"
+            :class="[m.role, { letter: m.role === 'qi' && m.proactive }]"
+          >
+            <div class="who">
+              {{ m.role === "qi" ? "栖" : "你" }}
+              <span v-if="m.role === 'qi' && m.proactive" class="letter-tag"
+                >她来过</span
+              >
+            </div>
             <div class="txt">{{ m.text }}</div>
             <div class="when">{{ timeLabel(m.at) }}</div>
           </div>
@@ -365,6 +374,38 @@ watch(
 
 .msg.qi.card {
   max-width: 88%;
+}
+
+/* 主动开口信笺：仍在谈区，样式异于回复气泡 */
+.msg.qi.letter {
+  max-width: min(82%, 560px);
+}
+
+.msg.qi.letter .who {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.msg.qi.letter .letter-tag {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: color-mix(in srgb, var(--ember) 70%, var(--ink-dim));
+}
+
+.msg.qi.letter .txt {
+  background: color-mix(in srgb, var(--panel-veil) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ember) 22%, var(--ink) 10%);
+  border-left: 2px solid color-mix(in srgb, var(--ember) 55%, transparent);
+  border-radius: 2px 10px 10px 10px;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+}
+
+.panel.desktop .msg.qi.letter .txt {
+  background: color-mix(in srgb, var(--panel-veil) 62%, transparent);
+  border-color: color-mix(in srgb, var(--ember) 20%, var(--ink) 8%);
+  border-left-color: color-mix(in srgb, var(--ember) 50%, transparent);
 }
 
 .msg.me {
