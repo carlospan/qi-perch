@@ -40,14 +40,14 @@ import type {
 import { offlineKindFromFlags } from "../connectionStatus";
 import { qiWs } from "../ws";
 
-/** 与 HITL：busy 约 60s 强制解锁 */
+/** 与 HITL：约 60s 解开输入强调；等待点可继续亮（A：解耦） */
 const TYPING_TIMEOUT_MS = 60_000;
 /** 发送回执：约 3s 无 ACK → 可能没送到 */
 const ACK_TIMEOUT_MS = 3_000;
 
 const TIMEOUT_NOTICE: SystemNoticePayload = {
   kind: "timeout",
-  message: "等太久了，先解开输入。若稍后她仍回了，气泡仍会显示。",
+  message: "等太久了，先解开输入。她可能还在想；若稍后仍回了，气泡会显示。",
   action: null,
 };
 
@@ -139,7 +139,16 @@ function createQi() {
   const connected = ref(false);
   /** 本会话是否曾成功接上通道（用于区分「从未接上」与「断线重连」） */
   const everConnected = ref(false);
+  /** 等待回复中：等待点 / 叫住她；不因 60s 超时灭灯 */
   const typing = ref(false);
+  /**
+   * 60s 已解开输入强调（composer 不再 busy），但 typing 可仍为 true。
+   * 整轮结束（speech / notice / 打断 / 断线）时清零。
+   */
+  const composerUnlockedEarly = ref(false);
+  const composerBusy = computed(
+    () => typing.value && !composerUnlockedEarly.value
+  );
   const speech = ref("");
   const speaking = ref(false);
   const replyEpoch = ref(0);
@@ -365,10 +374,12 @@ function createQi() {
 
   function armTypingTimeout() {
     clearTypingTimer();
+    if (composerUnlockedEarly.value) return;
     typingTimer = window.setTimeout(() => {
       typingTimer = null;
       if (!typing.value) return;
-      typing.value = false;
+      // 只解输入强调，保留等待点（慢模型空窗仍有反馈）
+      composerUnlockedEarly.value = true;
       systemNotice.value = TIMEOUT_NOTICE;
     }, TYPING_TIMEOUT_MS);
   }
@@ -405,8 +416,12 @@ function createQi() {
 
   function setTyping(on: boolean) {
     typing.value = on;
-    if (on) armTypingTimeout();
-    else clearTypingTimer();
+    if (on) {
+      armTypingTimeout();
+    } else {
+      composerUnlockedEarly.value = false;
+      clearTypingTimer();
+    }
   }
 
   function applySystemNotice(payload: SystemNoticePayload) {
@@ -529,6 +544,8 @@ function createQi() {
     activeStreamTalkId = null;
     speech.value = "";
     speaking.value = false;
+    // 收回后常走非流式重试：重新点亮等待，避免空窗（C）
+    setTyping(true);
   }
 
   function retractActiveStreamBubble() {
@@ -1134,7 +1151,9 @@ function createQi() {
 
   /** 形象旁真状态短旁白（非 speech） */
   const presenceStatus = computed(() => {
-    if (typing.value) return "正在回你";
+    if (typing.value) {
+      return composerUnlockedEarly.value ? "还在想" : "正在回你";
+    }
     if (avatar.value.posture === "thinking") return "在想";
     if (inStasis.value || mode.value === "stasis") return "睡着了";
     if (mode.value === "dreaming") return "在做梦";
@@ -1147,6 +1166,7 @@ function createQi() {
     connected,
     offlineKind,
     typing,
+    composerBusy,
     speech,
     speaking,
     replyEpoch,

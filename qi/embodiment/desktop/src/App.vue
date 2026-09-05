@@ -19,6 +19,7 @@ const {
   connected,
   offlineKind,
   typing,
+  composerBusy,
   season,
   mode,
   emotion,
@@ -270,7 +271,7 @@ onUnmounted(() => disconnect());
                     </div>
                     <InputBox
                       :disabled="!connected"
-                      :busy="typing"
+                      :busy="composerBusy"
                       :prefill="composerPrefill"
                       @update:prefill="composerPrefill = $event"
                       @send="send"
@@ -317,7 +318,7 @@ onUnmounted(() => disconnect());
               <InputBox
                 v-else
                 :disabled="!connected"
-                :busy="typing"
+                :busy="composerBusy"
                 :prefill="composerPrefill"
                 @update:prefill="composerPrefill = $event"
                 @send="send"
