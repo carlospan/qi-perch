@@ -593,7 +593,7 @@ pip install -e ".[dev]"
 
 # 密钥
 copy .env.example .env
-# 编辑 .env：ZHIPU_API_KEY=...（备用可填 ARK_API_KEY / MODELSCOPE_API_KEY / …）
+# 编辑 .env：ARK_API_KEY=...（备用可填 MODELSCOPE_API_KEY / …）
 
 # 配置（推荐放 data/，与记忆数据一起，不入库）
 copy qi\config\settings.example.yaml data\settings.yaml

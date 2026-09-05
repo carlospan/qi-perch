@@ -86,9 +86,9 @@ def test_apply_user_llm_overrides(monkeypatch):
     monkeypatch.setenv(SECRET_MODEL, "override-model")
     cfg = {
         "llm": {
-            "default_provider": "zhipu",
+            "default_provider": "ark",
             "custom_providers": {
-                "zhipu": {
+                "ark": {
                     "base_url": "https://old",
                     "api_key": "",
                     "models": {"fast": "old-fast", "strong": "old-strong"},
@@ -97,7 +97,7 @@ def test_apply_user_llm_overrides(monkeypatch):
         }
     }
     out = apply_user_llm_overrides(cfg)
-    z = out["llm"]["custom_providers"]["zhipu"]
+    z = out["llm"]["custom_providers"]["ark"]
     assert z["api_key"] == "sk-override-aaaaaaaa"
     assert z["base_url"] == "https://override/v1"
     assert z["models"]["fast"] == "override-model"

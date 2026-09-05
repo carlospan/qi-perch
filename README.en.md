@@ -85,7 +85,7 @@ What “moving toward life” means is written as things you can observe, not sl
 pip install -e ".[dev]"
 
 cp .env.example .env          # Windows: copy .env.example .env
-# Set ZHIPU_API_KEY=... (default provider in settings.example.yaml)
+# Set ARK_API_KEY=... (default provider in settings.example.yaml)
 
 mkdir -p data                 # Windows: mkdir data
 cp qi/config/settings.example.yaml data/settings.yaml

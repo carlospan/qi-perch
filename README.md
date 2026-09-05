@@ -82,7 +82,7 @@
 pip install -e ".[dev]"
 
 cp .env.example .env          # Windows: copy .env.example .env
-# 填写 ZHIPU_API_KEY=...（settings.example.yaml 默认提供商）
+# 填写 ARK_API_KEY=...（settings.example.yaml 默认提供商）
 
 mkdir -p data                 # Windows: mkdir data
 cp qi/config/settings.example.yaml data/settings.yaml
@@ -140,7 +140,7 @@ Brain 心跳（qi/core/brain.py）
 
 - **v0.1** — 个人 / 研究向
 - 工程阶段零～四已作为施工里程碑收官；C1–C5 意义上的充分内生仍是更长的旅程
-- 默认 LLM 示例：智谱 `glm-5.3-flash`（可配置任意 OpenAI 兼容提供商）
+- 默认 LLM 示例：火山方舟 `doubao-seed-evolving`（可配置任意 OpenAI 兼容提供商）
 
 ---
 

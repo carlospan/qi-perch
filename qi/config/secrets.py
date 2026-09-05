@@ -9,9 +9,9 @@ from pathlib import Path
 from qi import PROJECT_ROOT
 from qi.paths import under_data
 
-# 与 settings.yaml 里 ${ZHIPU_API_KEY} 兼容；同时认 QI_API_KEY
+# 与 settings.yaml 里 ${ARK_API_KEY} 兼容；同时认 QI_API_KEY
 SECRET_API_KEY = "QI_API_KEY"
-SECRET_API_KEY_ALIAS = "ZHIPU_API_KEY"
+SECRET_API_KEY_ALIAS = "ARK_API_KEY"
 SECRET_BASE_URL = "QI_BASE_URL"
 SECRET_MODEL = "QI_MODEL"
 
@@ -61,9 +61,11 @@ def write_secrets_file(
         if key:
             cur[SECRET_API_KEY] = key
             cur[SECRET_API_KEY_ALIAS] = key
+            cur.pop("ZHIPU_API_KEY", None)
         else:
             cur.pop(SECRET_API_KEY, None)
             cur.pop(SECRET_API_KEY_ALIAS, None)
+            cur.pop("ZHIPU_API_KEY", None)
 
     if base_url is not None:
         b = base_url.strip()
@@ -119,6 +121,8 @@ def apply_secrets_to_environ(secrets: dict[str, str] | None = None) -> None:
     if not (data.get(SECRET_API_KEY) or data.get(SECRET_API_KEY_ALIAS)):
         os.environ.pop(SECRET_API_KEY, None)
         os.environ.pop(SECRET_API_KEY_ALIAS, None)
+        # 旧别名，避免设置页清空后仍被 .env 里残留智谱钥匙劫持
+        os.environ.pop("ZHIPU_API_KEY", None)
         _refill_api_keys_from_dotenv()
 
 
@@ -181,7 +185,7 @@ def settings_llm_snapshot() -> dict:
 def apply_user_llm_overrides(config: dict) -> dict:
     """用 QI_BASE_URL / QI_MODEL / 密钥覆盖默认 provider。"""
     llm = config.setdefault("llm", {})
-    name = str(llm.get("default_provider") or "zhipu")
+    name = str(llm.get("default_provider") or "ark")
     bag = llm.get("custom_providers") or llm.get("providers") or {}
     if not isinstance(bag, dict):
         return config
