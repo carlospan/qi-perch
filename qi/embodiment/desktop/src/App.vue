@@ -30,6 +30,8 @@ const {
   reviewMemories,
   avatar,
   replyEpoch,
+  mouthPulse,
+  mouthClearTick,
   talkByDay,
   creationCards,
   exploreCards,
@@ -217,6 +219,8 @@ onUnmounted(() => disconnect());
                   :expression="avatar.expression"
                   :typing="typing"
                   :speech-tick="replyEpoch"
+                  :mouth-pulse="mouthPulse"
+                  :mouth-clear-tick="mouthClearTick"
                 />
                 <div
                   v-if="presenceStatus || activityGlanceLine || timeTraceLine"

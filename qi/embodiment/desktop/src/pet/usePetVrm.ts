@@ -2,6 +2,11 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM } from "@pixiv/three-vrm";
 import { loadMixamoAnimation } from "./loadMixamoAnimation";
+import {
+  createSpeakClock,
+  MOUTH_SHAPES,
+  type SpeakPulseOpts,
+} from "./speakClock";
 
 /** 相对路径：Tauri 安装壳 frontendDist 下绝对 `/…` 偶发贴图协议不一致 */
 const MODEL_URL = "./avatars/qi-avatar.vrm";
@@ -9,7 +14,6 @@ const IDLE_URL = "./animations/idle.fbx";
 const WALK_URL = "./animations/walk.fbx";
 /** 去掉头颈动画，避免 VRoid 脸被带出张嘴感 */
 const FACE_LOCK_BONES = ["head", "neck", "jaw"];
-const MOUTH_EXPR = ["aa", "ih", "ou", "ee", "oh"] as const;
 
 export type PetLocomotion = "idle" | "walk";
 /** 1 = 向屏幕右走，-1 = 向左 */
@@ -75,6 +79,13 @@ export type PetVrmHandle = {
   notice: (durationMs?: number) => void;
   /** 情绪脸：后端 avatar_state.expression → VRM preset+custom */
   setExpression: (expression: string) => void;
+  /**
+   * 输出时钟脉冲（今日=文字 delta；日后=TTS 分片接同一入口）。
+   * @see ./speakClock.ts
+   */
+  pulseSpeak: (opts?: SpeakPulseOpts) => void;
+  /** 打断/收回：立刻闭嘴 */
+  clearSpeak: () => void;
 };
 
 /**
@@ -100,6 +111,9 @@ export function createPetVrm(
   let faceExpr: PetFaceExpression = "neutral";
   /** 当前已应用到模型的权重，向目标缓动 */
   const faceWeights: Record<string, number> = {};
+  const speakClock = createSpeakClock();
+  /** idle 视线漂移相位（秒） */
+  let driftPhase = 0;
 
   const clock = new THREE.Clock();
   const scene = new THREE.Scene();
@@ -109,6 +123,8 @@ export function createPetVrm(
   scene.add(lookAtTarget);
   const _headPos = new THREE.Vector3();
   const _camDir = new THREE.Vector3();
+  const _camRight = new THREE.Vector3();
+  const _camUp = new THREE.Vector3();
 
   const key = new THREE.DirectionalLight(0xffffff, 1.2);
   key.position.set(0.45, 1.6, 1.4);
@@ -250,10 +266,12 @@ export function createPetVrm(
     if (destroyed || !renderer || !vrm || !rendering) return;
     const delta = clock.getDelta();
     mixer?.update(delta);
-    lockMouth(vrm);
+    const mouth = speakClock.tick(delta);
+    applyMouthFromClock(vrm, mouth.energy, mouth.shape, mouth.active);
     const noticing = clock.elapsedTime < noticeUntil;
+    const speakingMouth = mouth.active;
     if (noticing) {
-      updateLookAtTarget();
+      updateLookAtTarget(0, 0);
       applyNoticeReaction(vrm, clock.elapsedTime, noticeStart, noticeUntil);
       const noticeElapsed = clock.elapsedTime - noticeStart;
       // 回复/点击前半秒盯紧，之后恢复轻眨眼，避免全程瞪眼像紧张
@@ -262,13 +280,27 @@ export function createPetVrm(
       } else {
         clearEyeBlink(vrm);
       }
-    } else {
+    } else if (speakingMouth) {
+      // 说话时轻轻看向你，不做漂移抢戏
+      if (vrm.lookAt) vrm.lookAt.target = lookAtTarget;
+      updateLookAtTarget(0, 0);
       if (faceExpr === "sleepy") {
         clearEyeBlink(vrm);
       } else {
         applyBlink(vrm, clock.elapsedTime);
       }
-      if (vrm.lookAt) vrm.lookAt.target = null;
+    } else {
+      // 静默：轻量视线漂移（#2=A）
+      driftPhase += delta;
+      if (vrm.lookAt) vrm.lookAt.target = lookAtTarget;
+      const driftX = Math.sin(driftPhase * 0.35) * 0.08;
+      const driftY = Math.sin(driftPhase * 0.22 + 1.2) * 0.03;
+      updateLookAtTarget(driftX, driftY);
+      if (faceExpr === "sleepy") {
+        clearEyeBlink(vrm);
+      } else {
+        applyBlink(vrm, clock.elapsedTime);
+      }
     }
     applyFaceExpression(vrm, faceExpr, faceWeights, delta);
     vrm.update(delta);
@@ -330,7 +362,15 @@ export function createPetVrm(
     }
   };
 
-  const updateLookAtTarget = () => {
+  const pulseSpeak = (opts?: SpeakPulseOpts) => {
+    speakClock.pulse(opts);
+  };
+
+  const clearSpeak = () => {
+    speakClock.clear();
+  };
+
+  const updateLookAtTarget = (driftRight = 0, driftUp = 0) => {
     if (!vrm?.lookAt?.target) return;
     const head = vrm.humanoid?.getNormalizedBoneNode("head");
     if (head) {
@@ -342,7 +382,15 @@ export function createPetVrm(
     _camDir.copy(camera.position).sub(_headPos);
     if (_camDir.lengthSq() < 1e-6) _camDir.set(0, 0, 1);
     else _camDir.normalize();
-    lookAtTarget.position.copy(_headPos).addScaledVector(_camDir, 0.45);
+    _camRight.crossVectors(_camDir, camera.up);
+    if (_camRight.lengthSq() < 1e-6) _camRight.set(1, 0, 0);
+    else _camRight.normalize();
+    _camUp.crossVectors(_camRight, _camDir).normalize();
+    lookAtTarget.position
+      .copy(_headPos)
+      .addScaledVector(_camDir, 0.45)
+      .addScaledVector(_camRight, driftRight)
+      .addScaledVector(_camUp, driftUp);
   };
 
   const ready = (async () => {
@@ -455,8 +503,11 @@ export function createPetVrm(
     setLocomotion,
     notice,
     setExpression,
+    pulseSpeak,
+    clearSpeak,
     destroy() {
       destroyed = true;
+      speakClock.clear();
       cancelAnimationFrame(raf);
       window.clearTimeout(resizeTimer);
       window.removeEventListener("resize", onResize);
@@ -496,11 +547,24 @@ function clearEyeBlink(model: VRM) {
   em.setValue("blinkRight", 0);
 }
 
-function lockMouth(model: VRM) {
+/** 按输出时钟采样驱动口型；不活跃时压平（替代原 lockMouth 死锁）。 */
+function applyMouthFromClock(
+  model: VRM,
+  energy: number,
+  shape: string,
+  active: boolean
+) {
   const em = model.expressionManager;
   if (!em) return;
-  for (const name of MOUTH_EXPR) {
+  for (const name of MOUTH_SHAPES) {
     em.setValue(name, 0);
+  }
+  if (!active) return;
+  const w = Math.min(1, Math.max(0, energy)) * 0.72;
+  if (MOUTH_SHAPES.includes(shape as (typeof MOUTH_SHAPES)[number])) {
+    em.setValue(shape, w);
+  } else {
+    em.setValue("aa", w);
   }
 }
 

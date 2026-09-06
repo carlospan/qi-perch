@@ -9,6 +9,13 @@ const props = defineProps<{
   typing?: boolean;
   /** 每次 speech / typing 递增，驱动轻 notice */
   speechTick?: number;
+  /**
+   * 输出时钟脉冲计数（今日=文字 delta / 非流式 speech；日后=TTS 分片）。
+   * 每次递增 → pulseSpeak；与 speechTick（notice）分离。
+   */
+  mouthPulse?: number;
+  /** 递增时立刻 clearSpeak（打断 / 收回） */
+  mouthClearTick?: number;
 }>();
 
 const host = ref<HTMLElement | null>(null);
@@ -59,6 +66,24 @@ watch(
   (tick, prev) => {
     if (tick && tick !== prev) {
       pet?.notice(SPEECH_NOTICE_MS);
+    }
+  }
+);
+
+watch(
+  () => props.mouthPulse,
+  (tick, prev) => {
+    if (tick != null && tick !== prev && tick > 0) {
+      pet?.pulseSpeak();
+    }
+  }
+);
+
+watch(
+  () => props.mouthClearTick,
+  (tick, prev) => {
+    if (tick != null && tick !== prev && tick > 0) {
+      pet?.clearSpeak();
     }
   }
 );

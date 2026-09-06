@@ -152,6 +152,9 @@ function createQi() {
   const speech = ref("");
   const speaking = ref(false);
   const replyEpoch = ref(0);
+  /** 口型输出时钟脉冲（与 replyEpoch/notice 分离） */
+  const mouthPulse = ref(0);
+  const mouthClearTick = ref(0);
   const systemNotice = ref<SystemNoticePayload | null>(null);
   const composerPrefill = ref("");
   const season = ref("spring");
@@ -459,6 +462,16 @@ function createQi() {
     replyEpoch.value += 1;
   }
 
+  function pulseMouth(energy?: number) {
+    // energy 预留给日后 TTS；今日 Presence 侧用默认 bump
+    void energy;
+    mouthPulse.value += 1;
+  }
+
+  function clearMouth() {
+    mouthClearTick.value += 1;
+  }
+
   function appendTalk(
     role: "qi" | "me",
     text: string,
@@ -491,6 +504,7 @@ function createQi() {
     const delta = String(payload?.delta || "");
     if (!sid || !delta) return;
     noteReplyStart();
+    pulseMouth();
     setTyping(false);
     if (activeStreamId === sid && activeStreamTalkId) {
       const idx = talk.value.findIndex((m) => m.id === activeStreamTalkId);
@@ -550,6 +564,7 @@ function createQi() {
     activeStreamTalkId = null;
     speech.value = "";
     speaking.value = false;
+    clearMouth();
     // 收回后常走非流式重试：重新点亮等待，避免空窗（C）
     setTyping(true);
   }
@@ -561,6 +576,7 @@ function createQi() {
     activeStreamTalkId = null;
     speech.value = "";
     speaking.value = false;
+    clearMouth();
   }
 
   function applyHistory(messages: TalkMessage[], hasMore?: boolean) {
@@ -997,6 +1013,7 @@ function createQi() {
       qiWs.on("turn_interrupted", (payload: TurnInterruptedPayload) => {
         setTyping(false);
         clearAllAckTimers();
+        clearMouth();
         retractActiveStreamBubble();
         const orig = (payload?.original_text || "").trim();
         // 若刚发了打断白话，先拿掉那条；再拿掉原句气泡
@@ -1032,6 +1049,11 @@ function createQi() {
         }
         speech.value = payload.text;
         appendTalk("qi", payload.text, payload.tone, isProactive);
+        // 非流式：简版口型起伏（按字数多脉冲几次）
+        const n = Math.min(6, Math.max(2, Math.ceil((payload.text || "").length / 24)));
+        for (let i = 0; i < n; i++) {
+          window.setTimeout(() => pulseMouth(), i * 90);
+        }
       });
       qiWs.on(
         "state",
@@ -1184,6 +1206,8 @@ function createQi() {
     speech,
     speaking,
     replyEpoch,
+    mouthPulse,
+    mouthClearTick,
     systemNotice,
     dismissSystemNotice,
     composerPrefill,
