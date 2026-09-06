@@ -8,8 +8,11 @@
 //! 4. 否则仓库根 `python -m qi`
 //! 5. 失败 → 日志提示（前端走既有连接失败可见路径）
 //!
-//! 退出策略（P2 托盘）：仅在壳 **自己拉起** 大脑时，于 `RunEvent::Exit`（「退出栖」）结束子进程；
+//! 退出策略（P2 托盘）：仅在壳 **自己拉起** 大脑时，于 `ExitRequested`/`Exit`（「退出栖」或开发机 Ctrl+C）结束子进程；
 //! 沿用已在听的后端（borrowed）不杀。关主窗藏托盘不会走到 Exit。
+//!
+//! 开发（`debug_assertions` / `tauri:dev`）：子进程挂同一控制台（可 Ctrl+C），并挂 Windows Job
+//!（壳进程被杀时一并带走大脑）。Release 安装壳仍 `CREATE_NO_WINDOW`，避免黑框。
 //!
 //! 安装包只带 `qi-brain.zip`（避免 NSIS 数千文件落半套）；解压到 `%LOCALAPPDATA%/Qi/runtime/qi-brain`。
 
@@ -33,6 +36,9 @@ pub struct BrainSidecar {
   child: Mutex<Option<Child>>,
   /// 若为 true，退出时不杀（沿用用户已开的大脑进程）
   borrowed: bool,
+  /// Windows：KILL_ON_JOB_CLOSE，壳意外退出时带走自拉起的大脑
+  #[cfg(windows)]
+  _kill_job: Option<win_kill_job::KillOnCloseJob>,
 }
 
 impl BrainSidecar {
@@ -40,13 +46,19 @@ impl BrainSidecar {
     Self {
       child: Mutex::new(None),
       borrowed: true,
+      #[cfg(windows)]
+      _kill_job: None,
     }
   }
 
   fn owned(child: Child) -> Self {
+    #[cfg(windows)]
+    let kill_job = win_kill_job::KillOnCloseJob::bind(&child);
     Self {
       child: Mutex::new(Some(child)),
       borrowed: false,
+      #[cfg(windows)]
+      _kill_job: kill_job,
     }
   }
 }
@@ -97,7 +109,11 @@ pub fn attach(app: &AppHandle) {
 }
 
 pub fn on_run_event(app: &AppHandle, event: &RunEvent) {
-  if !matches!(event, RunEvent::Exit) {
+  // ExitRequested：开发机 Ctrl+C / 关进程时更早收脑；Exit：托盘「退出栖」收尾
+  if !matches!(
+    event,
+    RunEvent::ExitRequested { .. } | RunEvent::Exit
+  ) {
     return;
   }
   let Some(state) = app.try_state::<BrainSidecar>() else {
@@ -227,12 +243,8 @@ fn prefer_bundled_requested() -> bool {
 fn spawn_bundled(exe: &Path) -> Result<Child, String> {
   let cwd = exe.parent().unwrap_or(exe);
   let mut cmd = Command::new(exe);
-  cmd.current_dir(cwd)
-    .env("PYTHONUNBUFFERED", "1")
-    .stdin(Stdio::null())
-    .stdout(Stdio::null())
-    .stderr(Stdio::null());
-  apply_no_console(&mut cmd);
+  cmd.current_dir(cwd).env("PYTHONUNBUFFERED", "1");
+  apply_brain_stdio(&mut cmd);
 
   eprintln!(
     "[qi] 启动 bundled 大脑：{}（cwd={}）",
@@ -257,11 +269,8 @@ fn spawn_repo_python() -> Result<Child, String> {
   cmd.args(&prefix_args)
     .args(["-m", "qi"])
     .current_dir(&root)
-    .env("PYTHONUNBUFFERED", "1")
-    .stdin(Stdio::null())
-    .stdout(Stdio::null())
-    .stderr(Stdio::null());
-  apply_no_console(&mut cmd);
+    .env("PYTHONUNBUFFERED", "1");
+  apply_brain_stdio(&mut cmd);
 
   eprintln!(
     "[qi] 启动大脑：{} {:?} -m qi（cwd={}）",
@@ -274,7 +283,21 @@ fn spawn_repo_python() -> Result<Child, String> {
     .map_err(|e| format!("{}：{e}", python.display()))
 }
 
-/// Windows：子进程不弹控制台黑窗（安装壳体验）。
+/// 开发：挂同一控制台（Ctrl+C / 日志可见）。Release：无窗，避免安装壳黑框。
+fn apply_brain_stdio(cmd: &mut Command) {
+  if cfg!(debug_assertions) {
+    cmd.stdin(Stdio::null())
+      .stdout(Stdio::inherit())
+      .stderr(Stdio::inherit());
+    return;
+  }
+  cmd.stdin(Stdio::null())
+    .stdout(Stdio::null())
+    .stderr(Stdio::null());
+  apply_no_console(cmd);
+}
+
+/// Windows：子进程不弹控制台黑窗（安装壳 / taskkill 辅助进程）。
 fn apply_no_console(cmd: &mut Command) {
   #[cfg(windows)]
   {
@@ -283,6 +306,72 @@ fn apply_no_console(cmd: &mut Command) {
     cmd.creation_flags(CREATE_NO_WINDOW);
   }
   let _ = cmd;
+}
+
+/// Windows Job：壳进程句柄关闭时杀掉作业内子进程（防 Ctrl+C 留幽灵脑）。
+#[cfg(windows)]
+mod win_kill_job {
+  use std::mem::zeroed;
+  use std::os::windows::io::{AsRawHandle, RawHandle};
+  use std::process::Child;
+
+  use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+  use windows_sys::Win32::System::JobObjects::{
+    AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+    SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+  };
+
+  pub struct KillOnCloseJob {
+    handle: HANDLE,
+  }
+
+  impl KillOnCloseJob {
+    pub fn bind(child: &Child) -> Option<Self> {
+      unsafe {
+        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if job.is_null() {
+          eprintln!("[qi] CreateJobObject 失败：开发机 Ctrl+C 可能留幽灵脑");
+          return None;
+        }
+        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = zeroed();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let ok = SetInformationJobObject(
+          job,
+          JobObjectExtendedLimitInformation,
+          &mut info as *mut _ as *mut _,
+          std::mem::size_of_val(&info) as u32,
+        );
+        if ok == 0 {
+          eprintln!("[qi] SetInformationJobObject 失败");
+          CloseHandle(job);
+          return None;
+        }
+        let proc: RawHandle = child.as_raw_handle();
+        if AssignProcessToJobObject(job, proc as HANDLE) == 0 {
+          eprintln!("[qi] AssignProcessToJobObject 失败");
+          CloseHandle(job);
+          return None;
+        }
+        Some(Self { handle: job })
+      }
+    }
+  }
+
+  impl Drop for KillOnCloseJob {
+    fn drop(&mut self) {
+      unsafe {
+        if !self.handle.is_null() {
+          CloseHandle(self.handle);
+          self.handle = std::ptr::null_mut();
+        }
+      }
+    }
+  }
+
+  // 作业句柄由壳进程独占；Tauri State 要求 Send+Sync
+  unsafe impl Send for KillOnCloseJob {}
+  unsafe impl Sync for KillOnCloseJob {}
 }
 
 fn brain_exe_name() -> &'static str {

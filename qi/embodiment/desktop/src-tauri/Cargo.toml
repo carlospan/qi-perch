@@ -19,3 +19,12 @@ tauri-build = { version = "2.6.3", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 tauri = { version = "2.11.3", features = ["tray-icon"] }
+
+# 开发机 Ctrl+C / 壳被杀时，用 Job 带掉自拉起的大脑（安装包仍可无控制台）
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }
