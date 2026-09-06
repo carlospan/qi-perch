@@ -11,9 +11,11 @@ const props = defineProps<{
   speechTick?: number;
   /**
    * 输出时钟脉冲计数（今日=文字 delta / 非流式 speech；日后=TTS 分片）。
-   * 每次递增 → pulseSpeak；与 speechTick（notice）分离。
+   * 每次递增 → pulseSpeak({ text: mouthChunk })。
    */
   mouthPulse?: number;
+  /** 与 mouthPulse 同步的本段文字 */
+  mouthChunk?: string;
   /** 递增时立刻 clearSpeak（打断 / 收回） */
   mouthClearTick?: number;
 }>();
@@ -74,7 +76,7 @@ watch(
   () => props.mouthPulse,
   (tick, prev) => {
     if (tick != null && tick !== prev && tick > 0) {
-      pet?.pulseSpeak();
+      pet?.pulseSpeak({ text: props.mouthChunk || "" });
     }
   }
 );

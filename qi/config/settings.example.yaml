@@ -1,5 +1,5 @@
 # LLM 配置（OpenAI 兼容协议）
-# 现行：火山方舟 ark + doubao-seed-evolving
+# 现行：火山方舟 ark + doubao-seed-character-260628（拟人对话；支持图文）
 # 密钥放仓库根 .env：ARK_API_KEY=...
 llm:
   default_provider: "ark"
@@ -8,8 +8,8 @@ llm:
       base_url: "https://ark.cn-beijing.volces.com/api/v3"
       api_key: "${ARK_API_KEY}"
       models:
-        fast: "doubao-seed-evolving"
-        strong: "doubao-seed-evolving"
+        fast: "doubao-seed-character-260628"
+        strong: "doubao-seed-character-260628"
   model_routing:
     conversation: "ark:fast"
     narrative: "ark:strong"

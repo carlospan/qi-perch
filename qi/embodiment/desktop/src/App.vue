@@ -31,6 +31,7 @@ const {
   avatar,
   replyEpoch,
   mouthPulse,
+  mouthChunk,
   mouthClearTick,
   talkByDay,
   creationCards,
@@ -220,6 +221,7 @@ onUnmounted(() => disconnect());
                   :typing="typing"
                   :speech-tick="replyEpoch"
                   :mouth-pulse="mouthPulse"
+                  :mouth-chunk="mouthChunk"
                   :mouth-clear-tick="mouthClearTick"
                 />
                 <div

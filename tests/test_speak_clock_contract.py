@@ -14,9 +14,11 @@ def test_speak_clock_module_api_surface():
     assert "pulse(" in text or "pulse(opts" in text
     assert "clear()" in text
     assert "tick(" in text
-    # 日后 TTS 改接同一入口的契约说明
     assert "TTS" in text or "日后" in text
     assert "MOUTH_SHAPES" in text
+    assert "vowelVisemeFromChar" in text
+    assert "ATTACK" in text and "RELEASE" in text
+    assert "text?" in text or "text?:" in text
 
 
 def test_lock_mouth_deadlock_removed():
@@ -25,4 +27,13 @@ def test_lock_mouth_deadlock_removed():
     assert "pulseSpeak" in text
     assert "clearSpeak" in text
     assert "applyMouthFromClock" in text
+    assert "exaggerateMouthVisibility" in text
+    assert "MOUTH_VISUAL_AMP" in text
     assert "createSpeakClock" in text
+
+
+def test_vowel_viseme_heuristic_table_present():
+    text = SPEAK.read_text(encoding="utf-8")
+    assert "啊" in text and "OPEN_CHARS" in text
+    assert "SOFT_CYCLE" in text
+    assert "vowelVisemeFromChar" in text

@@ -5,8 +5,36 @@ import { loadMixamoAnimation } from "./loadMixamoAnimation";
 import {
   createSpeakClock,
   MOUTH_SHAPES,
+  type MouthShape,
   type SpeakPulseOpts,
 } from "./speakClock";
+
+/** VRoid 口型 morph 名（与 preset aa/ih/ou/ee/oh 绑定） */
+const SHAPE_TO_MORPH: Record<MouthShape, string> = {
+  aa: "Fcl_MTH_A",
+  ih: "Fcl_MTH_I",
+  ou: "Fcl_MTH_U",
+  ee: "Fcl_MTH_E",
+  oh: "Fcl_MTH_O",
+};
+
+/**
+ * 全身取景口型：微放大 + 硬顶；不抬颌。
+ * 说话时清掉浅笑相关嘴 morph，避免 Fun/Small 把嘴钉死。
+ */
+const MOUTH_VISUAL_AMP = 1.22;
+/** 单帧口型权重上限 */
+const MOUTH_WEIGHT_CAP = 0.55;
+/** 与开口抢戏的嘴部 morph（浅笑/抿嘴） */
+const MOUTH_CONFLICT_MORPHS = [
+  "Fcl_MTH_Fun",
+  "Fcl_MTH_Small",
+  "Fcl_MTH_Close",
+  "Fcl_MTH_Smile",
+  "Fcl_MTH_SkinFung",
+  "Fcl_MTH_SkinFung_R",
+  "Fcl_MTH_SkinFung_L",
+] as const;
 
 /** 相对路径：Tauri 安装壳 frontendDist 下绝对 `/…` 偶发贴图协议不一致 */
 const MODEL_URL = "./avatars/qi-avatar.vrm";
@@ -43,17 +71,18 @@ const EMOTION_EXPR_NAMES = [
   "curious",
 ] as const;
 
-/** 目标权重（边测边调 2026-08-25）：
+/** 目标权重（边测边调 2026-08-25；2026-09-06 再收 Joy）：
  * - soft_smile 勿混 relaxed（本模型会眯眼）
- * - 浅笑靠 soft_smile 满量 + 极轻 happy 带嘴角
- * - happy 勿过高（Joy 会闭眼笑）
+ * - soft_smile 勿叠 happy/Joy：Joy 眯眼像不屑/鄙视
+ * - 浅笑只靠 custom soft_smile（已含轻嘴角 Fun）
+ * - happy 以 soft_smile 为主，Joy 极轻
  * - curious 压低，避免皱眉像发愁
  */
 const EXPR_TARGETS: Record<PetFaceExpression, Record<string, number>> = {
   neutral: {},
-  // 浅笑：以 custom 为主，极轻 happy 提嘴角（勿过高，Joy 会眯眼）
-  soft_smile: { soft_smile: 0.92, happy: 0.34 },
-  happy: { happy: 0.42, soft_smile: 0.58 },
+  // 浅笑：只用 custom，不叠 Joy
+  soft_smile: { soft_smile: 0.88 },
+  happy: { soft_smile: 0.72, happy: 0.12 },
   quiet: { quiet: 0.85 },
   surprised: { surprised: 0.55 },
   sleepy: { sleepy: 1 },
@@ -267,7 +296,7 @@ export function createPetVrm(
     const delta = clock.getDelta();
     mixer?.update(delta);
     const mouth = speakClock.tick(delta);
-    applyMouthFromClock(vrm, mouth.energy, mouth.shape, mouth.active);
+    applyMouthFromClock(vrm, mouth.weights, mouth.active);
     const noticing = clock.elapsedTime < noticeUntil;
     const speakingMouth = mouth.active;
     if (noticing) {
@@ -302,8 +331,18 @@ export function createPetVrm(
         applyBlink(vrm, clock.elapsedTime);
       }
     }
-    applyFaceExpression(vrm, faceExpr, faceWeights, delta);
+    applyFaceExpression(
+      vrm,
+      // 说话时暂时卸浅笑/开心，避免 Fun 嘴形钉死开口
+      speakingMouth && (faceExpr === "soft_smile" || faceExpr === "happy")
+        ? "neutral"
+        : faceExpr,
+      faceWeights,
+      delta
+    );
     vrm.update(delta);
+    // 全身取景可见性：放大口型 morph（须在 update 之后）
+    exaggerateMouthVisibility(vrm, mouth.weights, mouth.active);
     renderer.render(scene, camera);
     scheduleTick();
   };
@@ -547,25 +586,48 @@ function clearEyeBlink(model: VRM) {
   em.setValue("blinkRight", 0);
 }
 
-/** 按输出时钟采样驱动口型；不活跃时压平（替代原 lockMouth 死锁）。 */
+/** 按输出时钟写入 expression（供 vrm.update）；可见放大见 exaggerateMouthVisibility。 */
 function applyMouthFromClock(
   model: VRM,
-  energy: number,
-  shape: string,
+  weights: Record<MouthShape, number>,
   active: boolean
 ) {
   const em = model.expressionManager;
   if (!em) return;
   for (const name of MOUTH_SHAPES) {
-    em.setValue(name, 0);
+    em.setValue(name, active ? Math.min(1, Math.max(0, weights[name] ?? 0)) : 0);
   }
-  if (!active) return;
-  const w = Math.min(1, Math.max(0, energy)) * 0.72;
-  if (MOUTH_SHAPES.includes(shape as (typeof MOUTH_SHAPES)[number])) {
-    em.setValue(shape, w);
-  } else {
-    em.setValue("aa", w);
-  }
+}
+
+/** 全身取景口型：放大 Face morph，硬顶；说话时清冲突嘴形。 */
+function exaggerateMouthVisibility(
+  model: VRM,
+  weights: Record<MouthShape, number>,
+  active: boolean
+) {
+  model.scene.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.morphTargetDictionary || !mesh.morphTargetInfluences) {
+      return;
+    }
+    if (!mesh.name.startsWith("Face")) return;
+    if (active) {
+      for (const conflict of MOUTH_CONFLICT_MORPHS) {
+        const cidx = mesh.morphTargetDictionary[conflict];
+        if (cidx != null) mesh.morphTargetInfluences[cidx] = 0;
+      }
+    }
+    for (const shape of MOUTH_SHAPES) {
+      const morphName = SHAPE_TO_MORPH[shape];
+      const idx = mesh.morphTargetDictionary[morphName];
+      if (idx == null) continue;
+      const raw = active ? Math.min(1, Math.max(0, weights[shape] ?? 0)) : 0;
+      mesh.morphTargetInfluences[idx] = Math.min(
+        MOUTH_WEIGHT_CAP,
+        raw * MOUTH_VISUAL_AMP
+      );
+    }
+  });
 }
 
 function applyFaceExpression(

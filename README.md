@@ -140,7 +140,7 @@ Brain 心跳（qi/core/brain.py）
 
 - **v0.1** — 个人 / 研究向
 - 工程阶段零～四已作为施工里程碑收官；C1–C5 意义上的充分内生仍是更长的旅程
-- 默认 LLM 示例：火山方舟 `doubao-seed-evolving`（可配置任意 OpenAI 兼容提供商）
+- 默认 LLM 示例：火山方舟 `doubao-seed-character-260628`（可配置任意 OpenAI 兼容提供商）
 
 ---
 

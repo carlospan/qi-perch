@@ -154,6 +154,7 @@ function createQi() {
   const replyEpoch = ref(0);
   /** 口型输出时钟脉冲（与 replyEpoch/notice 分离） */
   const mouthPulse = ref(0);
+  const mouthChunk = ref("");
   const mouthClearTick = ref(0);
   const systemNotice = ref<SystemNoticePayload | null>(null);
   const composerPrefill = ref("");
@@ -462,9 +463,8 @@ function createQi() {
     replyEpoch.value += 1;
   }
 
-  function pulseMouth(energy?: number) {
-    // energy 预留给日后 TTS；今日 Presence 侧用默认 bump
-    void energy;
+  function pulseMouth(text?: string) {
+    mouthChunk.value = text ?? "";
     mouthPulse.value += 1;
   }
 
@@ -504,7 +504,7 @@ function createQi() {
     const delta = String(payload?.delta || "");
     if (!sid || !delta) return;
     noteReplyStart();
-    pulseMouth();
+    pulseMouth(delta);
     setTyping(false);
     if (activeStreamId === sid && activeStreamTalkId) {
       const idx = talk.value.findIndex((m) => m.id === activeStreamTalkId);
@@ -1049,11 +1049,8 @@ function createQi() {
         }
         speech.value = payload.text;
         appendTalk("qi", payload.text, payload.tone, isProactive);
-        // 非流式：简版口型起伏（按字数多脉冲几次）
-        const n = Math.min(6, Math.max(2, Math.ceil((payload.text || "").length / 24)));
-        for (let i = 0; i < n; i++) {
-          window.setTimeout(() => pulseMouth(), i * 90);
-        }
+        // 非流式：整段喂入口型队列（韵母粗映射 + 时长）
+        pulseMouth(payload.text || "");
       });
       qiWs.on(
         "state",
@@ -1207,6 +1204,7 @@ function createQi() {
     speaking,
     replyEpoch,
     mouthPulse,
+    mouthChunk,
     mouthClearTick,
     systemNotice,
     dismissSystemNotice,
