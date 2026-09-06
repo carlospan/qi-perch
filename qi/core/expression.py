@@ -16,6 +16,7 @@ from qi.core.intention import (
     looks_like_answer_chase,
 )
 from qi.core.turn_understanding import looks_like_substantive_question
+from qi.core.speech_sanitize import strip_meta_preamble
 from qi.inner_life.consciousness import char_jaccard
 from qi.llm.prompt_builder import PromptBuilder
 
@@ -26,6 +27,12 @@ if TYPE_CHECKING:
     from qi.storage.database import Database
 
 logger = logging.getLogger("qi.expression")
+
+
+def _clean_speech(text: str) -> str:
+    """交付前剥元指令前缀（模型偶发念出意向卡约束）。"""
+    return strip_meta_preamble(str(text or "").strip())
+
 
 REPLY_DEDUP_THRESHOLD = 0.85
 REPLY_DEDUP_WINDOW = 5
@@ -352,7 +359,7 @@ class Expression:
         used_retry = False
         text = await self._primary_conversation(messages, speech_stream=speech_stream)
 
-        text = str(text or "").strip()
+        text = _clean_speech(text)
         # 催答：空返回或省略号敷衍 → 约束重试一次（占本拍重试预算）
         if chase and (not text or _is_ellipsis_dodge(text)) and not used_retry:
             await self._retract_stream(speech_stream)
@@ -372,7 +379,7 @@ class Expression:
                 logger.debug("催答重试异常，走模板", exc_info=True)
                 again = ""
             used_retry = True
-            again = str(again or "").strip()
+            again = _clean_speech(again)
             if again and not _is_ellipsis_dodge(again):
                 text = again
             else:
@@ -402,7 +409,7 @@ class Expression:
                 logger.debug("实质问重试异常，走模板", exc_info=True)
                 again = ""
             used_retry = True
-            again = str(again or "").strip()
+            again = _clean_speech(again)
             if again and not _is_ellipsis_dodge(again):
                 text = again
             else:
@@ -422,8 +429,10 @@ class Expression:
                 await self._retract_stream(speech_stream)
                 if used_retry:
                     intention.outcome = "template"
-                    return _build_fallback(
-                        intention, hard, user_message=user_message
+                    return _clean_speech(
+                        _build_fallback(
+                            intention, hard, user_message=user_message
+                        )
                     )
                 fixed = await self._fix_generation(
                     messages, hard, intention, recent_messages=recent_messages
@@ -431,10 +440,12 @@ class Expression:
                 used_retry = True
                 if fixed is None:
                     intention.outcome = "template"
-                    return _build_fallback(
-                        intention, hard, user_message=user_message
+                    return _clean_speech(
+                        _build_fallback(
+                            intention, hard, user_message=user_message
+                        )
                     )
-                text = fixed
+                text = _clean_speech(fixed)
         if text:
             if not is_duplicate_reply(text, hist):
                 intention.outcome = "llm"
@@ -445,9 +456,9 @@ class Expression:
                 templated = render_template(intention, user_message=user_message)
                 if templated and not is_duplicate_reply(templated, hist):
                     intention.outcome = "template"
-                    return templated
+                    return _clean_speech(templated)
                 intention.outcome = "template"
-                return _DEDUP_SAFE
+                return _clean_speech(_DEDUP_SAFE)
             regen_messages = list(messages)
             if regen_messages:
                 sys0 = dict(regen_messages[0])
@@ -460,7 +471,7 @@ class Expression:
             except Exception:
                 logger.debug("去重重生成异常，走模板", exc_info=True)
                 again = ""
-            again = str(again or "").strip()
+            again = _clean_speech(again)
             if again and not is_duplicate_reply(again, hist):
                 again_hard = _hard_violations(
                     again, intention, recent_messages=recent_messages
@@ -471,18 +482,18 @@ class Expression:
                     )
                     if fb and not is_duplicate_reply(fb, hist):
                         intention.outcome = "template"
-                        return fb
+                        return _clean_speech(fb)
                     intention.outcome = "template"
-                    return _DEDUP_SAFE
+                    return _clean_speech(_DEDUP_SAFE)
                 intention.outcome = "llm"
                 return again
             # 仍重复 → 模板；若模板也撞车则安全句（防 #1485≡#1487）
             templated = render_template(intention, user_message=user_message)
             if templated and not is_duplicate_reply(templated, hist):
                 intention.outcome = "template"
-                return templated
+                return _clean_speech(templated)
             intention.outcome = "template"
-            return _DEDUP_SAFE
+            return _clean_speech(_DEDUP_SAFE)
 
         # 对话路径：不可达 / 缺 key /（非催答）空结果 → 不模板冒充，交给系统态
         # 主动开口仍走模板，保证器官推进；催答 empty 仍用催答模板（既有包）
@@ -503,7 +514,7 @@ class Expression:
         templated = render_template(intention, user_message=user_message)
         if templated:
             intention.outcome = "template"
-            return templated
+            return _clean_speech(templated)
         intention.outcome = "empty"
         return ""
 
@@ -572,6 +583,9 @@ class Expression:
             logger.debug("事实一致性重试异常，走兜底", exc_info=True)
             fixed = ""
         fixed = str(fixed or "").strip()
+        if not fixed:
+            return None
+        fixed = _clean_speech(fixed)
         if not fixed:
             return None
         if teach_related and detect_teach_inversion(
