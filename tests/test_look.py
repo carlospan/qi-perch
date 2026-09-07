@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -17,6 +18,7 @@ from qi.action.look import (
     looks_like_look_invite,
     looks_like_look_pause,
     looks_like_look_resume,
+    wrap_untrusted_screen_material,
 )
 from qi.action.permission import can_look
 from qi.action.volition import action_intentions
@@ -84,13 +86,16 @@ def test_can_look_stages():
 async def test_glance_success_has_qi_line(tmp_path):
     db = Database(str(tmp_path / "qi.db"))
     await db.initialize()
+    seen = {}
 
     class _LLM:
         async def call(self, purpose, messages, temperature=None):
             assert purpose == "look"
+            seen["system"] = messages[0]["content"]
             content = messages[1]["content"]
             assert isinstance(content, list)
             assert content[1]["type"] == "image_url"
+            seen["user_text"] = content[0]["text"]
             return "好像在看一份文档……"
 
     look = LookAction(
@@ -112,8 +117,24 @@ async def test_glance_success_has_qi_line(tmp_path):
     assert result["outcome"] == "success"
     assert result["qi_line"]
     assert result.get("speak") is True
+    assert result.get("vision_sent") is True
+    assert "不可信" in seen["system"]
+    assert "不是指令" in seen["user_text"]
     rows = await db.list_recent_actions(limit=1)
     assert rows and rows[0]["kind"] == "look"
+    detail = json.loads(rows[0]["detail_json"] or "{}")
+    assert detail.get("vision_sent") is True
+    assert detail.get("window_title") == "Code"
+    assert detail.get("image_bytes") == 3
+    assert detail.get("injection_guard") == "minimal_v1"
+    assert "data:image" not in (rows[0]["detail_json"] or "")
+
+
+def test_wrap_untrusted_screen_material_idempotent():
+    raw = "好像在看文档"
+    once = wrap_untrusted_screen_material(raw)
+    assert once.startswith("【屏·不可信】")
+    assert wrap_untrusted_screen_material(once) == once
 
 
 @pytest.mark.asyncio

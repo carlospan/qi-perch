@@ -114,7 +114,7 @@ L7 是 **N1 感知-行动** 在功能分层里的落点；架构方案 **N2–N5
 
 | 能力 | 一句话 | 确认 / 判断姿态 |
 |------|--------|----------------|
-| `look` | 截前台窗口 → 视觉印象（含屏内容；非仅标题） | 从宽：相处约定 + 叫停；**工程已落地**（`look.py`） |
+| `look` | 截前台窗口 → 视觉印象（含屏内容；非仅标题） | 从宽：相处约定 + 叫停；**工程已落地**（`look.py`）；**注入防护最小刀**（视觉+look_heart 标不可信；`detail_json` 发图元数据，不存原图；2026-09-07） |
 | `open` | 开 URL / 白名单应用；可对话授权进名单（allow） | **判断制**；不在白名单 → 口头复述候选 + 跨轮记名（非叠确认卡）；**工程已落地**（`open.py`） |
 | `list_dir` / 本地打开 | 列 **D:\\** 下一层；开 D: 下文件；白话能力问→邀列→名字/序号指认 | **判断制**；**工程已落地**（`disk.py`） |
 | `write` | 把短文写入 D: 白名单路径（日记按日期新建；点名文件 append） | **判断制**；**工程已落地**（`write.py`） |
@@ -140,7 +140,7 @@ qi/action/explore_web.py     # 外部 WebSearchClient（Tavily；失败/空→No
 qi/action/assist.py          # 介入你的生活（已建：八包——骨架/感知/跨轮/对话拍/留痕与补执行/追问补全/全文分块/整体叙事；判断制直接读）
 qi/action/judgment.py        # 响应式帮忙：接 / 拒 / 延 + 委托队列（2026-08-22）
 qi/action/delegate_search.py # 委托式联网检索（与 explore 分轨；source=web_delegate）
-qi/action/look.py            # 窗口瞥视（已建：截屏→vision→qi_line；自主+邀看；叫停/防连瞥/事不过三）
+qi/action/look.py            # 窗口瞥视（截屏→vision→qi_line；自主+邀看；叫停/防连瞥；注入护栏+detail_json 轻审计）
 qi/action/open.py            # 打开（已建：URL/白名单应用/授权 allow；allow 口头复述；open_and_look）
 qi/action/disk.py            # 盘：列 D: 一层 + 打开 D: 文件（判断制）
 qi/action/write.py           # 写下：D: 白名单 append / 日记按日期新建（判断制）

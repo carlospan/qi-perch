@@ -6,7 +6,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from qi.action.look import FIRST_NOTICE_LINE, LookAction, min_interval_minutes
+from qi.action.look import FIRST_NOTICE_LINE, LookAction, min_interval_minutes, wrap_untrusted_screen_material
 from qi.core.emotion import EmotionState
 from qi.core.look_heart import enrich_look_glance
 from qi.storage.database import Database
@@ -57,6 +57,13 @@ async def test_enrich_look_applies_impact_and_rewrites_line():
     ) > 0
     assert result["qi_line"] == "好像有点晃……你在看文档？"
     brain.expression.express.assert_awaited()
+    brain.perception.assess_impact_async.assert_awaited()
+    impact_arg = brain.perception.assess_impact_async.await_args.args[0]
+    assert impact_arg.startswith("【屏·不可信】")
+    card = brain.expression.express.await_args.kwargs["intention"]
+    cue = next(m for m in card.materials if m.tag == "cue")
+    assert cue.text.startswith("【屏·不可信】")
+    assert any("不可信" in m for m in card.must)
     # 幂等
     await enrich_look_glance(brain, result, now)
     assert brain.expression.express.await_count == 1
@@ -391,7 +398,7 @@ async def test_enrich_reactive_notices_facts():
     await enrich_look_glance(brain, result, now)
 
     brain.memory.notice_facts.assert_awaited_once_with(
-        impression,
+        wrap_untrusted_screen_material(impression),
         brain.emotion,
         "friend",
         now,
