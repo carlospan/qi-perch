@@ -24,7 +24,10 @@
 
 ## 已拍板决策
 
-- **2026-08-22 · L7 判断制取代确认门（非 irreversible）**：凡非 irreversible 的响应式帮忙改**接 / 拒 / 延**；`confirm_gate` 默认撤除；`pending` 仅 `open.allow` 口头复述 + 未来 irreversible。`open.allow` 写白名单：**判断制** + friend+ + 记前复述（非 irreversible 级确认）。**委托式联网检索**同包（`delegate_search`，`source=web_delegate`，与自主 explore 分轨）；延后履约入 `user_delegate_queue` + 成功后 narrative 欠账。**irreversible 诚实边界**（`irreversible.py`，发微信等不执行、留痕）。工程 **700 passed**；白话 + 自动感受批（`acceptance_ws_only` 8/8 用户落库）。真源 `docs/specs/archive/2026-08-22-L7-judgment/`；感受验清单 Agent 勾选自 `how-to/L7世界触达-感受验清单.md`。**未做**：删白名单。
+- **2026-09-07 · 撤销世界触达冻结**：`2026-08-13-L7-世界触达四能力-冻结.md` 不再作「下一刀范围 / 明确不做」现行真源；已交付 look/open/disk/write/together 不变。原「自动签到 / 通用网页 Agent」等**不再因冻结默认禁止**，新能力另开 Spec + HITL。同日拍板：**「非工具」≠ 能力天花板**（约束动机/姿态/留痕，不阉割能力）。真源 [`specs/tasks/2026-09-07-撤销世界触达冻结.md`](specs/tasks/2026-09-07-撤销世界触达冻结.md)。
+
+- **2026-08-22 · L7 判断制取代确认门（非 irreversible）**：
+凡非 irreversible 的响应式帮忙改**接 / 拒 / 延**；`confirm_gate` 默认撤除；`pending` 仅 `open.allow` 口头复述 + 未来 irreversible。`open.allow` 写白名单：**判断制** + friend+ + 记前复述（非 irreversible 级确认）。**委托式联网检索**同包（`delegate_search`，`source=web_delegate`，与自主 explore 分轨）；延后履约入 `user_delegate_queue` + 成功后 narrative 欠账。**irreversible 诚实边界**（`irreversible.py`，发微信等不执行、留痕）。工程 **700 passed**；白话 + 自动感受批（`acceptance_ws_only` 8/8 用户落库）。真源 `docs/specs/archive/2026-08-22-L7-judgment/`；感受验清单 Agent 勾选自 `how-to/L7世界触达-感受验清单.md`。**未做**：删白名单。
 
 - **2026-08-13 · SDD 改 Cursor 单线默认**：废止「方案 Agent + Cursor」双线固定分工与路 A/B 全套过程稿；默认同一 Cursor 会话完成短规格 → 编码 → 工程自验 → 回写。HITL（感受/路线/R 红线）仍归维护者。可选第二 Agent 仅作顾问审短方案。真源 `docs/specs/SDD-GUIDE.md` §2；`archive/` 旧包勿当现行工序。
 
@@ -45,7 +48,7 @@
 
 - **2026-08-15 · L7 open 打开落地**：`qi/action/open.py` + permission/layer/brain；确认复用 assist pending（单槽），**谈区正文不叠确认卡**；意图 `open`/`open_and_look`/`allow`（旧名 teach 已收）；空白名单 `body_memory`；应用发现：开始菜单 + 常见目录浅搜；`tests/test_open.py` 绿。真源 `docs/specs/archive/2026-08-15-L7-world-reach/2026-08-15-L7-open-打开-任务包.md`。list_dir / 删白名单 / write / together 曾后置（list_dir 同日另包落地）。
 - **2026-08-13 · L7 look 窗口瞥视落地**：`qi/action/look.py` + volition/permission/layer/brain 接线；邀看对话拍；别看 1h / 防连瞥 15min / 沉默 20min 软加分；`purpose=look`；`tests/test_look.py` 绿。真源任务包 `docs/specs/archive/2026-08-15-L7-world-reach/2026-08-13-L7-look-窗口瞥视-任务包.md`（感受验待维护者）。open/write/together 仍后置。
-- **2026-08-13 · L7 世界触达四能力冻结**：下一刀为 `look`（窗口截图→视觉印象，含屏内容；感知从宽）/ `open` / `write` / `together`；个体非工具；不做自动签到、通用网页 Agent、键鼠监控；`irreversible` 后置。真源 `docs/specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md`。
+- **2026-08-13 · L7 世界触达四能力冻结**（**2026-09-07 已撤销**）：当时下一刀为 `look` / `open` / `write` / `together`；个体非工具；曾列不做自动签到、通用网页 Agent、键鼠监控。史料 `docs/specs/tasks/2026-08-13-L7-世界触达四能力-冻结.md`；撤销见上条 2026-09-07。
 
 - **2026-08-12 · 文档回写（前端 IA）**：聊天壳三栏静/谈/忆 → **相处/回顾/内在**；对齐 L6 / 黄昏的枝 / code-wiki / README；相处背景 `qi-presence-glow.png`；测试规模口径 → 606。
 
